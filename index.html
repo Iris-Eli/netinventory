@@ -591,7 +591,7 @@
             .sidebar {
                 position: fixed;
                 top: 0; left: 0; bottom: 0;
-                width: 64px;
+                width: 84px;
                 height: 100vh;
                 display: flex;
                 flex-direction: column;
@@ -607,14 +607,18 @@
                 display: flex;
                 flex-direction: column;
                 align-items: center;
+                justify-content: center;
                 text-align: center;
-                gap: 2px;
-                font-size: 0.55rem;
-                line-height: 1.15;
+                gap: 3px;
+                padding: 0.6rem 0.25rem !important;
+                font-size: 0.62rem;
+                line-height: 1.2;
                 white-space: normal;
-                word-break: break-word;
+                word-break: normal;
+                overflow-wrap: break-word;
+                border-radius: 0.4rem;
             }
-            .nav-item span { font-size: 1.25rem; }
+            .nav-item span { font-size: 1.3rem; }
             .sidebar::-webkit-scrollbar { display: none; }
             .sidebar .logo {
                 padding: 0 0.6rem 0 0.25rem;
@@ -627,7 +631,7 @@
             .sidebar .logo p, .sidebar .logo div:not(:first-child) { display: none; }
 
             .main-content {
-                margin-left: 64px;
+                margin-left: 84px;
                 margin-top: 0;
                 margin-bottom: 0;
                 padding: 1rem 0.75rem;
@@ -749,7 +753,7 @@
         // BUILD: 2024-05-19-23-00-TEMPLATE-LITERALS-FIXED
         // This timestamp forces browser to reload: 1747719600
         console.log('%c🔧 NetInventory Version: 2026-06-10-OTDR-PINPOINT', 'background: #8b5cf6; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;');
-        console.log('🎨 Real IRIS logo, 📱 left rail nav, fullscreen port maps + all prior!');
+        console.log('🗺️ KMZ upload + KML export, 📱 readable left rail + all prior features!');
         console.log('✅ Edit buttons ACTUALLY work now - template literals fixed!');
         console.log('🔢 Build timestamp: 1747719600');
         
@@ -873,6 +877,23 @@
 
         // Graph API Client
         class GraphAPIClient {
+            // Binary file upload (KMZ/KML etc). Files must be < 4MB for single-PUT.
+            async uploadFile(endpoint, file) {
+                const response = await fetch(`https://graph.microsoft.com/v1.0${endpoint}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Authorization': `Bearer ${accessToken}`,
+                        'Content-Type': file.type || 'application/octet-stream'
+                    },
+                    body: file
+                });
+                if (!response.ok) {
+                    const error = await response.json().catch(() => ({}));
+                    throw new Error((error.error && error.error.message) || 'File upload failed');
+                }
+                return response.json();
+            }
+            
             async callAPI(endpoint, method = 'GET', body = null) {
                 const options = {
                     method,
@@ -10114,6 +10135,96 @@
             }
         }
 
+        // ============ KMZ/KML: upload to SharePoint + generate KML from route data ============
+        async function uploadRouteKmz(routeId) {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.kmz,.kml';
+            input.onchange = async () => {
+                const file = input.files[0];
+                if (!file) return;
+                if (file.size > 4 * 1024 * 1024) {
+                    alert('File is larger than 4MB. Please reduce the KMZ size (remove embedded imagery) and try again.');
+                    return;
+                }
+                try {
+                    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+                    const path = `/sites/${SHAREPOINT_CONFIG.siteId}/drive/root:/NetInventory-RouteMaps/${routeId}-${safeName}:/content`;
+                    const result = await graphClient.uploadFile(path, file);
+                    await store.updateDarkFiberRoute(routeId, { routeMapURL: result.webUrl });
+                    alert('✅ Map file uploaded and linked to this route!');
+                    await viewDarkFiberRoute(routeId);
+                } catch (error) {
+                    console.error('KMZ upload error:', error);
+                    alert('Error uploading map file: ' + friendlyError(error));
+                }
+            };
+            input.click();
+        }
+
+        async function downloadRouteKml(routeId) {
+            try {
+                const [routes, segments, sites] = await Promise.all([
+                    store.getDarkFiberRoutes(), store.getDarkFiberSegments(), store.getSites()
+                ]);
+                const route = routes.find(r => r.id === routeId);
+                if (!route) { alert('Route not found'); return; }
+                const routeSegments = segments.filter(s => s.routeId === routeId)
+                    .sort((a, b) => (a.segmentOrder || 0) - (b.segmentOrder || 0));
+                
+                const findSite = (idOrName) => sites.find(s => s.id === idOrName || s.name === idOrName);
+                const aSite = findSite(route.aLocationSiteId);
+                const zSite = findSite(route.zLocationSiteId);
+                const coord = (s) => (s && s.latitude && s.longitude) ? `${parseFloat(s.longitude)},${parseFloat(s.latitude)},0` : null;
+                const aCoord = coord(aSite), zCoord = coord(zSite);
+                
+                const esc = (t) => String(t || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                const segDesc = routeSegments.map(s =>
+                    `Seg ${s.segmentOrder}: ${esc(s.providerName)} (${esc(s.ownershipType)}) — ${s.distance || 0} km` +
+                    (s.strandNumbers ? `, strands ${esc(s.strandNumbers)}` : '')
+                ).join('\n');
+                
+                let placemarks = '';
+                if (aCoord) placemarks += `
+    <Placemark><name>${esc(route.aLocationSiteId)} (A-End)</name><Point><coordinates>${aCoord}</coordinates></Point></Placemark>`;
+                if (zCoord) placemarks += `
+    <Placemark><name>${esc(route.zLocationSiteId)} (Z-End)</name><Point><coordinates>${zCoord}</coordinates></Point></Placemark>`;
+                if (aCoord && zCoord) placemarks += `
+    <Placemark>
+      <name>${esc(route.routeName)}</name>
+      <description>${esc(route.totalDistance || 0)} km total\n${segDesc}</description>
+      <Style><LineStyle><color>ff8b5cf6</color><width>4</width></LineStyle></Style>
+      <LineString><tessellate>1</tessellate><coordinates>${aCoord} ${zCoord}</coordinates></LineString>
+    </Placemark>`;
+                
+                if (!placemarks) {
+                    alert('Neither end site has latitude/longitude yet, so a KML cannot be generated.\n\nGeocode the sites (Site Map page) or wait for the Salesforce import to populate coordinates.');
+                    return;
+                }
+                if (!aCoord || !zCoord) {
+                    alert('Note: only one end site has coordinates — the KML will contain that point but no route line.');
+                }
+                
+                const kml = `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>${esc(route.routeName)} — NetInventory Export</name>
+    <description>Straight-line representation between route end sites. For as-built fiber paths, upload the engineering KMZ instead.</description>${placemarks}
+  </Document>
+</kml>`;
+                const blob = new Blob([kml], { type: 'application/vnd.google-earth.kml+xml' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = (route.routeName || routeId).replace(/[^a-zA-Z0-9._-]/g, '_') + '.kml';
+                a.click();
+                URL.revokeObjectURL(url);
+            } catch (error) {
+                console.error('KML generation error:', error);
+                alert('Error generating KML: ' + friendlyError(error));
+            }
+        }
+
         function openAddDarkFiberRouteModal() {
             console.log('📋 Opening Add Dark Fiber Route modal...');
             if (!document.getElementById('darkFiberRouteModal')) {
@@ -10260,6 +10371,9 @@
                                 <p style="color: var(--text-secondary); margin: 0;">${route.id || ''}</p>
                             </div>
                             <div style="display: flex; gap: 1rem;">
+                                ${route.routeMapURL ? `<a href="${route.routeMapURL}" target="_blank" class="btn-secondary" style="text-decoration: none; display: inline-flex; align-items: center;">🌍 View Map File</a>` : ''}
+                                <button class="btn-secondary" onclick="uploadRouteKmz('${routeId}')">🗺️ ${route.routeMapURL ? 'Replace' : 'Upload'} KMZ/KML</button>
+                                <button class="btn-secondary" onclick="downloadRouteKml('${routeId}')">⬇️ Download KML</button>
                                 <button class="btn-secondary" onclick="editDarkFiberRoute('${routeId}')">Edit Route</button>
                                 <button class="btn-danger" onclick="deleteDarkFiberRoute('${routeId}')">Delete Route</button>
                             </div>
