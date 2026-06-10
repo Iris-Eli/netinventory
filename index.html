@@ -658,7 +658,7 @@
         // BUILD: 2024-05-19-23-00-TEMPLATE-LITERALS-FIXED
         // This timestamp forces browser to reload: 1747719600
         console.log('%c🔧 NetInventory Version: 2026-06-10-OTDR-PINPOINT', 'background: #8b5cf6; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;');
-        console.log('📍 Full cross-linking, template apply, clickable dashboard, OTDR bidirectional pinpoint + more!');
+        console.log('🛡️ Save guards: duplicate detection, IP conflicts, numeric validation, friendly errors + all prior features!');
         console.log('✅ Edit buttons ACTUALLY work now - template literals fixed!');
         console.log('🔢 Build timestamp: 1747719600');
         
@@ -1465,6 +1465,7 @@
                 notes: formData.get('notes')
             };
             
+            if (!(await confirmIfDuplicate('getTemplates', 'name', template.name, editingTemplateId, 'template named'))) return;
             try {
                 if (editingTemplateId) {
                     await store.updateTemplate(editingTemplateId, template);
@@ -1477,7 +1478,7 @@
                 await renderTemplatesPage();
             } catch (error) {
                 console.error('Save error:', error);
-                alert('Error saving template: ' + error.message);
+                alert('Error saving template: ' + friendlyError(error));
             }
         }
         
@@ -1490,7 +1491,7 @@
                 await renderTemplatesPage();
             } catch (error) {
                 console.error('Delete error:', error);
-                alert('Error deleting template: ' + error.message);
+                alert('Error deleting template: ' + friendlyError(error));
             }
         }
 
@@ -2268,7 +2269,7 @@
                 
             } catch (error) {
                 console.error('Remove duplicates error:', error);
-                alert('Error removing duplicates: ' + error.message);
+                alert('Error removing duplicates: ' + friendlyError(error));
             } finally {
                 btn.disabled = false;
                 btn.textContent = '🔄 Remove Duplicates';
@@ -2397,7 +2398,7 @@
                 
             } catch (error) {
                 console.error('Remove no address sites error:', error);
-                alert('Error removing sites: ' + error.message);
+                alert('Error removing sites: ' + friendlyError(error));
             } finally {
                 btn.disabled = false;
                 btn.textContent = '🗑️ Remove No Address Sites';
@@ -2984,6 +2985,7 @@
                 longitude: formData.get('longitude') || null
             };
             
+            if (!(await confirmIfDuplicate('getSites', 'name', site.name, editingSiteId, 'site named'))) return;
             try {
                 if (editingSiteId) {
                     await store.updateSite(editingSiteId, site);
@@ -2996,7 +2998,7 @@
                 await renderSitesPage();
             } catch (error) {
                 console.error('Save error:', error);
-                alert('Error saving site: ' + error.message);
+                alert('Error saving site: ' + friendlyError(error));
             }
         }
         
@@ -3009,7 +3011,7 @@
                 await renderSitesPage();
             } catch (error) {
                 console.error('Delete error:', error);
-                alert('Error deleting site: ' + error.message);
+                alert('Error deleting site: ' + friendlyError(error));
             }
         }
 
@@ -3408,7 +3410,7 @@
                 
             } catch (error) {
                 console.error('Bulk geocode error:', error);
-                alert('Error during bulk geocoding: ' + error.message);
+                alert('Error during bulk geocoding: ' + friendlyError(error));
             } finally {
                 btn.disabled = false;
                 btn.textContent = '🗺️ Bulk Geocode All';
@@ -3900,6 +3902,7 @@
                 notes: formData.get('notes')
             };
             
+            if (!(await confirmIfDuplicate('getRacks', 'name', rack.name, editingRackId, 'rack named'))) return;
             try {
                 if (editingRackId) {
                     await store.updateRack(editingRackId, rack);
@@ -3912,7 +3915,7 @@
                 await renderRacksPage();
             } catch (error) {
                 console.error('Save error:', error);
-                alert('Error saving rack: ' + error.message);
+                alert('Error saving rack: ' + friendlyError(error));
             }
         }
         
@@ -3925,7 +3928,7 @@
                 await renderRacksPage();
             } catch (error) {
                 console.error('Delete error:', error);
-                alert('Error deleting rack: ' + error.message);
+                alert('Error deleting rack: ' + friendlyError(error));
             }
         }
 
@@ -4483,6 +4486,44 @@
             editingEquipmentId = null;
         }
         
+        // ============ SAVE-TIME GUARDS: friendly errors, duplicates, IP conflicts ============
+        function friendlyError(error) {
+            let msg = error && error.message ? error.message : String(error);
+            if (/general exception/i.test(msg)) {
+                msg += '\n\n\ud83d\udca1 This usually means a SharePoint column is missing or has the wrong type (e.g., text vs number). Run ensure-netinventory-columns.ps1 to verify and fix columns.';
+            } else if (/is not recognized|does not exist|invalid field|column.*not found/i.test(msg)) {
+                msg += '\n\n\ud83d\udca1 A SharePoint column the app expects is missing. Run ensure-netinventory-columns.ps1.';
+            } else if (/401|unauthorized|token|interaction_required/i.test(msg)) {
+                msg += '\n\n\ud83d\udca1 Your session may have expired \u2014 refresh the page and sign in again.';
+            } else if (/429|throttl/i.test(msg)) {
+                msg += '\n\n\ud83d\udca1 SharePoint is rate-limiting requests \u2014 wait a few seconds and try again.';
+            }
+            return msg;
+        }
+
+        // Warn (with override) when saving an item whose identifier already exists
+        async function confirmIfDuplicate(getterName, field, value, excludeId, entityLabel) {
+            if (!value || !String(value).trim()) return true;
+            try {
+                const items = await store[getterName]();
+                const dup = items.find(i => i.id !== excludeId && String(i[field] || '').trim().toLowerCase() === String(value).trim().toLowerCase());
+                if (!dup) return true;
+                return confirm('\u26a0\ufe0f Possible duplicate!\n\nA ' + entityLabel + ' with "' + value + '" already exists.\n\nSave anyway?');
+            } catch (e) { return true; }
+        }
+
+        // IP conflict detection across equipment mgmt IPs and circuit CPE mgmt IPs
+        async function findIpConflict(ip, excludeType, excludeId) {
+            if (!ip || !ip.trim()) return null;
+            const norm = ip.trim();
+            const [equipment, circuits] = await Promise.all([store.getEquipment(), store.getCircuits()]);
+            const eq = equipment.find(e => !(excludeType === 'equipment' && e.id === excludeId) && String(e.mgmtIp || '').trim() === norm);
+            if (eq) return { kind: 'Equipment', name: eq.name };
+            const c = circuits.find(x => !(excludeType === 'circuit' && x.id === excludeId) && String(x.cpeMgmtIp || '').trim() === norm);
+            if (c) return { kind: 'Circuit CPE', name: c.circuitId };
+            return null;
+        }
+
         // RU Conflict Validation - final guard at save time (dropdown can be stale in multi-user use)
         async function validateRackPosition(rackId, position, rackUnits, excludeId = null) {
             const [equipment, fdps] = await Promise.all([store.getEquipment(), store.getFdps()]);
@@ -4577,6 +4618,16 @@
                 }
             }
             
+            // Duplicate name / serial check
+            if (!(await confirmIfDuplicate('getEquipment', 'name', equip.name, editingEquipmentId, 'piece of equipment named'))) return;
+            if (equip.serialNumber && !(await confirmIfDuplicate('getEquipment', 'serialNumber', equip.serialNumber, editingEquipmentId, 'piece of equipment with serial'))) return;
+            
+            // Management IP conflict check
+            if (equip.mgmtIp) {
+                const ipc = await findIpConflict(equip.mgmtIp, 'equipment', editingEquipmentId);
+                if (ipc && !confirm('\u26a0\ufe0f IP conflict!\n\n' + equip.mgmtIp + ' is already assigned to ' + ipc.kind + ' "' + ipc.name + '".\n\nSave anyway?')) return;
+            }
+            
             console.log('Saving equipment:', equip);
             
             try {
@@ -4592,7 +4643,7 @@
             } catch (error) {
                 console.error('Save error details:', error);
                 console.error('Equipment data:', equip);
-                alert('Error saving equipment: ' + error.message);
+                alert('Error saving equipment: ' + friendlyError(error));
             }
         }
         
@@ -4604,7 +4655,7 @@
                 await renderEquipmentPage();
             } catch (error) {
                 console.error('Delete error:', error);
-                alert('Error deleting equipment: ' + error.message);
+                alert('Error deleting equipment: ' + friendlyError(error));
             }
         }
 
@@ -4956,6 +5007,7 @@
                 }
             }
             
+            if (!(await confirmIfDuplicate('getFdps', 'name', fdp.name, editingFdpId, 'FDP named'))) return;
             try {
                 if (editingFdpId) {
                     await store.updateFdp(editingFdpId, fdp);
@@ -4968,7 +5020,7 @@
                 await renderFdpsPage();
             } catch (error) {
                 console.error('Save error:', error);
-                alert('Error saving FDP: ' + error.message);
+                alert('Error saving FDP: ' + friendlyError(error));
             }
         }
         
@@ -4980,7 +5032,7 @@
                 await renderFdpsPage();
             } catch (error) {
                 console.error('Delete error:', error);
-                alert('Error deleting FDP: ' + error.message);
+                alert('Error deleting FDP: ' + friendlyError(error));
             }
         }
 
@@ -6870,6 +6922,13 @@
             console.log('Full circuit object:', circuit);
             console.log('========================');
             
+            if (!(await confirmIfDuplicate('getCircuits', 'circuitId', circuit.circuitId, editingCircuitId, 'circuit with ID'))) return;
+            
+            // CPE management IP conflict check
+            if (circuit.cpeMgmtIp) {
+                const ipc = await findIpConflict(circuit.cpeMgmtIp, 'circuit', editingCircuitId);
+                if (ipc && !confirm('\u26a0\ufe0f IP conflict!\n\n' + circuit.cpeMgmtIp + ' is already assigned to ' + ipc.kind + ' "' + ipc.name + '".\n\nSave anyway?')) return;
+            }
             try {
                 // HANDLE CPE EQUIPMENT - Create new or update existing
                 if (circuit.hasCpe === 'yes' && circuit.cpeType && circuit.zLocationSiteId) {
@@ -6922,7 +6981,7 @@
                 await renderCircuitsPage();
             } catch (error) {
                 console.error('Save error:', error);
-                alert('Error saving circuit: ' + error.message);
+                alert('Error saving circuit: ' + friendlyError(error));
             }
         }
         
@@ -6934,7 +6993,7 @@
                 await renderCircuitsPage();
             } catch (error) {
                 console.error('Delete error:', error);
-                alert('Error deleting circuit: ' + error.message);
+                alert('Error deleting circuit: ' + friendlyError(error));
             }
         }
 
@@ -7448,6 +7507,7 @@
                 notes: formData.get('notes') || ''
             };
             
+            if (!(await confirmIfDuplicate('getNnis', 'name', nni.name, editingNniId, 'NNI named'))) return;
             try {
                 if (editingNniId) {
                     await store.updateNni(editingNniId, nni);
@@ -7460,7 +7520,7 @@
                 await renderNnisPage();
             } catch (error) {
                 console.error('Save error:', error);
-                alert('Error saving NNI: ' + error.message);
+                alert('Error saving NNI: ' + friendlyError(error));
             }
         }
         
@@ -7472,7 +7532,7 @@
                 await renderNnisPage();
             } catch (error) {
                 console.error('Delete error:', error);
-                alert('Error deleting NNI: ' + error.message);
+                alert('Error deleting NNI: ' + friendlyError(error));
             }
         }
         
@@ -9813,7 +9873,7 @@
                 `;
             } catch (error) {
                 console.error('Error rendering provider summary:', error);
-                alert('Error loading provider summary: ' + error.message);
+                alert('Error loading provider summary: ' + friendlyError(error));
             }
         }
 
@@ -9876,6 +9936,7 @@
                 notes: formData.get('notes')
             };
             
+            if (!(await confirmIfDuplicate('getDarkFiberRoutes', 'routeName', route.routeName, editingDarkFiberRouteId, 'dark fiber route named'))) return;
             try {
                 if (editingDarkFiberRouteId) {
                     await store.updateDarkFiberRoute(editingDarkFiberRouteId, route);
@@ -9888,7 +9949,7 @@
                 await renderDarkFiberPage();
             } catch (error) {
                 console.error('Save error:', error);
-                alert('Error saving route: ' + error.message);
+                alert('Error saving route: ' + friendlyError(error));
             }
         }
         
@@ -9909,7 +9970,7 @@
                 await renderDarkFiberPage();
             } catch (error) {
                 console.error('Delete error:', error);
-                alert('Error deleting route: ' + error.message);
+                alert('Error deleting route: ' + friendlyError(error));
             }
         }
         
@@ -10129,7 +10190,7 @@
                 
             } catch (error) {
                 console.error('Error viewing route:', error);
-                alert('Error loading route details: ' + error.message);
+                alert('Error loading route details: ' + friendlyError(error));
             }
         }
         
@@ -10237,6 +10298,9 @@
                 segment.providerName = 'IRIS Networks';
             }
             
+            // Numeric validation (SharePoint Number columns reject NaN)
+            if (isNaN(segment.distance)) { alert('Distance must be a number (km), e.g. 12.5'); return; }
+            if (isNaN(segment.segmentOrder)) { alert('Segment order must be a number, e.g. 1'); return; }
             try {
                 if (editingDarkFiberSegmentId) {
                     await store.updateDarkFiberSegment(editingDarkFiberSegmentId, segment);
@@ -10249,7 +10313,7 @@
                 await viewDarkFiberRoute(currentViewingRouteId);
             } catch (error) {
                 console.error('Save error:', error);
-                alert('Error saving segment: ' + error.message);
+                alert('Error saving segment: ' + friendlyError(error));
             }
         }
         
@@ -10264,7 +10328,7 @@
                 await viewDarkFiberRoute(segment.routeId);
             } catch (error) {
                 console.error('Delete error:', error);
-                alert('Error deleting segment: ' + error.message);
+                alert('Error deleting segment: ' + friendlyError(error));
             }
         }
         
