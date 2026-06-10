@@ -657,7 +657,8 @@
     <script>
         // BUILD: 2024-05-19-23-00-TEMPLATE-LITERALS-FIXED
         // This timestamp forces browser to reload: 1747719600
-        console.log('%c🔧 NetInventory Version: 2024-05-19-FINAL-FIX', 'background: #8b5cf6; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;');
+        console.log('%c🔧 NetInventory Version: 2026-06-10-OTDR-PINPOINT', 'background: #8b5cf6; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;');
+        console.log('📍 OTDR Pinpoint + alternating segment colors added!');
         console.log('✅ Edit buttons ACTUALLY work now - template literals fixed!');
         console.log('🔢 Build timestamp: 1747719600');
         
@@ -9324,6 +9325,99 @@
         let editingDarkFiberSegmentId = null;
         let currentViewingRouteId = null;
         
+        // ============ OTDR PINPOINT & SEGMENT COLORS ============
+        // Alternating palette so adjacent segments are always visually distinct
+        // (red is reserved for the OTDR fault marker)
+        const SEGMENT_COLORS = ['#3b82f6', '#f59e0b', '#10b981', '#ec4899', '#8b5cf6', '#06b6d4'];
+
+        function runOtdrPinpoint() {
+            const data = window._otdrRouteData;
+            const resultEl = document.getElementById('otdrResult');
+            const marker = document.getElementById('otdrMarker');
+            const markerLabel = document.getElementById('otdrMarkerLabel');
+            if (!data || !resultEl || !marker) return;
+
+            const showError = (msg) => {
+                resultEl.style.display = 'block';
+                resultEl.style.background = 'rgba(239, 68, 68, 0.1)';
+                resultEl.style.border = '1px solid #ef4444';
+                resultEl.innerHTML = msg;
+                marker.style.display = 'none';
+            };
+
+            const raw = parseFloat(document.getElementById('otdrDistanceInput').value);
+            const unit = document.getElementById('otdrUnitSelect').value;
+            if (isNaN(raw) || raw < 0) {
+                showError('⚠️ Enter a valid distance value.');
+                return;
+            }
+
+            // Convert input to km
+            let km = raw;
+            if (unit === 'ft') km = raw / 3280.84;
+            if (unit === 'mi') km = raw * 1.609344;
+
+            const totalKm = data.totalKm;
+            const ftStr = Math.round(km * 3280.84).toLocaleString();
+            const miStr = (km / 1.609344).toFixed(2);
+
+            if (!totalKm || totalKm <= 0) {
+                showError('⚠️ This route has no segment distances entered, so the fault location cannot be mapped.');
+                return;
+            }
+
+            if (km > totalKm) {
+                marker.style.left = '100%';
+                marker.style.display = 'block';
+                markerLabel.textContent = km.toFixed(2) + ' km';
+                showError(`⚠️ <strong>${km.toFixed(2)} km</strong> (${ftStr} ft) exceeds the total route distance of <strong>${totalKm.toFixed(2)} km</strong>. ` +
+                    `The fault may be past ${data.zLocation}, or the OTDR reading includes slack/launch fiber not in the as-built distances. Marker pinned at route end.`);
+                marker.style.display = 'block';
+                return;
+            }
+
+            // Walk segments to find where the fault lands
+            let cum = 0, found = null, segStart = 0, colorIdx = 0;
+            for (let i = 0; i < data.segments.length; i++) {
+                const s = data.segments[i];
+                if (km <= cum + s.km || i === data.segments.length - 1) {
+                    found = s; segStart = cum; colorIdx = i;
+                    break;
+                }
+                cum += s.km;
+            }
+
+            const intoSeg = km - segStart;
+            const segEnd = segStart + found.km;
+            const remaining = totalKm - km;
+            const pct = Math.min((km / totalKm) * 100, 100);
+
+            marker.style.left = pct.toFixed(3) + '%';
+            marker.style.display = 'block';
+            markerLabel.textContent = km.toFixed(2) + ' km';
+
+            const segColor = SEGMENT_COLORS[colorIdx % SEGMENT_COLORS.length];
+            resultEl.style.display = 'block';
+            resultEl.style.background = 'rgba(16, 185, 129, 0.08)';
+            resultEl.style.border = '1px solid ' + segColor;
+            resultEl.innerHTML =
+                `📍 <strong>${km.toFixed(2)} km</strong> (${ftStr} ft / ${miStr} mi) from <strong>${data.aLocation}</strong> lands in ` +
+                `<span style="color: ${segColor}; font-weight: 700;">Segment ${found.order}: ${found.provider}</span>` +
+                ` (${found.ownership || 'Unknown'}${found.name ? ' — ' + found.name : ''})<br>` +
+                `↳ <strong>${intoSeg.toFixed(2)} km</strong> into this segment (segment spans ${segStart.toFixed(2)}–${segEnd.toFixed(2)} km) · ` +
+                `${remaining.toFixed(2)} km remaining to ${data.zLocation}` +
+                `<br><span style="font-size: 0.8rem; color: var(--text-tertiary);">Note: OTDR measures optical fiber length (includes slack loops & launch fiber), so the physical fault may be slightly before this point.</span>`;
+        }
+
+        function clearOtdrPinpoint() {
+            const resultEl = document.getElementById('otdrResult');
+            const marker = document.getElementById('otdrMarker');
+            const input = document.getElementById('otdrDistanceInput');
+            if (resultEl) resultEl.style.display = 'none';
+            if (marker) marker.style.display = 'none';
+            if (input) input.value = '';
+        }
+
         function openAddDarkFiberRouteModal() {
             console.log('📋 Opening Add Dark Fiber Route modal...');
             if (!document.getElementById('darkFiberRouteModal')) {
@@ -9445,6 +9539,20 @@
                 const ownedCount = routeSegments.filter(s => s.ownershipType === 'Owned').length;
                 const leasedCount = routeSegments.filter(s => s.ownershipType === 'Leased').length;
                 
+                // Stash data for OTDR Pinpoint tool
+                window._otdrRouteData = {
+                    totalKm: totalDistance,
+                    aLocation: route.aLocationSiteId || 'A-End',
+                    zLocation: route.zLocationSiteId || 'Z-End',
+                    segments: routeSegments.map((seg, idx) => ({
+                        order: seg.segmentOrder || idx + 1,
+                        name: seg.segmentName || '',
+                        provider: seg.providerName || 'Provider',
+                        ownership: seg.ownershipType || '',
+                        km: parseFloat(seg.distance) || 0
+                    }))
+                };
+                
                 // Render route detail view
                 content.innerHTML = `
                     <div style="margin-bottom: 2rem;">
@@ -9495,35 +9603,60 @@
                     ${routeSegments.length > 0 ? `
                     <div style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 0.75rem; padding: 1.5rem; margin-bottom: 1.5rem;">
                         <h3 style="margin: 0 0 1rem 0; color: var(--accent-primary);">Visual Span</h3>
-                        <div style="display: flex; align-items: center; gap: 0; font-size: 0.9rem;">
+
+                        <!-- OTDR Pinpoint Tool -->
+                        <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; margin-bottom: 0.75rem; padding: 0.75rem 1rem; border: 1px dashed var(--border-color); border-radius: 0.5rem;">
+                            <span style="font-weight: 600; white-space: nowrap;">📍 OTDR Pinpoint:</span>
+                            <input type="number" id="otdrDistanceInput" min="0" step="any" placeholder="Distance" style="width: 130px; padding: 0.45rem 0.6rem; background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 0.35rem;" onkeydown="if(event.key==='Enter'){runOtdrPinpoint()}">
+                            <select id="otdrUnitSelect" style="padding: 0.45rem 0.6rem; background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 0.35rem;">
+                                <option value="km">km</option>
+                                <option value="ft">feet</option>
+                                <option value="mi">miles</option>
+                            </select>
+                            <button class="btn-primary" onclick="runOtdrPinpoint()" style="padding: 0.45rem 1rem;">Locate</button>
+                            <button class="btn-secondary" onclick="clearOtdrPinpoint()" style="padding: 0.45rem 1rem;">Clear</button>
+                            <span style="font-size: 0.8rem; color: var(--text-tertiary);">Enter OTDR distance-to-fault to mark it on the span</span>
+                        </div>
+                        <div id="otdrResult" style="display: none; margin-bottom: 0.5rem; padding: 0.75rem 1rem; border-radius: 0.5rem; font-size: 0.9rem; line-height: 1.5;"></div>
+
+                        <div style="display: flex; align-items: center; gap: 0; font-size: 0.9rem; margin-top: 3.5rem; margin-bottom: 1rem;">
                             <div style="padding: 0.5rem 1rem; background: var(--accent-primary); color: white; border-radius: 0.25rem; white-space: nowrap;">
                                 ${route.aLocationSiteId || 'Start'}
                             </div>
-                            ${routeSegments.map((seg, idx) => `
-                                <div style="flex: 1; display: flex; align-items: center;">
-                                    <div style="flex: 1; height: 4px; background: ${seg.ownershipType === 'Owned' ? 'var(--success)' : 'var(--accent-primary)'}; position: relative;">
-                                        <div style="position: absolute; top: -25px; left: 50%; transform: translateX(-50%); white-space: nowrap; font-size: 0.75rem; color: var(--text-tertiary);">
-                                            ${seg.distance || 0}km
-                                        </div>
-                                        <div style="position: absolute; top: 10px; left: 50%; transform: translateX(-50%); white-space: nowrap; font-size: 0.8rem; color: ${seg.ownershipType === 'Owned' ? 'var(--success)' : 'var(--text-secondary)'};">
-                                            ${seg.providerName || 'Provider'}
+                            <div id="otdrSpanTrack" style="flex: 1; display: flex; align-items: center; position: relative;">
+                                ${routeSegments.map((seg, idx) => `
+                                    <div style="flex: ${Math.max(parseFloat(seg.distance) || 0, 0.0001)} 1 0%; display: flex; align-items: center; ${idx > 0 ? 'border-left: 2px solid var(--bg-secondary);' : ''}">
+                                        <div style="flex: 1; height: 6px; background: ${SEGMENT_COLORS[idx % SEGMENT_COLORS.length]}; position: relative;">
+                                            <div style="position: absolute; top: ${idx % 2 === 0 ? '-25px' : '-44px'}; left: 50%; transform: translateX(-50%); white-space: nowrap; font-size: 0.75rem; color: var(--text-tertiary);">
+                                                ${seg.distance || 0}km
+                                            </div>
+                                            <div style="position: absolute; top: ${idx % 2 === 0 ? '12px' : '30px'}; left: 50%; transform: translateX(-50%); white-space: nowrap; font-size: 0.8rem; font-weight: 600; color: ${SEGMENT_COLORS[idx % SEGMENT_COLORS.length]};">
+                                                ${seg.ownershipType === 'Owned' ? '🏠' : '🏢'} ${seg.providerName || 'Provider'}
+                                            </div>
                                         </div>
                                     </div>
+                                `).join('')}
+                                <div id="otdrMarker" style="display: none; position: absolute; top: -36px; bottom: -36px; left: 0%; width: 0; z-index: 5; pointer-events: none;">
+                                    <div style="position: absolute; top: 0; bottom: 0; left: -1.5px; width: 3px; background: #ef4444; border-radius: 2px; box-shadow: 0 0 6px rgba(239,68,68,0.7);"></div>
+                                    <div style="position: absolute; top: -16px; left: 50%; transform: translateX(-50%); font-size: 1.1rem;">📍</div>
+                                    <div id="otdrMarkerLabel" style="position: absolute; bottom: -20px; left: 50%; transform: translateX(-50%); white-space: nowrap; font-size: 0.75rem; font-weight: 700; color: #ef4444;"></div>
                                 </div>
-                            `).join('')}
+                            </div>
                             <div style="padding: 0.5rem 1rem; background: var(--accent-primary); color: white; border-radius: 0.25rem; white-space: nowrap;">
                                 ${route.zLocationSiteId || 'End'}
                             </div>
                         </div>
-                        <div style="display: flex; gap: 2rem; margin-top: 2rem; font-size: 0.9rem;">
-                            <div style="display: flex; align-items: center; gap: 0.5rem;">
-                                <div style="width: 30px; height: 4px; background: var(--success);"></div>
-                                <span>Owned (${ownedCount})</span>
-                            </div>
-                            <div style="display: flex; align-items: center; gap: 0.5rem;">
-                                <div style="width: 30px; height: 4px; background: var(--accent-primary);"></div>
-                                <span>Leased (${leasedCount})</span>
-                            </div>
+
+                        <div style="display: flex; flex-wrap: wrap; gap: 1rem 1.75rem; margin-top: 3.5rem; font-size: 0.85rem;">
+                            ${routeSegments.map((seg, idx) => `
+                                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                    <div style="width: 24px; height: 6px; background: ${SEGMENT_COLORS[idx % SEGMENT_COLORS.length]}; border-radius: 2px;"></div>
+                                    <span>Seg ${seg.segmentOrder || idx + 1}: ${seg.providerName || 'Provider'} (${seg.ownershipType === 'Owned' ? '🏠 Owned' : '🏢 Leased'}) — ${seg.distance || 0} km</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                        <div style="margin-top: 0.75rem; font-size: 0.8rem; color: var(--text-tertiary);">
+                            ${ownedCount} owned · ${leasedCount} leased · Segment widths are proportional to distance
                         </div>
                     </div>
                     ` : ''}
@@ -9543,9 +9676,9 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                ${routeSegments.map(seg => `
+                                ${routeSegments.map((seg, idx) => `
                                     <tr>
-                                        <td><strong>${seg.segmentOrder || ''}</strong></td>
+                                        <td><span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: ${SEGMENT_COLORS[idx % SEGMENT_COLORS.length]}; margin-right: 6px; vertical-align: middle;"></span><strong>${seg.segmentOrder || ''}</strong></td>
                                         <td>${seg.segmentName || '-'}</td>
                                         <td>
                                             <span style="color: ${seg.ownershipType === 'Owned' ? 'var(--success)' : 'var(--accent-primary)'};">
