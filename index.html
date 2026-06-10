@@ -3346,8 +3346,8 @@
                                     const result = data[0];
                                     
                                     await store.updateSite(site.id, {
-                                        latitude: parseFloat(result.lat),
-                                        longitude: parseFloat(result.lon)
+                                        latitude: String(result.lat),
+                                        longitude: String(result.lon)
                                     });
                                     
                                     successful++;
