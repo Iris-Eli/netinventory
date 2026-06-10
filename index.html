@@ -658,7 +658,7 @@
         // BUILD: 2024-05-19-23-00-TEMPLATE-LITERALS-FIXED
         // This timestamp forces browser to reload: 1747719600
         console.log('%c🔧 NetInventory Version: 2026-06-10-OTDR-PINPOINT', 'background: #8b5cf6; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;');
-        console.log('📍 OTDR Pinpoint + alternating segment colors added!');
+        console.log('📍 OTDR Pinpoint, segment colors, modal Back nav, RU conflict validation, Provider Summary added!');
         console.log('✅ Edit buttons ACTUALLY work now - template literals fixed!');
         console.log('🔢 Build timestamp: 1747719600');
         
@@ -2674,7 +2674,7 @@
                         actions: [
                             {
                                 label: '👁️ View',
-                                onclick: (rack) => `closeViewModal(); viewRackDetails('${rack.id}')`,
+                                onclick: (rack) => `stackViewModal(); viewRackDetails('${rack.id}')`,
                                 tooltip: 'View rack details'
                             },
                             {
@@ -2694,7 +2694,7 @@
                         actions: [
                             {
                                 label: '👁️ View',
-                                onclick: (equip) => `closeViewModal(); viewEquipmentDetails('${equip.id}')`,
+                                onclick: (equip) => `stackViewModal(); viewEquipmentDetails('${equip.id}')`,
                                 tooltip: 'View equipment details'
                             },
                             {
@@ -2714,7 +2714,7 @@
                         actions: [
                             {
                                 label: '👁️ View',
-                                onclick: (fdp) => `closeViewModal(); viewFdpDetails('${fdp.id}')`,
+                                onclick: (fdp) => `stackViewModal(); viewFdpDetails('${fdp.id}')`,
                                 tooltip: 'View FDP details'
                             },
                             {
@@ -2734,7 +2734,7 @@
                         actions: [
                             {
                                 label: '👁️ View',
-                                onclick: (circuit) => `closeViewModal(); viewCircuitDetails('${circuit.id}')`,
+                                onclick: (circuit) => `stackViewModal(); viewCircuitDetails('${circuit.id}')`,
                                 tooltip: 'View circuit details'
                             },
                             {
@@ -2754,7 +2754,7 @@
                         actions: [
                             {
                                 label: '👁️ View',
-                                onclick: (nni) => `closeViewModal(); viewNniDetails('${nni.id}')`,
+                                onclick: (nni) => `stackViewModal(); viewNniDetails('${nni.id}')`,
                                 tooltip: 'View NNI details'
                             }
                         ]
@@ -4437,6 +4437,44 @@
             editingEquipmentId = null;
         }
         
+        // RU Conflict Validation - final guard at save time (dropdown can be stale in multi-user use)
+        async function validateRackPosition(rackId, position, rackUnits, excludeId = null) {
+            const [equipment, fdps] = await Promise.all([store.getEquipment(), store.getFdps()]);
+            const newStart = parseInt(position);
+            const newEnd = newStart + (parseInt(rackUnits) || 1) - 1;
+
+            const conflicting = [...equipment, ...fdps]
+                .filter(item => item.id !== excludeId && item.rackId === rackId)
+                .find(item => {
+                    const itemStart = parseInt(item.rackPosition || item.ruPosition);
+                    if (!itemStart || isNaN(itemStart)) return false;
+                    const itemEnd = itemStart + (parseInt(item.rackUnits || item.ruSize) || 1) - 1;
+                    return (newStart <= itemEnd && newEnd >= itemStart);
+                });
+
+            if (!conflicting) return { valid: true };
+
+            // Suggest the next available position that fits
+            const occupied = new Set();
+            [...equipment, ...fdps]
+                .filter(item => item.id !== excludeId && item.rackId === rackId)
+                .forEach(item => {
+                    const pos = parseInt(item.rackPosition || item.ruPosition);
+                    const units = parseInt(item.rackUnits || item.ruSize) || 1;
+                    if (pos && !isNaN(pos)) for (let i = 0; i < units; i++) occupied.add(pos + i);
+                });
+            const rack = (await store.getRacks()).find(r => r.id === rackId);
+            const capacity = parseInt(rack && rack.ruCapacity) || 42;
+            const size = parseInt(rackUnits) || 1;
+            let suggestion = null;
+            for (let pos = 1; pos <= capacity - size + 1; pos++) {
+                let fits = true;
+                for (let i = 0; i < size; i++) if (occupied.has(pos + i)) { fits = false; break; }
+                if (fits) { suggestion = pos; break; }
+            }
+            return { valid: false, conflictingItem: conflicting, suggestion };
+        }
+
         async function saveEquipment(event) {
             event.preventDefault();
             const form = event.target;
@@ -4480,6 +4518,17 @@
             // Only include weight if provided
             if (formData.get('weight')) {
                 equip.weight = parseInt(formData.get('weight'));
+            }
+            
+            // RU conflict check (guards against stale dropdowns & simultaneous multi-user edits)
+            if (equip.rackId && equip.rackPosition) {
+                const check = await validateRackPosition(equip.rackId, equip.rackPosition, equip.rackUnits || 1, editingEquipmentId);
+                if (!check.valid) {
+                    const c = check.conflictingItem;
+                    alert(`⚠️ Rack position conflict!\n\nU${equip.rackPosition}${(equip.rackUnits || 1) > 1 ? `–U${equip.rackPosition + equip.rackUnits - 1}` : ''} overlaps with "${c.name}" (U${c.rackPosition || c.ruPosition}, ${c.rackUnits || c.ruSize || 1}U).` +
+                        (check.suggestion ? `\n\nNext available position for this size: U${check.suggestion}` : '\n\nNo positions available in this rack for this size.'));
+                    return;
+                }
             }
             
             console.log('Saving equipment:', equip);
@@ -4848,6 +4897,17 @@
             // Only include portCount if provided
             if (formData.get('portCount')) {
                 fdp.portCount = parseInt(formData.get('portCount'));
+            }
+            
+            // RU conflict check (guards against stale dropdowns & simultaneous multi-user edits)
+            if (fdp.rackId && fdp.rackPosition) {
+                const check = await validateRackPosition(fdp.rackId, fdp.rackPosition, fdp.rackUnits || 1, editingFdpId);
+                if (!check.valid) {
+                    const c = check.conflictingItem;
+                    alert(`⚠️ Rack position conflict!\n\nU${fdp.rackPosition}${(fdp.rackUnits || 1) > 1 ? `–U${fdp.rackPosition + fdp.rackUnits - 1}` : ''} overlaps with "${c.name}" (U${c.rackPosition || c.ruPosition}, ${c.rackUnits || c.ruSize || 1}U).` +
+                        (check.suggestion ? `\n\nNext available position for this size: U${check.suggestion}` : '\n\nNo positions available in this rack for this size.'));
+                    return;
+                }
             }
             
             try {
@@ -6933,7 +6993,25 @@
         `;
         
         // Universal View Modal - can display any entity's details
-        function showViewModal(config) {
+        // Drill-down history: stackViewModal() before opening a child view enables the ← Back button
+        let viewModalStack = [];
+        let currentViewModalConfig = null;
+
+        function stackViewModal() {
+            if (currentViewModalConfig) viewModalStack.push(currentViewModalConfig);
+            const existing = document.getElementById('universalViewModal');
+            if (existing) existing.remove();
+        }
+
+        function viewModalBack() {
+            if (viewModalStack.length > 0) {
+                const previous = viewModalStack.pop();
+                showViewModal(previous, true);
+            }
+        }
+
+        function showViewModal(config, isBack = false) {
+            currentViewModalConfig = config;
             // Remove existing view modal if any
             const existing = document.getElementById('universalViewModal');
             if (existing) existing.remove();
@@ -7010,7 +7088,10 @@
                         <div style="padding: 1.5rem;">
                             ${sectionsHTML}
                         </div>
-                        <div style="padding: 1rem 1.5rem; border-top: 1px solid var(--border-color); display: flex; justify-content: flex-end;">
+                        <div style="padding: 1rem 1.5rem; border-top: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                ${viewModalStack.length > 0 ? `<button onclick="viewModalBack()" class="btn-secondary">← Back</button><span style="margin-left: 0.75rem; font-size: 0.8rem; color: var(--text-tertiary);">${viewModalStack.length} previous view${viewModalStack.length > 1 ? 's' : ''}</span>` : ''}
+                            </div>
                             <button onclick="closeViewModal()" class="btn-secondary">Close</button>
                         </div>
                     </div>
@@ -7023,6 +7104,8 @@
         function closeViewModal() {
             const modal = document.getElementById('universalViewModal');
             if (modal) modal.remove();
+            viewModalStack = [];
+            currentViewModalConfig = null;
         }
         
         async function renderNnisPage() {
@@ -7344,7 +7427,7 @@
                     type: 'details',
                     data: [
                         { label: 'Equipment Name', value: equipment.name },
-                        ...(parentChassis ? [{ label: 'Parent Chassis', value: parentChassis.name, onClick: () => { closeViewModal(); viewEquipmentDetails(parentChassis.id); } }] : []),
+                        ...(parentChassis ? [{ label: 'Parent Chassis', value: parentChassis.name, onClick: () => { stackViewModal(); viewEquipmentDetails(parentChassis.id); } }] : []),
                         ...(equipment.slotNumber ? [{ label: 'Slot/Position', value: equipment.slotNumber }] : []),
                         { label: 'Site', value: site ? site.name : (equipment.siteId || '-') },
                         { label: 'Rack', value: rack ? rack.name : (equipment.rackId || '-') },
@@ -7379,7 +7462,7 @@
                     columns: ['slotNumber', 'name', 'manufacturer', 'model', 'portConfig'],
                     headers: ['Slot', 'Card Name', 'Manufacturer', 'Model', 'Port Config'],
                     emptyMessage: 'No line cards installed',
-                    onclick: (card) => `closeViewModal(); viewEquipmentDetails('${card.id}')`
+                    onclick: (card) => `stackViewModal(); viewEquipmentDetails('${card.id}')`
                 });
             }
             
@@ -9247,7 +9330,10 @@
                 content.innerHTML = `
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
                         <h1 style="font-size: 2rem;">🌑 Dark Fiber Routes</h1>
-                        <button class="btn-primary" onclick="openAddDarkFiberRouteModal()">+ Add Route</button>
+                        <div style="display: flex; gap: 0.75rem;">
+                            <button class="btn-secondary" onclick="renderDarkFiberProviderSummary()">📊 Provider Summary</button>
+                            <button class="btn-primary" onclick="openAddDarkFiberRouteModal()">+ Add Route</button>
+                        </div>
                     </div>
                     
                     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
@@ -9416,6 +9502,128 @@
             if (resultEl) resultEl.style.display = 'none';
             if (marker) marker.style.display = 'none';
             if (input) input.value = '';
+        }
+
+        // ============ DARK FIBER PROVIDER SUMMARY ============
+        // Roll-up of all segments grouped by provider — who to call when OTDR pinpoints a fault,
+        // total leased footprint per provider, and which routes each provider touches.
+        let dfSummaryFilter = 'all';
+
+        async function renderDarkFiberProviderSummary(filter) {
+            if (filter !== undefined) dfSummaryFilter = filter;
+            try {
+                const [routes, segments] = await Promise.all([store.getDarkFiberRoutes(), store.getDarkFiberSegments()]);
+                const routeById = {};
+                routes.forEach(r => routeById[r.id] = r);
+
+                // Apply filter
+                const filtered = segments.filter(s => {
+                    if (dfSummaryFilter === 'owned') return s.ownershipType === 'Owned';
+                    if (dfSummaryFilter === 'leased') return s.ownershipType === 'Leased';
+                    if (dfSummaryFilter === 'customer') return s.usageType === 'Customer Lease';
+                    return true;
+                });
+
+                // Group by provider
+                const providers = {};
+                filtered.forEach(s => {
+                    const key = s.providerName || '(No Provider)';
+                    if (!providers[key]) providers[key] = { segments: [], km: 0, owned: 0, leased: 0, customer: 0, routeIds: new Set() };
+                    const p = providers[key];
+                    p.segments.push(s);
+                    p.km += parseFloat(s.distance) || 0;
+                    if (s.ownershipType === 'Owned') p.owned++;
+                    if (s.ownershipType === 'Leased') p.leased++;
+                    if (s.usageType === 'Customer Lease') p.customer++;
+                    if (s.routeId) p.routeIds.add(s.routeId);
+                });
+                const providerNames = Object.keys(providers).sort((a, b) => providers[b].km - providers[a].km);
+                const totalKm = filtered.reduce((sum, s) => sum + (parseFloat(s.distance) || 0), 0);
+
+                const chip = (val, label) => `<button onclick="renderDarkFiberProviderSummary('${val}')" class="${dfSummaryFilter === val ? 'btn-primary' : 'btn-secondary'}" style="padding: 0.4rem 1rem; font-size: 0.9rem;">${label}</button>`;
+
+                content.innerHTML = `
+                    <div style="margin-bottom: 2rem;">
+                        <button class="btn-secondary" onclick="renderDarkFiberPage()" style="margin-bottom: 1rem;">← Back to Routes</button>
+                        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+                            <h1 style="font-size: 2rem; margin: 0;">📊 Provider Summary</h1>
+                            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                                ${chip('all', 'All')}
+                                ${chip('owned', '🏠 Owned')}
+                                ${chip('leased', '🏢 Leased')}
+                                ${chip('customer', '👤 Customer Lease')}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+                        <div class="stat-card">
+                            <div class="stat-value">${providerNames.length}</div>
+                            <div class="stat-label">Providers</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value">${filtered.length}</div>
+                            <div class="stat-label">Segments</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value">${totalKm.toFixed(1)} km</div>
+                            <div class="stat-label">Total Distance</div>
+                        </div>
+                    </div>
+
+                    ${providerNames.length === 0 ? `
+                        <div style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 0.75rem; padding: 3rem; text-align: center; color: var(--text-secondary);">
+                            No segments match this filter.
+                        </div>
+                    ` : providerNames.map(name => {
+                        const p = providers[name];
+                        const routeList = [...p.routeIds].map(id => routeById[id]).filter(Boolean);
+                        return `
+                        <div style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 0.75rem; padding: 1.5rem; margin-bottom: 1.5rem;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem;">
+                                <h2 style="margin: 0; font-size: 1.3rem;">${name}</h2>
+                                <div style="display: flex; gap: 1.5rem; font-size: 0.9rem; color: var(--text-secondary);">
+                                    <span><strong style="color: var(--text-primary);">${p.km.toFixed(1)} km</strong> total</span>
+                                    <span><strong style="color: var(--text-primary);">${p.segments.length}</strong> segment${p.segments.length !== 1 ? 's' : ''}</span>
+                                    ${p.owned ? `<span>🏠 ${p.owned} owned</span>` : ''}
+                                    ${p.leased ? `<span>🏢 ${p.leased} leased</span>` : ''}
+                                    ${p.customer ? `<span>👤 ${p.customer} customer</span>` : ''}
+                                </div>
+                            </div>
+                            <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+                                <thead>
+                                    <tr style="border-bottom: 1px solid var(--border-color); text-align: left; color: var(--text-secondary);">
+                                        <th style="padding: 0.5rem;">Route</th>
+                                        <th style="padding: 0.5rem;">Segment</th>
+                                        <th style="padding: 0.5rem;">Ownership</th>
+                                        <th style="padding: 0.5rem;">Distance</th>
+                                        <th style="padding: 0.5rem;">Strands</th>
+                                        <th style="padding: 0.5rem;">Connections</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${p.segments.sort((a, b) => (routeById[a.routeId] ? routeById[a.routeId].routeName || '' : '').localeCompare(routeById[b.routeId] ? routeById[b.routeId].routeName || '' : '')).map(s => {
+                                        const route = routeById[s.routeId];
+                                        return `
+                                        <tr style="border-bottom: 1px solid var(--border-color);">
+                                            <td style="padding: 0.5rem;">${route ? `<a href="javascript:void(0)" onclick="viewDarkFiberRoute('${route.id}')" style="color: var(--accent-primary); text-decoration: none;">${route.routeName || route.id}</a>` : '<span style="color: var(--text-tertiary);">(orphaned)</span>'}</td>
+                                            <td style="padding: 0.5rem;">#${s.segmentOrder || '-'} ${s.segmentName || ''}</td>
+                                            <td style="padding: 0.5rem;">${s.ownershipType === 'Owned' ? '🏠 Owned' : '🏢 ' + (s.ownershipType || '-')}${s.usageType === 'Customer Lease' ? ` <span style="font-size: 0.85em;">→ 👤 ${s.customerName || 'Customer'}</span>` : ''}</td>
+                                            <td style="padding: 0.5rem;">${s.distance || 0} km</td>
+                                            <td style="padding: 0.5rem;">${s.strandNumbers || '-'}</td>
+                                            <td style="padding: 0.5rem; font-size: 0.85rem;">${s.aEndLocation || '-'} → ${s.zEndLocation || '-'}</td>
+                                        </tr>`;
+                                    }).join('')}
+                                </tbody>
+                            </table>
+                            ${routeList.length > 0 ? `<div style="margin-top: 0.75rem; font-size: 0.85rem; color: var(--text-tertiary);">Routes: ${routeList.map(r => `<a href="javascript:void(0)" onclick="viewDarkFiberRoute('${r.id}')" style="color: var(--accent-primary); text-decoration: none;">${r.routeName || r.id}</a>`).join(' · ')}</div>` : ''}
+                        </div>`;
+                    }).join('')}
+                `;
+            } catch (error) {
+                console.error('Error rendering provider summary:', error);
+                alert('Error loading provider summary: ' + error.message);
+            }
         }
 
         function openAddDarkFiberRouteModal() {
