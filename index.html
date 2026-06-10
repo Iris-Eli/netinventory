@@ -658,7 +658,7 @@
         // BUILD: 2024-05-19-23-00-TEMPLATE-LITERALS-FIXED
         // This timestamp forces browser to reload: 1747719600
         console.log('%c🔧 NetInventory Version: 2026-06-10-OTDR-PINPOINT', 'background: #8b5cf6; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;');
-        console.log('📍 OTDR Pinpoint, segment colors, modal Back nav, RU conflict validation, Provider Summary added!');
+        console.log('📍 OTDR bidirectional pinpoint, quick-actions popup, segment colors, Back nav, RU validation, Provider Summary!');
         console.log('✅ Edit buttons ACTUALLY work now - template literals fixed!');
         console.log('🔢 Build timestamp: 1747719600');
         
@@ -2572,7 +2572,7 @@
                                     '<tr><td colspan="8" style="text-align: center; padding: 3rem; color: var(--text-secondary);">No sites yet. Click "Add Site" to get started.</td></tr>' :
                                     sites.map(site => `
                                         <tr class="site-row" data-searchable="${[site.name, site.cidCode, site.location, site.type, site.city, site.state, site.contact].filter(Boolean).join(' ').toLowerCase()}">
-                                            <td><strong>${site.name || ''}</strong></td>
+                                            <td><strong><a href="javascript:void(0)" onclick="showQuickActions('site','${site.id}')" style="color: var(--accent-primary); text-decoration: none; cursor: pointer;" title="Quick actions">${site.name || ''}</a></strong></td>
                                             <td>${site.cidCode || ''}</td>
                                             <td>${site.location || ''}</td>
                                             <td>${site.type || ''}</td>
@@ -3801,7 +3801,7 @@
                                         const site = sites.find(s => s.id === rack.siteId);
                                         return `
                                             <tr>
-                                                <td><strong>${rack.name || ''}</strong></td>
+                                                <td><strong><a href="javascript:void(0)" onclick="showQuickActions('rack','${rack.id}')" style="color: var(--accent-primary); text-decoration: none; cursor: pointer;" title="Quick actions">${rack.name || ''}</a></strong></td>
                                                 <td>${site ? site.name : rack.siteId || ''}</td>
                                                 <td>${rack.location || ''}</td>
                                                 <td>${rack.rackUnits || ''}</td>
@@ -4128,7 +4128,7 @@
                                             rows.push(`
                                                 <tr class="equipment-row chassis-row" data-searchable="${[equip.name, site?.name, rack?.name, equip.manufacturer, equip.model, equip.type].filter(Boolean).join(' ').toLowerCase()}">
                                                     <td>
-                                                        <strong>${equip.name || ''}</strong>
+                                                        <strong><a href="javascript:void(0)" onclick="showQuickActions('equipment','${equip.id}')" style="color: var(--accent-primary); text-decoration: none; cursor: pointer;" title="Quick actions">${equip.name || ''}</a></strong>
                                                         ${childCards.length > 0 ? `<span style="font-size: 0.75rem; color: var(--text-tertiary); margin-left: 0.5rem;">(${childCards.length} cards)</span>` : ''}
                                                     </td>
                                                     <td>${site ? site.name : equip.siteId || ''}</td>
@@ -4160,7 +4160,7 @@
                                                     <tr class="equipment-row linecard-row" data-searchable="${[lc.name, lcSite?.name, lcRack?.name, lc.manufacturer, lc.model, lc.type].filter(Boolean).join(' ').toLowerCase()}" style="background: var(--bg-tertiary);">
                                                         <td style="padding-left: 3rem;">
                                                             <span style="color: var(--text-tertiary);">├─</span> 
-                                                            <strong>${lc.name || ''}</strong>
+                                                            <strong><a href="javascript:void(0)" onclick="showQuickActions('equipment','${lc.id}')" style="color: var(--accent-primary); text-decoration: none; cursor: pointer;" title="Quick actions">${lc.name || ''}</a></strong>
                                                             ${lc.slotNumber ? `<span style="font-size: 0.8rem; color: var(--accent-primary); margin-left: 0.5rem;">[${lc.slotNumber}]</span>` : ''}
                                                         </td>
                                                         <td>${lcSite ? lcSite.name : lc.siteId || ''}</td>
@@ -4691,7 +4691,7 @@
                                         const rack = racks.find(r => r.id === fdp.rackId);
                                         return `
                                             <tr class="fdp-row" data-searchable="${[fdp.name, site?.name, fdp.mountingType, fdp.connectorType].filter(Boolean).join(' ').toLowerCase()}">
-                                                <td><strong>${fdp.name || ''}</strong></td>
+                                                <td><strong><a href="javascript:void(0)" onclick="showQuickActions('fdp','${fdp.id}')" style="color: var(--accent-primary); text-decoration: none; cursor: pointer;" title="Quick actions">${fdp.name || ''}</a></strong></td>
                                                 <td>${site ? site.name : fdp.siteId || ''}</td>
                                                 <td>${fdp.mountingType || ''}</td>
                                                 <td>${rack ? rack.name : fdp.rackId || '-'}</td>
@@ -6005,7 +6005,7 @@
                                         const directionLabel = circuit.direction === 'provider' ? 'Purchasing' : circuit.direction === 'customer' ? 'Providing' : 'Internal';
                                         return `
                                             <tr class="circuit-row" data-searchable="${[circuit.circuitId, circuit.previousCircuitId, circuit.type, circuit.direction, circuit.status].filter(Boolean).join(' ').toLowerCase()}">
-                                                <td><strong>${circuit.circuitId || ''}</strong></td>
+                                                <td><strong><a href="javascript:void(0)" onclick="showQuickActions('circuit','${circuit.id}')" style="color: var(--accent-primary); text-decoration: none; cursor: pointer;" title="Quick actions">${circuit.circuitId || ''}</a></strong></td>
                                                 <td style="color: var(--text-tertiary); font-size: 0.9rem;">${circuit.previousCircuitId || '-'}</td>
                                                 <td><span class="badge ${circuit.direction === 'provider' ? 'badge-warning' : circuit.direction === 'customer' ? 'badge-success' : 'badge-info'}">${directionLabel}</span></td>
                                                 <td>${circuit.type || ''}</td>
@@ -6992,6 +6992,109 @@
         </div>
         `;
         
+        // ============ QUICK ACTIONS POPUP ============
+        // Clicking an entity name anywhere opens this: every view + edit for that entity.
+        // Delete is intentionally excluded — destructive actions stay on the main table rows.
+        const QUICK_ACTIONS = {
+            site: {
+                icon: '🏢', typeLabel: 'Site',
+                getName: async (id) => { const x = (await store.getSites()).find(i => i.id === id); return x ? x.name : null; },
+                actions: [
+                    { label: '👁️ View Details', fn: (id) => viewSiteDetails(id) },
+                    { label: '✏️ Edit', fn: (id) => editSiteById(id) }
+                ]
+            },
+            rack: {
+                icon: '🗄️', typeLabel: 'Rack',
+                getName: async (id) => { const x = (await store.getRacks()).find(i => i.id === id); return x ? x.name : null; },
+                actions: [
+                    { label: '👁️ View Details', fn: (id) => viewRackDetails(id) },
+                    { label: '🔲 Rack Layout', fn: (id) => viewRackLayout(id) },
+                    { label: '✏️ Edit', fn: (id) => editRackById(id) }
+                ]
+            },
+            equipment: {
+                icon: '🖥️', typeLabel: 'Equipment',
+                getName: async (id) => { const x = (await store.getEquipment()).find(i => i.id === id); return x ? x.name : null; },
+                actions: [
+                    { label: '👁️ View Details', fn: (id) => viewEquipmentDetails(id) },
+                    { label: '🔌 View Ports', fn: (id) => viewEquipmentPorts(id) },
+                    { label: '✏️ Edit', fn: (id) => editEquipmentById(id) }
+                ]
+            },
+            fdp: {
+                icon: '🔆', typeLabel: 'FDP',
+                getName: async (id) => { const x = (await store.getFdps()).find(i => i.id === id); return x ? x.name : null; },
+                actions: [
+                    { label: '👁️ View Details', fn: (id) => viewFdpDetails(id) },
+                    { label: '🔌 Port Layout', fn: (id) => viewFdpLayout(id) },
+                    { label: '✏️ Edit', fn: (id) => editFdpById(id) }
+                ]
+            },
+            circuit: {
+                icon: '⚡', typeLabel: 'Circuit',
+                getName: async (id) => { const x = (await store.getCircuits()).find(i => i.id === id); return x ? x.circuitId : null; },
+                actions: [
+                    { label: '👁️ View Details', fn: (id) => viewCircuitDetails(id) },
+                    { label: '📋 View DLR', fn: (id) => viewDLR(id) },
+                    { label: '✏️ Edit', fn: (id) => editCircuitById(id) }
+                ]
+            },
+            nni: {
+                icon: '🔗', typeLabel: 'NNI',
+                getName: async (id) => { const x = (await store.getNnis()).find(i => i.id === id); return x ? x.name : null; },
+                actions: [
+                    { label: '👁️ View Details', fn: (id) => viewNniDetails(id) },
+                    { label: '✏️ Edit', fn: (id) => editNniById(id) }
+                ]
+            },
+            dfroute: {
+                icon: '🌑', typeLabel: 'Dark Fiber Route',
+                getName: async (id) => { const x = (await store.getDarkFiberRoutes()).find(i => i.id === id); return x ? (x.routeName || x.id) : null; },
+                actions: [
+                    { label: '👁️ View Route & Segments', fn: (id) => viewDarkFiberRoute(id) },
+                    { label: '✏️ Edit', fn: (id) => editDarkFiberRoute(id) }
+                ]
+            }
+        };
+
+        let _quickActionFns = [];
+
+        async function showQuickActions(entityType, id) {
+            const config = QUICK_ACTIONS[entityType];
+            if (!config) return;
+            const name = await config.getName(id);
+            if (name === null) { alert(config.typeLabel + ' not found'); return; }
+
+            closeQuickActions();
+            _quickActionFns = config.actions.map(a => () => { closeQuickActions(); a.fn(id); });
+
+            const html = `
+                <div class="modal active" id="quickActionsModal" onclick="if(event.target === this) closeQuickActions()" style="z-index: 1100;">
+                    <div class="modal-content" style="max-width: 380px;">
+                        <div class="modal-header">
+                            <h2 style="font-size: 1.1rem;">${config.icon} ${name}</h2>
+                            <button class="close-btn" onclick="closeQuickActions()">&times;</button>
+                        </div>
+                        <div style="padding: 1rem 1.5rem 1.5rem;">
+                            <div style="font-size: 0.8rem; color: var(--text-tertiary); margin-bottom: 0.75rem;">${config.typeLabel}</div>
+                            <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                                ${config.actions.map((a, i) => `
+                                    <button class="btn-secondary" onclick="_quickActionFns[${i}]()" style="text-align: left; padding: 0.75rem 1rem; font-size: 0.95rem;">${a.label}</button>
+                                `).join('')}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.insertAdjacentHTML('beforeend', html);
+        }
+
+        function closeQuickActions() {
+            const m = document.getElementById('quickActionsModal');
+            if (m) m.remove();
+        }
+
         // Universal View Modal - can display any entity's details
         // Drill-down history: stackViewModal() before opening a child view enables the ← Back button
         let viewModalStack = [];
@@ -7016,6 +7119,9 @@
             const existing = document.getElementById('universalViewModal');
             if (existing) existing.remove();
             
+            // Handler registry for clickable detail rows (e.g., Parent Chassis)
+            window._viewModalDetailFns = [];
+            
             // Build sections HTML
             let sectionsHTML = '';
             
@@ -7026,12 +7132,19 @@
                         <div style="margin-bottom: 2rem;">
                             <h3 style="font-size: 1.2rem; font-weight: 600; color: var(--accent-primary); margin-bottom: 1rem;">${section.title}</h3>
                             <div style="background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 0.5rem; padding: 1.5rem;">
-                                ${section.data.map(item => `
+                                ${section.data.map(item => {
+                                    let valueHTML = item.value;
+                                    if (typeof item.onClick === 'function') {
+                                        const fnIdx = window._viewModalDetailFns.push(item.onClick) - 1;
+                                        valueHTML = `<a href="javascript:void(0)" onclick="_viewModalDetailFns[${fnIdx}]()" style="color: var(--accent-primary); text-decoration: none; cursor: pointer;">${item.value}</a>`;
+                                    }
+                                    return `
                                     <div style="display: flex; padding: 0.5rem 0; border-bottom: 1px solid var(--border-color);">
                                         <div style="flex: 0 0 180px; font-weight: 500; color: var(--text-secondary);">${item.label}:</div>
-                                        <div style="flex: 1; color: var(--text-primary);">${item.value}</div>
+                                        <div style="flex: 1; color: var(--text-primary);">${valueHTML}</div>
                                     </div>
-                                `).join('')}
+                                `;
+                                }).join('')}
                             </div>
                         </div>
                     `;
@@ -7140,7 +7253,7 @@
                                         const directionLabel = nni.direction === 'customer' ? 'Customer' : nni.direction === 'type-ii-provider' ? 'Type II Provider' : 'Router/Internal';
                                         return `
                                             <tr class="nni-row" data-searchable="${[nni.name, site?.name, nni.equipmentID, nni.fdpId].filter(Boolean).join(' ').toLowerCase()}">
-                                                <td><strong>${nni.name || ''}</strong></td>
+                                                <td><strong><a href="javascript:void(0)" onclick="showQuickActions('nni','${nni.id}')" style="color: var(--accent-primary); text-decoration: none; cursor: pointer;" title="Quick actions">${nni.name || ''}</a></strong></td>
                                                 <td><span class="badge ${nni.direction === 'customer' ? 'badge-success' : nni.direction === 'type-ii-provider' ? 'badge-warning' : 'badge-info'}">${directionLabel}</span></td>
                                                 <td>${site ? site.name : nni.siteId || ''}</td>
                                                 <td>${nni.equipmentID || '-'}</td>
@@ -9375,7 +9488,7 @@
                                     return `
                                         <tr>
                                             <td><strong style="color: var(--accent-primary);">${r.id || ''}</strong></td>
-                                            <td>${r.routeName || ''}</td>
+                                            <td><strong><a href="javascript:void(0)" onclick="showQuickActions('dfroute','${r.id}')" style="color: var(--accent-primary); text-decoration: none; cursor: pointer;" title="Quick actions">${r.routeName || ''}</a></strong></td>
                                             <td>${r.aLocationSiteId || ''} → ${r.zLocationSiteId || ''}</td>
                                             <td>${r.totalDistance || 0} km</td>
                                             <td>${routeSegments.length} ${ownedCount > 0 ? `(${ownedCount} owned)` : ''}</td>
@@ -9439,16 +9552,36 @@
             }
 
             // Convert input to km
-            let km = raw;
-            if (unit === 'ft') km = raw / 3280.84;
-            if (unit === 'mi') km = raw * 1.609344;
+            let measured = raw;
+            if (unit === 'ft') measured = raw / 3280.84;
+            if (unit === 'mi') measured = raw * 1.609344;
+
+            // Reference point (route end or segment boundary) and shot direction
+            const refSelect = document.getElementById('otdrRefSelect');
+            const dirSelect = document.getElementById('otdrDirSelect');
+            const refKm = refSelect ? parseFloat(refSelect.value) || 0 : 0;
+            const refLabel = refSelect ? refSelect.options[refSelect.selectedIndex].text.replace(/ — .*$/, '') : 'A-End';
+            const dir = dirSelect ? dirSelect.value : 'z';
+            const dirLabel = dir === 'z' ? `toward ${data.zLocation}` : `toward ${data.aLocation}`;
+            const km = refKm + (dir === 'z' ? measured : -measured);
 
             const totalKm = data.totalKm;
-            const ftStr = Math.round(km * 3280.84).toLocaleString();
-            const miStr = (km / 1.609344).toFixed(2);
+            const ftStr = Math.round(measured * 3280.84).toLocaleString();
+            const miStr = (measured / 1.609344).toFixed(2);
+            const shotDesc = `<strong>${measured.toFixed(2)} km</strong> (${ftStr} ft / ${miStr} mi) measured from <strong>${refLabel}</strong> ${dirLabel}`;
 
             if (!totalKm || totalKm <= 0) {
                 showError('⚠️ This route has no segment distances entered, so the fault location cannot be mapped.');
+                return;
+            }
+
+            if (km < 0) {
+                marker.style.left = '0%';
+                marker.style.display = 'block';
+                markerLabel.textContent = '< 0 km';
+                showError(`⚠️ ${shotDesc} lands <strong>${Math.abs(km).toFixed(2)} km past ${data.aLocation}</strong> — off the A-end of this route. ` +
+                    `Check the shot direction, or the OTDR reading includes slack/launch fiber. Marker pinned at route start.`);
+                marker.style.display = 'block';
                 return;
             }
 
@@ -9456,8 +9589,8 @@
                 marker.style.left = '100%';
                 marker.style.display = 'block';
                 markerLabel.textContent = km.toFixed(2) + ' km';
-                showError(`⚠️ <strong>${km.toFixed(2)} km</strong> (${ftStr} ft) exceeds the total route distance of <strong>${totalKm.toFixed(2)} km</strong>. ` +
-                    `The fault may be past ${data.zLocation}, or the OTDR reading includes slack/launch fiber not in the as-built distances. Marker pinned at route end.`);
+                showError(`⚠️ ${shotDesc} lands <strong>${(km - totalKm).toFixed(2)} km past ${data.zLocation}</strong> — beyond the route's ${totalKm.toFixed(2)} km total. ` +
+                    `Check the shot direction, or the OTDR reading includes slack/launch fiber not in the as-built distances. Marker pinned at route end.`);
                 marker.style.display = 'block';
                 return;
             }
@@ -9487,12 +9620,22 @@
             resultEl.style.background = 'rgba(16, 185, 129, 0.08)';
             resultEl.style.border = '1px solid ' + segColor;
             resultEl.innerHTML =
-                `📍 <strong>${km.toFixed(2)} km</strong> (${ftStr} ft / ${miStr} mi) from <strong>${data.aLocation}</strong> lands in ` +
+                `📍 ${shotDesc} lands at <strong>${km.toFixed(2)} km</strong> from ${data.aLocation}, in ` +
                 `<span style="color: ${segColor}; font-weight: 700;">Segment ${found.order}: ${found.provider}</span>` +
                 ` (${found.ownership || 'Unknown'}${found.name ? ' — ' + found.name : ''})<br>` +
-                `↳ <strong>${intoSeg.toFixed(2)} km</strong> into this segment (segment spans ${segStart.toFixed(2)}–${segEnd.toFixed(2)} km) · ` +
-                `${remaining.toFixed(2)} km remaining to ${data.zLocation}` +
+                `↳ <strong>${intoSeg.toFixed(2)} km</strong> into this segment from its A-side (segment spans ${segStart.toFixed(2)}–${segEnd.toFixed(2)} km) · ` +
+                `${(segEnd - km).toFixed(2)} km to the segment's Z-side · ${remaining.toFixed(2)} km to ${data.zLocation}` +
                 `<br><span style="font-size: 0.8rem; color: var(--text-tertiary);">Note: OTDR measures optical fiber length (includes slack loops & launch fiber), so the physical fault may be slightly before this point.</span>`;
+        }
+
+        // When the reference point changes, default the direction to the sensible one
+        // (A-end shoots toward Z, Z-end shoots toward A; boundaries default toward Z)
+        function otdrRefChanged() {
+            const refSelect = document.getElementById('otdrRefSelect');
+            const dirSelect = document.getElementById('otdrDirSelect');
+            if (!refSelect || !dirSelect) return;
+            const def = refSelect.options[refSelect.selectedIndex].getAttribute('data-default-dir');
+            if (def) dirSelect.value = def;
         }
 
         function clearOtdrPinpoint() {
@@ -9815,15 +9958,35 @@
                         <!-- OTDR Pinpoint Tool -->
                         <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; margin-bottom: 0.75rem; padding: 0.75rem 1rem; border: 1px dashed var(--border-color); border-radius: 0.5rem;">
                             <span style="font-weight: 600; white-space: nowrap;">📍 OTDR Pinpoint:</span>
-                            <input type="number" id="otdrDistanceInput" min="0" step="any" placeholder="Distance" style="width: 130px; padding: 0.45rem 0.6rem; background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 0.35rem;" onkeydown="if(event.key==='Enter'){runOtdrPinpoint()}">
+                            <input type="number" id="otdrDistanceInput" min="0" step="any" placeholder="Distance" style="width: 110px; padding: 0.45rem 0.6rem; background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 0.35rem;" onkeydown="if(event.key==='Enter'){runOtdrPinpoint()}">
                             <select id="otdrUnitSelect" style="padding: 0.45rem 0.6rem; background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 0.35rem;">
                                 <option value="km">km</option>
                                 <option value="ft">feet</option>
                                 <option value="mi">miles</option>
                             </select>
+                            <span style="color: var(--text-secondary); font-size: 0.9rem;">from</span>
+                            <select id="otdrRefSelect" onchange="otdrRefChanged()" style="padding: 0.45rem 0.6rem; background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 0.35rem; max-width: 260px;">
+                                ${(() => {
+                                    let cum = 0;
+                                    let opts = `<option value="0" data-default-dir="z">${route.aLocationSiteId || 'A-End'} (Route A-End)</option>`;
+                                    routeSegments.forEach((seg, idx) => {
+                                        cum += parseFloat(seg.distance) || 0;
+                                        if (idx < routeSegments.length - 1) {
+                                            const next = routeSegments[idx + 1];
+                                            opts += `<option value="${cum}" data-default-dir="z">Seg ${seg.segmentOrder || idx + 1}/${next.segmentOrder || idx + 2} boundary — ${cum.toFixed(2)} km (${seg.providerName || 'Provider'} → ${next.providerName || 'Provider'})</option>`;
+                                        }
+                                    });
+                                    opts += `<option value="${cum}" data-default-dir="a">${route.zLocationSiteId || 'Z-End'} (Route Z-End)</option>`;
+                                    return opts;
+                                })()}
+                            </select>
+                            <select id="otdrDirSelect" style="padding: 0.45rem 0.6rem; background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 0.35rem;">
+                                <option value="z">toward ${route.zLocationSiteId || 'Z-End'} →</option>
+                                <option value="a">← toward ${route.aLocationSiteId || 'A-End'}</option>
+                            </select>
                             <button class="btn-primary" onclick="runOtdrPinpoint()" style="padding: 0.45rem 1rem;">Locate</button>
                             <button class="btn-secondary" onclick="clearOtdrPinpoint()" style="padding: 0.45rem 1rem;">Clear</button>
-                            <span style="font-size: 0.8rem; color: var(--text-tertiary);">Enter OTDR distance-to-fault to mark it on the span</span>
+                            <span style="font-size: 0.8rem; color: var(--text-tertiary);">Shoot from either route end or any segment boundary (mid-span break-in)</span>
                         </div>
                         <div id="otdrResult" style="display: none; margin-bottom: 0.5rem; padding: 0.75rem 1rem; border-radius: 0.5rem; font-size: 0.9rem; line-height: 1.5;"></div>
 
