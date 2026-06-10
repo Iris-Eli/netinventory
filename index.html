@@ -581,6 +581,70 @@
             background: rgba(59, 130, 246, 0.1);
             border-color: #3b82f6;
         }
+
+        /* ============ MOBILE / RESPONSIVE (≤768px) ============ */
+        @media (max-width: 768px) {
+            /* Sidebar becomes a horizontal scrolling nav strip pinned to top */
+            .sidebar {
+                position: fixed;
+                top: 0; left: 0; right: 0;
+                width: 100%;
+                height: auto;
+                max-height: 58px;
+                display: flex;
+                align-items: center;
+                overflow-x: auto;
+                overflow-y: hidden;
+                padding: 0.3rem 0.5rem;
+                border-right: none;
+                border-bottom: 1px solid var(--border-color);
+                -webkit-overflow-scrolling: touch;
+                scrollbar-width: none;
+            }
+            .sidebar::-webkit-scrollbar { display: none; }
+            .sidebar .logo {
+                padding: 0 0.6rem 0 0.25rem;
+                border-bottom: none;
+                margin-bottom: 0;
+                flex: 0 0 auto;
+                font-size: 0.9rem;
+                white-space: nowrap;
+            }
+            .sidebar .logo p, .sidebar .logo div:not(:first-child) { display: none; }
+            .nav-item {
+                flex: 0 0 auto;
+                white-space: nowrap;
+                padding: 0.55rem 0.7rem !important;
+                font-size: 0.85rem;
+                border-radius: 0.4rem;
+            }
+            .main-content {
+                margin-left: 0;
+                margin-top: 64px;
+                padding: 1rem 0.75rem;
+            }
+            /* Cards & grids */
+            .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 0.6rem; }
+            .stat-card, .stats-grid > div { padding: 0.9rem !important; }
+            .dashboard-charts { grid-template-columns: 1fr !important; }
+            /* Tables scroll horizontally instead of crushing */
+            .table-container { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+            .table-container table { min-width: 640px; }
+            /* Modals fill the screen sensibly */
+            .modal-content {
+                max-width: 96vw !important;
+                width: 96vw !important;
+                max-height: 92vh;
+                overflow-y: auto;
+                margin: 1rem auto;
+            }
+            /* Headings scale down (overrides inline 2rem) */
+            h1 { font-size: 1.35rem !important; }
+            /* Prevent iOS zoom-on-focus */
+            input, select, textarea { font-size: 16px !important; }
+            /* Touch-friendlier buttons */
+            button { min-height: 38px; }
+        }
     </style>
 </head>
 <body>
@@ -659,7 +723,7 @@
         // BUILD: 2024-05-19-23-00-TEMPLATE-LITERALS-FIXED
         // This timestamp forces browser to reload: 1747719600
         console.log('%c🔧 NetInventory Version: 2026-06-10-OTDR-PINPOINT', 'background: #8b5cf6; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;');
-        console.log('📊 Capacity page (RU/power/ports per site), exports, save guards + all prior!');
+        console.log('🕐 Activity feed + charts dashboard, 📱 mobile layout, capacity, exports + all prior!');
         console.log('✅ Edit buttons ACTUALLY work now - template literals fixed!');
         console.log('🔢 Build timestamp: 1747719600');
         
@@ -890,6 +954,12 @@
             mapFromSharePoint(entity, item) {
                 const obj = {};
                 const mapping = SHAREPOINT_CONFIG.fieldMappings[entity];
+                
+                // Audit metadata (who/when) — powers the dashboard activity feed
+                obj._modified = item.lastModifiedDateTime || (item.fields && item.fields.Modified) || null;
+                obj._created = item.createdDateTime || (item.fields && item.fields.Created) || null;
+                obj._modifiedBy = (item.lastModifiedBy && item.lastModifiedBy.user && item.lastModifiedBy.user.displayName) || '';
+                obj._createdBy = (item.createdBy && item.createdBy.user && item.createdBy.user.displayName) || '';
                 
                 Object.keys(mapping).forEach(appField => {
                     const spField = mapping[appField];
@@ -11075,14 +11145,62 @@
             
             if (page === 'dashboard') {
                 try {
-                    const [sites, racks, equipment, fdps, circuits, nnis] = await Promise.all([
+                    const [sites, racks, equipment, fdps, circuits, nnis, dfRoutes, dfSegments] = await Promise.all([
                         store.getSites(),
                         store.getRacks(),
                         store.getEquipment(),
                         store.getFdps(),
                         store.getCircuits(),
-                        store.getNnis()
+                        store.getNnis(),
+                        store.getDarkFiberRoutes().catch(() => []),
+                        store.getDarkFiberSegments().catch(() => [])
                     ]);
+                    
+                    // ===== Recent Activity (audit trail lite: who changed what, when) =====
+                    const activity = [];
+                    const collect = (items, type, icon, nameFn, clickFn) => items.forEach(i => {
+                        if (!i._modified) return;
+                        activity.push({ when: new Date(i._modified), type, icon, name: nameFn(i) || '(unnamed)', who: i._modifiedBy || '', isNew: i._created && (new Date(i._modified) - new Date(i._created) < 60000), click: clickFn(i) });
+                    });
+                    collect(sites, 'Site', '🏢', i => i.name, i => `showQuickActions('site','${i.id}')`);
+                    collect(racks, 'Rack', '🗄️', i => i.name, i => `showQuickActions('rack','${i.id}')`);
+                    collect(equipment, 'Equipment', '🖥️', i => i.name, i => `showQuickActions('equipment','${i.id}')`);
+                    collect(fdps, 'FDP', '🔆', i => i.name, i => `showQuickActions('fdp','${i.id}')`);
+                    collect(circuits, 'Circuit', '⚡', i => i.circuitId, i => `showQuickActions('circuit','${i.id}')`);
+                    collect(nnis, 'NNI', '🔗', i => i.name, i => `showQuickActions('nni','${i.id}')`);
+                    collect(dfRoutes, 'DF Route', '🌑', i => i.routeName, i => `showQuickActions('dfroute','${i.id}')`);
+                    collect(dfSegments, 'DF Segment', '🌑', i => i.segmentName || ('Segment ' + (i.segmentOrder || '')), i => i.routeId ? `viewDarkFiberRoute('${i.routeId}')` : '');
+                    activity.sort((a, b) => b.when - a.when);
+                    const recentActivity = activity.slice(0, 15);
+                    
+                    const timeAgo = (d) => {
+                        const s = Math.floor((Date.now() - d.getTime()) / 1000);
+                        if (s < 60) return 'just now';
+                        if (s < 3600) return Math.floor(s / 60) + 'm ago';
+                        if (s < 86400) return Math.floor(s / 3600) + 'h ago';
+                        if (s < 604800) return Math.floor(s / 86400) + 'd ago';
+                        return d.toLocaleDateString();
+                    };
+                    
+                    // ===== Mini bar charts (pure CSS) =====
+                    const barChart = (counts, palette) => {
+                        const entries = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 6);
+                        const max = entries.length ? entries[0][1] : 1;
+                        return entries.length === 0 ? '<div style="color: var(--text-tertiary); font-size: 0.85rem;">No data yet</div>' :
+                            entries.map(([label, count], i) => `
+                            <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem;">
+                                <div style="flex: 0 0 110px; font-size: 0.8rem; text-align: right; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${label}</div>
+                                <div style="flex: 1; height: 18px; background: var(--bg-tertiary); border-radius: 4px; overflow: hidden;">
+                                    <div style="height: 100%; width: ${Math.max((count / max) * 100, 4)}%; background: ${palette[i % palette.length]}; border-radius: 4px;"></div>
+                                </div>
+                                <div style="flex: 0 0 32px; font-size: 0.85rem; font-weight: 600;">${count}</div>
+                            </div>`).join('');
+                    };
+                    const statusCounts = {};
+                    circuits.forEach(c => { const k = (c.status || 'unknown').toLowerCase(); statusCounts[k] = (statusCounts[k] || 0) + 1; });
+                    const mfgCounts = {};
+                    equipment.forEach(e => { const k = e.manufacturer || 'Unknown'; mfgCounts[k] = (mfgCounts[k] || 0) + 1; });
+                    const CHART_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#06b6d4'];
                     
                     content.innerHTML = `
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
@@ -11119,9 +11237,27 @@
                                 <div class="value">${nnis.length}</div>
                             </div>
                         </div>
-                        <div style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 0.75rem; padding: 2rem; margin-top: 2rem;">
-                            <h2 style="color: var(--accent-primary); margin-bottom: 1rem;">Recent Activity</h2>
-                            <p style="color: var(--text-secondary);">System ready. ${sites.length + racks.length + equipment.length + fdps.length + circuits.length + nnis.length} total entities tracked.</p>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-top: 2rem;" class="dashboard-charts">
+                            <div style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 0.75rem; padding: 1.5rem;">
+                                <h2 style="color: var(--accent-primary); margin-bottom: 1rem; font-size: 1.1rem;">⚡ Circuits by Status</h2>
+                                ${barChart(statusCounts, CHART_COLORS)}
+                            </div>
+                            <div style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 0.75rem; padding: 1.5rem;">
+                                <h2 style="color: var(--accent-primary); margin-bottom: 1rem; font-size: 1.1rem;">🖥️ Equipment by Manufacturer</h2>
+                                ${barChart(mfgCounts, CHART_COLORS)}
+                            </div>
+                        </div>
+                        <div style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 0.75rem; padding: 1.5rem; margin-top: 1.5rem;">
+                            <h2 style="color: var(--accent-primary); margin-bottom: 1rem; font-size: 1.1rem;">🕐 Recent Activity</h2>
+                            ${recentActivity.length === 0 ? '<p style="color: var(--text-secondary);">No recent changes. ' + (sites.length + racks.length + equipment.length + fdps.length + circuits.length + nnis.length) + ' total entities tracked.</p>' :
+                            recentActivity.map(a => `
+                                <div style="display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 0; border-bottom: 1px solid var(--border-color); font-size: 0.9rem;">
+                                    <span>${a.icon}</span>
+                                    ${a.click ? `<a href="javascript:void(0)" onclick="${a.click}" style="color: var(--accent-primary); text-decoration: none; font-weight: 600;">${a.name}</a>` : `<strong>${a.name}</strong>`}
+                                    <span style="color: var(--text-tertiary); font-size: 0.8rem;">${a.type}</span>
+                                    <span style="color: var(--text-secondary); margin-left: auto; font-size: 0.8rem; white-space: nowrap;">${a.isNew ? '✨ created' : '✏️ edited'}${a.who ? ' by ' + a.who : ''} · ${timeAgo(a.when)}</span>
+                                </div>`).join('')}
+                            <div style="margin-top: 0.75rem; font-size: 0.78rem; color: var(--text-tertiary);">Full per-field history is in SharePoint: list → item → Version History.</div>
                         </div>
                     `;
                 } catch (error) {
