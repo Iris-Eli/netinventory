@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>NetInventory - SharePoint Edition</title>
     <script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -635,7 +636,7 @@
                 <span>📦</span> FDPs
             </div>
             <div class="nav-item" onclick="navigateTo('availablePorts')">
-                <span>🔓</span> Available Ports
+                <span>📊</span> Capacity
             </div>
             <div class="nav-item" onclick="navigateTo('circuits')">
                 <span>⚡</span> Circuits
@@ -658,7 +659,7 @@
         // BUILD: 2024-05-19-23-00-TEMPLATE-LITERALS-FIXED
         // This timestamp forces browser to reload: 1747719600
         console.log('%c🔧 NetInventory Version: 2026-06-10-OTDR-PINPOINT', 'background: #8b5cf6; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;');
-        console.log('🛡️ Save guards: duplicate detection, IP conflicts, numeric validation, friendly errors + all prior features!');
+        console.log('📊 Capacity page (RU/power/ports per site), exports, save guards + all prior!');
         console.log('✅ Edit buttons ACTUALLY work now - template literals fixed!');
         console.log('🔢 Build timestamp: 1747719600');
         
@@ -7097,6 +7098,101 @@
         </div>
         `;
         
+        // ============ EXPORT ALL / BACKUP ============
+        // One workbook, one tab per section. Column order follows the app's field mappings.
+        const EXPORT_SECTIONS = [
+            { sheet: 'Sites',        entity: 'sites',             getter: 'getSites' },
+            { sheet: 'Racks',        entity: 'racks',             getter: 'getRacks' },
+            { sheet: 'Equipment',    entity: 'equipment',         getter: 'getEquipment' },
+            { sheet: 'FDPs',         entity: 'fdps',              getter: 'getFdps' },
+            { sheet: 'Circuits',     entity: 'circuits',          getter: 'getCircuits' },
+            { sheet: 'NNIs',         entity: 'nnis',              getter: 'getNnis' },
+            { sheet: 'Templates',    entity: 'templates',         getter: 'getTemplates' },
+            { sheet: 'DF Routes',    entity: 'darkfiberroutes',   getter: 'getDarkFiberRoutes' },
+            { sheet: 'DF Segments',  entity: 'darkfibersegments', getter: 'getDarkFiberSegments' }
+        ];
+
+        async function _gatherAllData() {
+            const results = await Promise.all(EXPORT_SECTIONS.map(async s => {
+                try { return await store[s.getter](); }
+                catch (e) { console.warn('Export: failed to load ' + s.sheet, e); return []; }
+            }));
+            return EXPORT_SECTIONS.map((s, i) => ({ ...s, items: results[i] }));
+        }
+
+        function _exportStamp() {
+            const d = new Date();
+            const p = n => String(n).padStart(2, '0');
+            return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + '_' + p(d.getHours()) + p(d.getMinutes());
+        }
+
+        async function exportAllToExcel(btn) {
+            if (typeof XLSX === 'undefined') { alert('Excel library failed to load. Check your internet connection and refresh.'); return; }
+            const origText = btn ? btn.textContent : '';
+            if (btn) { btn.disabled = true; btn.textContent = '⏳ Exporting...'; }
+            try {
+                const sections = await _gatherAllData();
+                const wb = XLSX.utils.book_new();
+                let totalRows = 0;
+                sections.forEach(s => {
+                    const fields = Object.keys(SHAREPOINT_CONFIG.fieldMappings[s.entity]);
+                    const rows = s.items.map(item => {
+                        const row = {};
+                        fields.forEach(f => {
+                            let v = item[f];
+                            if (v === null || v === undefined) v = '';
+                            if (typeof v === 'object') v = JSON.stringify(v);
+                            row[f] = v;
+                        });
+                        return row;
+                    });
+                    totalRows += rows.length;
+                    const ws = XLSX.utils.json_to_sheet(rows, { header: fields });
+                    // Reasonable default column widths
+                    ws['!cols'] = fields.map(f => ({ wch: Math.max(f.length + 2, 14) }));
+                    XLSX.utils.book_append_sheet(wb, ws, s.sheet);
+                });
+                XLSX.writeFile(wb, 'NetInventory-Export-' + _exportStamp() + '.xlsx');
+                console.log('✅ Exported ' + totalRows + ' rows across ' + sections.length + ' sheets');
+            } catch (error) {
+                console.error('Export error:', error);
+                alert('Error exporting: ' + friendlyError(error));
+            } finally {
+                if (btn) { btn.disabled = false; btn.textContent = origText; }
+            }
+        }
+
+        async function backupAllToJson(btn) {
+            const origText = btn ? btn.textContent : '';
+            if (btn) { btn.disabled = true; btn.textContent = '⏳ Backing up...'; }
+            try {
+                const sections = await _gatherAllData();
+                const backup = {
+                    exportedAt: new Date().toISOString(),
+                    appVersion: '2026-06-10',
+                    counts: {},
+                    data: {}
+                };
+                sections.forEach(s => {
+                    backup.counts[s.entity] = s.items.length;
+                    backup.data[s.entity] = s.items;
+                });
+                const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'NetInventory-Backup-' + _exportStamp() + '.json';
+                a.click();
+                URL.revokeObjectURL(url);
+                console.log('✅ Backup complete:', backup.counts);
+            } catch (error) {
+                console.error('Backup error:', error);
+                alert('Error backing up: ' + friendlyError(error));
+            } finally {
+                if (btn) { btn.disabled = false; btn.textContent = origText; }
+            }
+        }
+
         // ============ QUICK ACTIONS POPUP ============
         // Clicking an entity name anywhere opens this: every view + edit for that entity.
         // Delete is intentionally excluded — destructive actions stay on the main table rows.
@@ -10368,12 +10464,13 @@
             
             try {
                 // Load all data
-                const [sites, equipment, fdps, circuits, nnis] = await Promise.all([
+                const [sites, equipment, fdps, circuits, nnis, racks] = await Promise.all([
                     store.getSites(),
                     store.getEquipment(),
                     store.getFdps(),
                     store.getCircuits(),
-                    store.getNnis()
+                    store.getNnis(),
+                    store.getRacks()
                 ]);
                 
                 // Calculate port utilization for all equipment
@@ -10504,17 +10601,81 @@
                     siteGroups[item.siteName].push(item);
                 });
                 
+                // ===== Per-site capacity rollup (RU, power, ports) =====
+                const parseAmps = (v) => { const n = parseFloat(String(v || '').replace(/[^0-9.]/g, '')); return isNaN(n) ? 0 : n; };
+                const siteCapacity = sites.map(site => {
+                    const siteRacks = racks.filter(r => r.siteId === site.id);
+                    const rackIds = new Set(siteRacks.map(r => r.id));
+                    const rackedItems = [...equipment, ...fdps].filter(i => i.rackId && rackIds.has(i.rackId));
+                    const totalRU = siteRacks.reduce((s, r) => s + (parseInt(r.rackUnits) || 0), 0);
+                    const usedRU = rackedItems.reduce((s, i) => s + (parseInt(i.rackUnits) || 1), 0);
+                    
+                    const purchasedAC = siteRacks.reduce((s, r) => s + parseAmps(r.purchasedPowerAC), 0);
+                    const purchasedDC = siteRacks.reduce((s, r) => s + parseAmps(r.purchasedPowerDC), 0);
+                    const siteEquip = equipment.filter(e => e.siteId === site.id || (e.rackId && rackIds.has(e.rackId)));
+                    const usedAC = siteEquip.filter(e => /ac/i.test(e.powerType || '')).reduce((s, e) => s + parseAmps(e.powerDraw), 0);
+                    const usedDC = siteEquip.filter(e => /dc/i.test(e.powerType || '')).reduce((s, e) => s + parseAmps(e.powerDraw), 0);
+                    
+                    const sFdp = fdpStats.filter(f => f.siteId === site.id);
+                    const fdpTotal = sFdp.reduce((s, f) => s + f.totalPorts, 0);
+                    const fdpUsed = sFdp.reduce((s, f) => s + f.usedPorts, 0);
+                    const sEq = enhancedEquipmentStats.filter(e => e.siteId === site.id && e.hasPortConfig);
+                    const eqTotal = sEq.reduce((s, e) => s + e.totalPorts, 0);
+                    const eqUsed = sEq.reduce((s, e) => s + e.usedPorts, 0);
+                    
+                    return { site, rackCount: siteRacks.length, totalRU, usedRU, purchasedAC, usedAC, purchasedDC, usedDC, fdpTotal, fdpUsed, eqTotal, eqUsed };
+                }).filter(c => c.rackCount > 0 || c.fdpTotal > 0 || c.eqTotal > 0)
+                  .sort((a, b) => (b.totalRU ? b.usedRU / b.totalRU : 0) - (a.totalRU ? a.usedRU / a.totalRU : 0));
+                
+                const capBar = (used, total, unit) => {
+                    if (!total) return `<div style="font-size: 0.8rem; color: var(--text-tertiary);">—</div>`;
+                    const pct = Math.min((used / total) * 100, 100);
+                    const color = pct >= 90 ? '#ef4444' : pct >= 70 ? '#f59e0b' : '#10b981';
+                    return `
+                        <div style="display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 0.25rem;">
+                            <span>${used}${unit} / ${total}${unit}</span>
+                            <span style="color: ${color}; font-weight: 600;">${pct.toFixed(0)}%</span>
+                        </div>
+                        <div style="height: 8px; background: var(--bg-tertiary); border-radius: 4px; overflow: hidden;">
+                            <div style="height: 100%; width: ${pct.toFixed(1)}%; background: ${color}; border-radius: 4px;"></div>
+                        </div>`;
+                };
+                
+                const siteCapacityHTML = siteCapacity.length === 0 ? '' : `
+                    <div style="margin-bottom: 2.5rem;">
+                        <h2 style="font-size: 1.4rem; margin-bottom: 1rem;">🏢 Site Capacity Overview</h2>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 1rem;">
+                            ${siteCapacity.map(c => `
+                                <div style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 0.75rem; padding: 1.25rem;">
+                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                                        <a href="javascript:void(0)" onclick="showQuickActions('site','${c.site.id}')" style="color: var(--accent-primary); text-decoration: none; font-weight: 700; font-size: 1.05rem;">${c.site.name}</a>
+                                        <span style="font-size: 0.8rem; color: var(--text-tertiary);">${c.rackCount} rack${c.rackCount !== 1 ? 's' : ''}</span>
+                                    </div>
+                                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.9rem 1.25rem;">
+                                        <div><div style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.3rem;">RACK SPACE (RU)</div>${capBar(c.usedRU, c.totalRU, '')}</div>
+                                        <div><div style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.3rem;">FDP PORTS</div>${capBar(c.fdpUsed, c.fdpTotal, '')}</div>
+                                        <div><div style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.3rem;">AC POWER (A)</div>${capBar(c.usedAC, c.purchasedAC, 'A')}</div>
+                                        <div><div style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.3rem;">DC POWER (A)</div>${capBar(c.usedDC, c.purchasedDC, 'A')}</div>
+                                        <div style="grid-column: 1 / -1;"><div style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.3rem;">EQUIPMENT PORTS</div>${capBar(c.eqUsed, c.eqTotal, '')}</div>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>`;
+                
                 content.innerHTML = `
                     <div style="max-width: 1600px; margin: 0 auto;">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
                             <div style="display: flex; align-items: center; gap: 1rem;">
                                 <button onclick="window.history.back()" class="btn-secondary" style="padding: 0.5rem 1rem;" title="Go back">← Back</button>
                                 <div>
-                                    <h1 style="font-size: 2rem; margin-bottom: 0.5rem; margin: 0;">🔓 Available Ports</h1>
-                                    <p style="color: var(--text-secondary); margin: 0.5rem 0 0 0;">Network-wide port capacity and availability</p>
+                                    <h1 style="font-size: 2rem; margin-bottom: 0.5rem; margin: 0;">📊 Capacity</h1>
+                                    <p style="color: var(--text-secondary); margin: 0.5rem 0 0 0;">Rack space, power, and port capacity across the network</p>
                                 </div>
                             </div>
                         </div>
+                        
+                        ${siteCapacityHTML}
                         
                         <!-- Summary Stats -->
                         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
@@ -10926,7 +11087,11 @@
                     content.innerHTML = `
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
                             <h1 style="font-size: 2rem;">Dashboard</h1>
-                            <button class="btn-secondary" onclick="removeDuplicates()">🔄 Remove Duplicates</button>
+                            <div style="display: flex; gap: 0.75rem;">
+                                <button class="btn-secondary" onclick="exportAllToExcel(this)">⬇️ Export All (XLSX)</button>
+                                <button class="btn-secondary" onclick="backupAllToJson(this)">💾 Backup (JSON)</button>
+                                <button class="btn-secondary" onclick="removeDuplicates()">🔄 Remove Duplicates</button>
+                            </div>
                         </div>
                         <div class="stats-grid">
                             <div class="stat-card" onclick="goToPage('sites')" style="cursor: pointer;" title="Go to Sites">
