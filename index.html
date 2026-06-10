@@ -658,7 +658,7 @@
         // BUILD: 2024-05-19-23-00-TEMPLATE-LITERALS-FIXED
         // This timestamp forces browser to reload: 1747719600
         console.log('%c🔧 NetInventory Version: 2026-06-10-OTDR-PINPOINT', 'background: #8b5cf6; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;');
-        console.log('📍 OTDR bidirectional pinpoint, quick-actions popup, segment colors, Back nav, RU validation, Provider Summary!');
+        console.log('📍 Full cross-linking, template apply, clickable dashboard, OTDR bidirectional pinpoint + more!');
         console.log('✅ Edit buttons ACTUALLY work now - template literals fixed!');
         console.log('🔢 Build timestamp: 1747719600');
         
@@ -3802,7 +3802,7 @@
                                         return `
                                             <tr>
                                                 <td><strong><a href="javascript:void(0)" onclick="showQuickActions('rack','${rack.id}')" style="color: var(--accent-primary); text-decoration: none; cursor: pointer;" title="Quick actions">${rack.name || ''}</a></strong></td>
-                                                <td>${site ? site.name : rack.siteId || ''}</td>
+                                                <td>${site ? `<a href="javascript:void(0)" onclick="showQuickActions('site','${site.id}')" style="color: var(--accent-primary); text-decoration: none; cursor: pointer;" title="Quick actions">${site.name}</a>` : rack.siteId || ''}</td>
                                                 <td>${rack.location || ''}</td>
                                                 <td>${rack.rackUnits || ''}</td>
                                                 <td>${rack.hasAC === 'true' || rack.hasAC === true ? rack.purchasedPowerAC + 'A' : 'No'}</td>
@@ -3940,6 +3940,13 @@
                     <button class="close-btn" onclick="closeEquipmentModal()">&times;</button>
                 </div>
                 <form id="equipmentForm" onsubmit="saveEquipment(event)">
+                    <div class="form-group" id="equipmentTemplateGroup">
+                        <label>📋 Start from Template (Optional)</label>
+                        <select id="equipmentTemplateSelect" onchange="applyEquipmentTemplate()">
+                            <option value="">No template — start blank</option>
+                        </select>
+                        <small style="color: var(--text-tertiary); font-size: 0.85rem;">Prefills manufacturer, model, type, RU size, power & port config</small>
+                    </div>
                     <div class="form-group">
                         <label>Equipment ID *</label>
                         <input type="text" name="name" required placeholder="e.g., EQ-001">
@@ -4131,8 +4138,8 @@
                                                         <strong><a href="javascript:void(0)" onclick="showQuickActions('equipment','${equip.id}')" style="color: var(--accent-primary); text-decoration: none; cursor: pointer;" title="Quick actions">${equip.name || ''}</a></strong>
                                                         ${childCards.length > 0 ? `<span style="font-size: 0.75rem; color: var(--text-tertiary); margin-left: 0.5rem;">(${childCards.length} cards)</span>` : ''}
                                                     </td>
-                                                    <td>${site ? site.name : equip.siteId || ''}</td>
-                                                    <td>${rack ? rack.name : equip.rackId || '-'}</td>
+                                                    <td>${site ? `<a href="javascript:void(0)" onclick="showQuickActions('site','${site.id}')" style="color: var(--accent-primary); text-decoration: none; cursor: pointer;" title="Quick actions">${site.name}</a>` : equip.siteId || ''}</td>
+                                                    <td>${rack ? `<a href="javascript:void(0)" onclick="showQuickActions('rack','${rack.id}')" style="color: var(--accent-primary); text-decoration: none; cursor: pointer;" title="Quick actions">${rack.name}</a>` : equip.rackId || '-'}</td>
                                                     <td>${equip.manufacturer || ''}</td>
                                                     <td>${equip.model || ''}</td>
                                                     <td>${equip.type || ''}</td>
@@ -4163,8 +4170,8 @@
                                                             <strong><a href="javascript:void(0)" onclick="showQuickActions('equipment','${lc.id}')" style="color: var(--accent-primary); text-decoration: none; cursor: pointer;" title="Quick actions">${lc.name || ''}</a></strong>
                                                             ${lc.slotNumber ? `<span style="font-size: 0.8rem; color: var(--accent-primary); margin-left: 0.5rem;">[${lc.slotNumber}]</span>` : ''}
                                                         </td>
-                                                        <td>${lcSite ? lcSite.name : lc.siteId || ''}</td>
-                                                        <td>${lcRack ? lcRack.name : lc.rackId || '-'}</td>
+                                                        <td>${lcSite ? `<a href="javascript:void(0)" onclick="showQuickActions('site','${lcSite.id}')" style="color: var(--accent-primary); text-decoration: none; cursor: pointer;" title="Quick actions">${lcSite.name}</a>` : lc.siteId || ''}</td>
+                                                        <td>${lcRack ? `<a href="javascript:void(0)" onclick="showQuickActions('rack','${lcRack.id}')" style="color: var(--accent-primary); text-decoration: none; cursor: pointer;" title="Quick actions">${lcRack.name}</a>` : lc.rackId || '-'}</td>
                                                         <td>${lc.manufacturer || ''}</td>
                                                         <td>${lc.model || ''}</td>
                                                         <td>${lc.type || ''}</td>
@@ -4195,6 +4202,31 @@
             }
         }
         
+        // Apply a saved template to the Add Equipment form
+        async function applyEquipmentTemplate() {
+            const tmplSelect = document.getElementById('equipmentTemplateSelect');
+            if (!tmplSelect || !tmplSelect.value) return;
+            const template = (await store.getTemplates()).find(t => t.id === tmplSelect.value);
+            if (!template) return;
+            
+            const form = document.getElementById('equipmentForm');
+            const setIf = (field, value) => { if (form.elements[field] && value !== null && value !== undefined && value !== '') form.elements[field].value = value; };
+            
+            setIf('manufacturer', template.manufacturer);
+            setIf('model', template.model);
+            setIf('type', template.type);
+            setIf('ruSize', template.rackUnits);
+            setIf('powerType', template.powerType);
+            setIf('voltage', template.voltage);
+            setIf('powerDraw', template.powerDraw);
+            setIf('maxPowerDraw', template.maxPowerDraw);
+            setIf('weight', template.weight);
+            setIf('portConfig', template.portConfig);
+            
+            // RU size may have changed — refresh available positions if a rack is selected
+            updateAvailableRackPositions(editingEquipmentId);
+        }
+
         async function openAddEquipmentModal() {
             editingEquipmentId = null;
             document.getElementById('equipmentModalTitle').textContent = 'Add Equipment';
@@ -4203,6 +4235,17 @@
             const siteSelect = document.getElementById('equipmentSiteSelect');
             siteSelect.innerHTML = '<option value="">Select Site...</option>' + sites.map(site => `<option value="${site.id}">${site.name}</option>`).join('');
             document.getElementById('equipmentRackSelect').innerHTML = '<option value="">Select Rack...</option>';
+            
+            // Populate template picker (Add mode only)
+            try {
+                const templates = await store.getTemplates();
+                const tmplSelect = document.getElementById('equipmentTemplateSelect');
+                if (tmplSelect) {
+                    tmplSelect.innerHTML = '<option value="">No template — start blank</option>' +
+                        templates.map(t => `<option value="${t.id}">${t.name}${t.manufacturer ? ' — ' + t.manufacturer : ''}${t.model ? ' ' + t.model : ''}</option>`).join('');
+                    document.getElementById('equipmentTemplateGroup').style.display = 'block';
+                }
+            } catch (e) { console.warn('Templates unavailable:', e); }
             
             // Populate parent equipment dropdown (chassis)
             await populateParentEquipmentDropdown();
@@ -4387,6 +4430,9 @@
             
             editingEquipmentId = equip.id;
             document.getElementById('equipmentModalTitle').textContent = 'Edit Equipment';
+            // Template picker is for new equipment only
+            const tmplGroup = document.getElementById('equipmentTemplateGroup');
+            if (tmplGroup) tmplGroup.style.display = 'none';
             const form = document.getElementById('equipmentForm');
             const sites = await store.getSites();
             const siteSelect = document.getElementById('equipmentSiteSelect');
@@ -4692,9 +4738,9 @@
                                         return `
                                             <tr class="fdp-row" data-searchable="${[fdp.name, site?.name, fdp.mountingType, fdp.connectorType].filter(Boolean).join(' ').toLowerCase()}">
                                                 <td><strong><a href="javascript:void(0)" onclick="showQuickActions('fdp','${fdp.id}')" style="color: var(--accent-primary); text-decoration: none; cursor: pointer;" title="Quick actions">${fdp.name || ''}</a></strong></td>
-                                                <td>${site ? site.name : fdp.siteId || ''}</td>
+                                                <td>${site ? `<a href="javascript:void(0)" onclick="showQuickActions('site','${site.id}')" style="color: var(--accent-primary); text-decoration: none; cursor: pointer;" title="Quick actions">${site.name}</a>` : fdp.siteId || ''}</td>
                                                 <td>${fdp.mountingType || ''}</td>
-                                                <td>${rack ? rack.name : fdp.rackId || '-'}</td>
+                                                <td>${rack ? `<a href="javascript:void(0)" onclick="showQuickActions('rack','${rack.id}')" style="color: var(--accent-primary); text-decoration: none; cursor: pointer;" title="Quick actions">${rack.name}</a>` : fdp.rackId || '-'}</td>
                                                 <td>${fdp.location || ''}</td>
                                                 <td>${fdp.portCount || '-'}</td>
                                                 <td>${fdp.connectorType || ''}</td>
@@ -6010,9 +6056,9 @@
                                                 <td><span class="badge ${circuit.direction === 'provider' ? 'badge-warning' : circuit.direction === 'customer' ? 'badge-success' : 'badge-info'}">${directionLabel}</span></td>
                                                 <td>${circuit.type || ''}</td>
                                                 <td>${circuit.bandwidth || ''}</td>
-                                                <td>${aSite ? aSite.name : circuit.aLocationSiteId || ''}</td>
+                                                <td>${aSite ? `<a href="javascript:void(0)" onclick="showQuickActions('site','${aSite.id}')" style="color: var(--accent-primary); text-decoration: none; cursor: pointer;" title="Quick actions">${aSite.name}</a>` : circuit.aLocationSiteId || ''}</td>
                                                 <td style="font-family: 'JetBrains Mono', monospace; color: var(--warning); font-size: 0.9rem;">${circuit.aNniSubinterface ? '.' + normalizeSubinterface(circuit.aNniSubinterface) : '-'}</td>
-                                                <td>${zSite ? zSite.name : circuit.zLocationSiteId || ''}</td>
+                                                <td>${zSite ? `<a href="javascript:void(0)" onclick="showQuickActions('site','${zSite.id}')" style="color: var(--accent-primary); text-decoration: none; cursor: pointer;" title="Quick actions">${zSite.name}</a>` : circuit.zLocationSiteId || ''}</td>
                                                 <td style="font-family: 'JetBrains Mono', monospace; color: var(--warning); font-size: 0.9rem;">${circuit.zNniSubinterface ? '.' + normalizeSubinterface(circuit.zNniSubinterface) : '-'}</td>
                                                 <td><span class="badge ${circuit.status === 'active' ? 'badge-success' : circuit.status === 'down' ? 'badge-danger' : 'badge-secondary'}">${circuit.status || ''}</span></td>
                                                 <td>
@@ -7223,7 +7269,7 @@
         
         async function renderNnisPage() {
             try {
-                const [nnis, sites] = await Promise.all([store.getNnis(), store.getSites()]);
+                const [nnis, sites, allEquipmentForNni, allFdpsForNni] = await Promise.all([store.getNnis(), store.getSites(), store.getEquipment(), store.getFdps()]);
                 
                 content.innerHTML = `
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
@@ -7250,14 +7296,16 @@
                                     '<tr><td colspan="7" style="text-align: center; padding: 3rem; color: var(--text-secondary);">No NNIs yet. Click "Add NNI" to get started.</td></tr>' :
                                     nnis.map(nni => {
                                         const site = sites.find(s => s.id === nni.siteId);
+                                        const nniEquip = nni.equipmentID ? allEquipmentForNni.find(e => e.id === nni.equipmentID) : null;
+                                        const nniFdp = nni.fdpId ? allFdpsForNni.find(f => f.id === nni.fdpId) : null;
                                         const directionLabel = nni.direction === 'customer' ? 'Customer' : nni.direction === 'type-ii-provider' ? 'Type II Provider' : 'Router/Internal';
                                         return `
                                             <tr class="nni-row" data-searchable="${[nni.name, site?.name, nni.equipmentID, nni.fdpId].filter(Boolean).join(' ').toLowerCase()}">
                                                 <td><strong><a href="javascript:void(0)" onclick="showQuickActions('nni','${nni.id}')" style="color: var(--accent-primary); text-decoration: none; cursor: pointer;" title="Quick actions">${nni.name || ''}</a></strong></td>
                                                 <td><span class="badge ${nni.direction === 'customer' ? 'badge-success' : nni.direction === 'type-ii-provider' ? 'badge-warning' : 'badge-info'}">${directionLabel}</span></td>
-                                                <td>${site ? site.name : nni.siteId || ''}</td>
-                                                <td>${nni.equipmentID || '-'}</td>
-                                                <td>${nni.fdpId || '-'}</td>
+                                                <td>${site ? `<a href="javascript:void(0)" onclick="showQuickActions('site','${site.id}')" style="color: var(--accent-primary); text-decoration: none; cursor: pointer;" title="Quick actions">${site.name}</a>` : nni.siteId || ''}</td>
+                                                <td>${nniEquip ? `<a href="javascript:void(0)" onclick="showQuickActions('equipment','${nniEquip.id}')" style="color: var(--accent-primary); text-decoration: none; cursor: pointer;" title="Quick actions">${nniEquip.name}</a>` : nni.equipmentID || '-'}</td>
+                                                <td>${nniFdp ? `<a href="javascript:void(0)" onclick="showQuickActions('fdp','${nniFdp.id}')" style="color: var(--accent-primary); text-decoration: none; cursor: pointer;" title="Quick actions">${nniFdp.name}</a>` : nni.fdpId || '-'}</td>
                                                 <td>${nni.contact || ''}</td>
                                                 <td>
                                                     <button onclick="viewNniDetails('${nni.id}')" class="btn-secondary" style="padding: 0.5rem 0.75rem; margin-right: 0.5rem;" title="View circuits using this NNI">👁️ View</button>
@@ -9397,7 +9445,7 @@
                         <tbody>
                             ${templates.map(t => `
                                 <tr>
-                                    <td><strong style="color: var(--accent-primary);">${t.name || ''}</strong></td>
+                                    <td><strong><a href="javascript:void(0)" onclick="editTemplate('${t.id}')" style="color: var(--accent-primary); text-decoration: none; cursor: pointer;" title="Edit template">${t.name || ''}</a></strong></td>
                                     <td>${t.manufacturer || ''}</td>
                                     <td>${t.model || ''}</td>
                                     <td>${t.type || ''}</td>
@@ -9487,7 +9535,7 @@
                                     const ownedCount = routeSegments.filter(s => s.ownershipType === 'Owned').length;
                                     return `
                                         <tr>
-                                            <td><strong style="color: var(--accent-primary);">${r.id || ''}</strong></td>
+                                            <td><strong><a href="javascript:void(0)" onclick="showQuickActions('dfroute','${r.id}')" style="color: var(--accent-primary); text-decoration: none; cursor: pointer;" title="Quick actions">${r.id || ''}</a></strong></td>
                                             <td><strong><a href="javascript:void(0)" onclick="showQuickActions('dfroute','${r.id}')" style="color: var(--accent-primary); text-decoration: none; cursor: pointer;" title="Quick actions">${r.routeName || ''}</a></strong></td>
                                             <td>${r.aLocationSiteId || ''} → ${r.zLocationSiteId || ''}</td>
                                             <td>${r.totalDistance || 0} km</td>
@@ -10050,7 +10098,7 @@
                                 ${routeSegments.map((seg, idx) => `
                                     <tr>
                                         <td><span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: ${SEGMENT_COLORS[idx % SEGMENT_COLORS.length]}; margin-right: 6px; vertical-align: middle;"></span><strong>${seg.segmentOrder || ''}</strong></td>
-                                        <td>${seg.segmentName || '-'}</td>
+                                        <td><a href="javascript:void(0)" onclick="editDarkFiberSegment('${seg.id}')" style="color: var(--accent-primary); text-decoration: none; cursor: pointer;" title="Edit segment">${seg.segmentName || '-'}</a></td>
                                         <td>
                                             <span style="color: ${seg.ownershipType === 'Owned' ? 'var(--success)' : 'var(--accent-primary)'};">
                                                 ${seg.ownershipType === 'Owned' ? '🏠' : '🏢'} ${seg.ownershipType || ''}
@@ -10767,6 +10815,19 @@
             }
         }
         
+        // Programmatic navigation (dashboard cards, links) - syncs sidebar highlight
+        function goToPage(page) {
+            if (page !== currentPage) {
+                navigationHistory.push(currentPage);
+                currentPage = page;
+            }
+            document.querySelectorAll('.nav-item').forEach(item => {
+                const oc = item.getAttribute('onclick') || '';
+                item.classList.toggle('active', oc.includes("navigateTo('" + page + "')"));
+            });
+            render(page);
+        }
+
         function navigateTo(page) {
             // Don't add to history if going to same page
             if (page !== currentPage) {
@@ -10804,25 +10865,29 @@
                             <button class="btn-secondary" onclick="removeDuplicates()">🔄 Remove Duplicates</button>
                         </div>
                         <div class="stats-grid">
-                            <div class="stat-card">
+                            <div class="stat-card" onclick="goToPage('sites')" style="cursor: pointer;" title="Go to Sites">
                                 <h3>TOTAL SITES</h3>
                                 <div class="value">${sites.length}</div>
                             </div>
-                            <div class="stat-card">
+                            <div class="stat-card" onclick="goToPage('racks')" style="cursor: pointer;" title="Go to Racks">
                                 <h3>TOTAL RACKS</h3>
                                 <div class="value">${racks.length}</div>
                             </div>
-                            <div class="stat-card">
+                            <div class="stat-card" onclick="goToPage('equipment')" style="cursor: pointer;" title="Go to Equipment">
                                 <h3>EQUIPMENT</h3>
                                 <div class="value">${equipment.length}</div>
                             </div>
-                            <div class="stat-card">
+                            <div class="stat-card" onclick="goToPage('fdps')" style="cursor: pointer;" title="Go to FDPs">
                                 <h3>FDPS</h3>
                                 <div class="value">${fdps.length}</div>
                             </div>
-                            <div class="stat-card">
+                            <div class="stat-card" onclick="goToPage('circuits')" style="cursor: pointer;" title="Go to Circuits">
                                 <h3>CIRCUITS</h3>
                                 <div class="value">${circuits.length}</div>
+                            </div>
+                            <div class="stat-card" onclick="goToPage('nnis')" style="cursor: pointer;" title="Go to NNIs">
+                                <h3>NNIS</h3>
+                                <div class="value">${nnis.length}</div>
                             </div>
                         </div>
                         <div style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 0.75rem; padding: 2rem; margin-top: 2rem;">
