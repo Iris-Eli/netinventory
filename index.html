@@ -753,7 +753,7 @@
         // BUILD: 2024-05-19-23-00-TEMPLATE-LITERALS-FIXED
         // This timestamp forces browser to reload: 1747719600
         console.log('%c🔧 NetInventory Version: 2026-06-10-OTDR-PINPOINT', 'background: #8b5cf6; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;');
-        console.log('📦 Ciena import support (parent/slot columns), Ports fix + all prior!');
+        console.log('📦 Import: optional sites, safe re-runs (existing names skip) + all prior!');
         console.log('✅ Edit buttons ACTUALLY work now - template literals fixed!');
         console.log('🔢 Build timestamp: 1747719600');
         
@@ -7550,14 +7550,15 @@
                 let level = 'ok';
                 if (!r.name) { problems.push('missing name'); level = 'error'; }
                 const site = r.site ? siteByKey[r.site.toLowerCase()] : null;
-                if (!site) { problems.push(r.site ? `unknown site "${r.site}"` : 'missing site'); level = 'error'; }
+                if (r.site && !site) { problems.push(`unknown site "${r.site}"`); level = 'error'; }
+                else if (!r.site) { problems.push('no site — assign later via Edit'); if (level !== 'error') level = 'warn'; }
                 let template = null;
                 if (r.template) {
                     template = tmplByName[r.template.toLowerCase()];
                     if (!template) { problems.push(`unknown template "${r.template}"`); level = 'error'; }
                 }
                 const nameKey = r.name.toLowerCase();
-                if (r.name && existingNames.has(nameKey)) { problems.push('name already exists in inventory'); if (level !== 'error') level = 'warn'; }
+                if (r.name && existingNames.has(nameKey)) { problems.push('already in inventory — skipped (safe re-run)'); level = 'error'; }
                 if (r.name && seenInFile.has(nameKey)) { problems.push('duplicate within file'); level = 'error'; }
                 if (r.name) seenInFile.add(nameKey);
                 let parent = null;
@@ -7616,7 +7617,7 @@
                     const pick = (field, tField) => r.raw[field] || t[tField !== undefined ? tField : field] || '';
                     const equip = {
                         name: r.raw.name,
-                        siteId: r.site.id,
+                        siteId: r.site ? r.site.id : '',
                         rackId: '',
                         manufacturer: pick('manufacturer'),
                         model: pick('model'),
