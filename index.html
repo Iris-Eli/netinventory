@@ -753,7 +753,7 @@
         // BUILD: 2024-05-19-23-00-TEMPLATE-LITERALS-FIXED
         // This timestamp forces browser to reload: 1747719600
         console.log('%c🔧 NetInventory Version: 2026-06-10-OTDR-PINPOINT', 'background: #8b5cf6; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;');
-        console.log('↻ Template sync to equipment, optical line-side, tunable circuits + all prior!');
+        console.log('🔧 Fixed equipment Ports modal (getFdps), template sync, optical + all prior!');
         console.log('✅ Edit buttons ACTUALLY work now - template literals fixed!');
         console.log('🔢 Build timestamp: 1747719600');
         
@@ -9200,11 +9200,12 @@
                 return;
             }
             
-            const [nnis, circuits, site, rack] = await Promise.all([
+            const [nnis, circuits, site, rack, allFdpsForConn] = await Promise.all([
                 store.getNnis(),
                 store.getCircuits(),
                 equipment.siteId ? store.getSites().then(s => s.find(site => site.id === equipment.siteId)) : Promise.resolve(null),
-                equipment.rackId ? store.getRacks().then(r => r.find(rack => rack.id === equipment.rackId)) : Promise.resolve(null)
+                equipment.rackId ? store.getRacks().then(r => r.find(rack => rack.id === equipment.rackId)) : Promise.resolve(null),
+                store.getFdps()
             ]);
             
             // Find circuits that reference this equipment
