@@ -753,7 +753,7 @@
         // BUILD: 2024-05-19-23-00-TEMPLATE-LITERALS-FIXED
         // This timestamp forces browser to reload: 1747719600
         console.log('%c🔧 NetInventory Version: 2026-06-10-OTDR-PINPOINT', 'background: #8b5cf6; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;');
-        console.log('📷 Site photos (capture, gallery, auto-downscale), KMZ doc download fix + all prior!');
+        console.log('🗂️ Dedicated storage libraries (RouteMaps, SitePhotos), configurable + all prior!');
         console.log('✅ Edit buttons ACTUALLY work now - template literals fixed!');
         console.log('🔢 Build timestamp: 1747719600');
         
@@ -762,6 +762,18 @@
             clientId: 'f0bc695d-e675-4aa8-a114-8b7935183c30',
             tenantId: 'iristransport.onmicrosoft.com',
             siteId: 'iristransport.sharepoint.com,4e195a2f-61e0-424d-a85e-6c0b3cab7267,613c2b2d-96f5-48a3-a65d-6f190ed5926c',
+            // ===== FILE STORAGE LOCATIONS =====
+            // Where uploaded files live. Each can point to a different SharePoint
+            // site + document library so access can be managed per team.
+            //   siteUrl:     full site URL (null = same site as the lists above)
+            //   libraryName: document library name (null = the site's default 'Documents')
+            //   folder:      top-level folder inside that library
+            // NOTE: uploads run as the signed-in user (delegated permissions), so
+            // users need Contribute rights on the target library.
+            storage: {
+                routeMaps:  { siteUrl: null, libraryName: 'NetInventoryRouteMaps', folder: '' },
+                sitePhotos: { siteUrl: null, libraryName: 'NetInventorySitePhotos', folder: '' }
+            },
             
             listNames: {
                 sites: 'NetInventory_Sites',
@@ -10136,6 +10148,39 @@
             }
         }
 
+        // ============ STORAGE DRIVE RESOLVER ============
+        // Resolves the Graph API base path for a configured storage location
+        // (handles other sites and non-default libraries), cached per session.
+        const _driveCache = {};
+        async function getStorageBase(kind) {
+            const cfg = SHAREPOINT_CONFIG.storage[kind];
+            const key = (cfg.siteUrl || 'default') + '|' + (cfg.libraryName || 'default');
+            if (_driveCache[key]) return _driveCache[key];
+            let siteId = SHAREPOINT_CONFIG.siteId;
+            if (cfg.siteUrl) {
+                const u = new URL(cfg.siteUrl);
+                const site = await graphClient.callAPI(`/sites/${u.hostname}:${u.pathname.replace(/\/$/, '')}`);
+                siteId = site.id;
+            }
+            let base = `/sites/${siteId}/drive`;
+            if (cfg.libraryName) {
+                const drives = await graphClient.callAPI(`/sites/${siteId}/drives`);
+                const d = (drives.value || []).find(x => (x.name || '').toLowerCase() === cfg.libraryName.toLowerCase());
+                if (!d) throw new Error(`Document library "${cfg.libraryName}" was not found on the storage site. Check SHAREPOINT_CONFIG.storage.`);
+                base = `/sites/${siteId}/drives/${d.id}`;
+            }
+            _driveCache[key] = base;
+            return base;
+        }
+
+        // Compose a full Graph endpoint inside a storage location: base + optional folder + rest
+        async function storageEndpoint(kind, rest) {
+            const base = await getStorageBase(kind);
+            const cfg = SHAREPOINT_CONFIG.storage[kind];
+            const prefix = cfg.folder ? cfg.folder + '/' : '';
+            return `${base}/root:/${prefix}${rest}`;
+        }
+
         // ============ SITE PHOTOS: capture, upload, gallery (SharePoint library) ============
         let _photosSiteId = null;
 
@@ -10178,14 +10223,14 @@
             const status = document.getElementById('photoStatus');
             if (!gallery || !_photosSiteId) return;
             try {
-                const endpoint = `/sites/${SHAREPOINT_CONFIG.siteId}/drive/root:/NetInventory-SitePhotos/${_photosSiteId}:/children?$expand=thumbnails&$top=200`;
+                const endpoint = await storageEndpoint('sitePhotos', `${_photosSiteId}:/children?$expand=thumbnails&$top=200`);
                 let items = [];
                 let folderUrl = null;
                 try {
                     const result = await graphClient.callAPI(endpoint);
                     items = (result.value || []).filter(i => i.file);
                     try {
-                        const folder = await graphClient.callAPI(`/sites/${SHAREPOINT_CONFIG.siteId}/drive/root:/NetInventory-SitePhotos/${_photosSiteId}`);
+                        const folder = await graphClient.callAPI(await storageEndpoint('sitePhotos', _photosSiteId));
                         folderUrl = folder.webUrl;
                     } catch (e) { /* folder lookup optional */ }
                 } catch (e) {
@@ -10261,7 +10306,7 @@
         async function uploadSitePhoto(blob, originalName) {
             const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
             const safeName = (originalName || 'photo.jpg').replace(/[^a-zA-Z0-9._-]/g, '_');
-            const path = `/sites/${SHAREPOINT_CONFIG.siteId}/drive/root:/NetInventory-SitePhotos/${_photosSiteId}/${stamp}-${safeName}:/content`;
+            const path = await storageEndpoint('sitePhotos', `${_photosSiteId}/${stamp}-${safeName}:/content`);
             await graphClient.uploadFile(path, blob);
         }
 
@@ -10296,7 +10341,7 @@
                 }
                 try {
                     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-                    const path = `/sites/${SHAREPOINT_CONFIG.siteId}/drive/root:/NetInventory-RouteMaps/${routeId}-${safeName}:/content`;
+                    const path = await storageEndpoint('routeMaps', `${routeId}-${safeName}:/content`);
                     const result = await graphClient.uploadFile(path, file);
                     await store.updateDarkFiberRoute(routeId, { routeMapURL: result.webUrl });
                     alert('✅ Map file uploaded and linked to this route!');
