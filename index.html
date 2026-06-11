@@ -753,7 +753,7 @@
         // BUILD: 2024-05-19-23-00-TEMPLATE-LITERALS-FIXED
         // This timestamp forces browser to reload: 1747719600
         console.log('%c🔧 NetInventory Version: 2026-06-10-OTDR-PINPOINT', 'background: #8b5cf6; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;');
-        console.log('⬇️ Per-page exports, connections export, ⬆️ bulk equipment import + all prior!');
+        console.log('🌊 Optical line-side (capacity gating, λ), 🌈 tunable circuits, SO numbers + all prior!');
         console.log('✅ Edit buttons ACTUALLY work now - template literals fixed!');
         console.log('🔢 Build timestamp: 1747719600');
         
@@ -788,15 +788,15 @@
             },
             
             fieldMappings: {
-                sites: { id: 'Title', name: 'SiteID', cidCode: 'CidCode', location: 'Location', type: 'SiteType', address: 'Address', city: 'City', state: 'State', zip: 'ZipCode', contact: 'Contact', latitude: 'Latitude', longitude: 'Longitude' },
-                racks: { id: 'Title', name: 'RackID', siteId: 'SiteID', location: 'RackLocation', rackUnits: 'RackUnits', hasAC: 'HasAC', purchasedPowerAC: 'PurchasedPowerAC', hasDC: 'HasDC', purchasedPowerDC: 'PurchasedPowerDC', notes: 'Notes' },
-                equipment: { id: 'Title', name: 'EquipmentID', siteId: 'SiteID', rackId: 'RackID', manufacturer: 'Manufacturer', model: 'Model', type: 'EquipmentType', serialNumber: 'SerialNumber', rackUnits: 'RackUnits', rackPosition: 'RackPosition', powerType: 'PowerType', powerDraw: 'PowerDraw', maxPowerDraw: 'MaxPowerDraw', voltage: 'Voltage', weight: 'Weight', portConfig: 'PortConfig', installDate: 'InstallDate', notes: 'Notes', parentEquipmentID: 'ParentEquipmentID', slotNumber: 'SlotNumber', mgmtIp: 'MgmtIP', mgmtSubnet: 'MgmtSubnet', mgmtGateway: 'MgmtGateway' },
-                fdps: { id: 'Title', name: 'FdpID', siteId: 'SiteID', mountingType: 'MountingType', rackId: 'RackID', location: 'FdpLocation', portCount: 'PortCount', connectorType: 'ConnectorType', type: 'FdpType', rackUnits: 'RackUnits', rackPosition: 'RackPosition', notes: 'Notes' },
-                circuits: { id: 'Title', circuitId: 'CircuitID', previousCircuitId: 'PreviousCircuitID', type: 'CircuitType', direction: 'Direction', networkType: 'NetworkType', provider: 'Provider', bandwidth: 'Bandwidth', status: 'Status', circuitVlans: 'CircuitVLANs', aLocationSiteId: 'ALocationSiteID', aConnectionType: 'AConnectionType', aFdp: 'AFdp', aPort: 'APort', aEquipment: 'AEquipment', aEquipmentPort: 'AEquipmentPort', aEquipmentFdp: 'AEquipmentFdp', aEquipmentFdpPorts: 'AEquipmentFdpPorts', aNni: 'ANni', aNniSubinterface: 'ANniSubinterface', zLocationSiteId: 'ZLocationSiteID', zConnectionType: 'ZConnectionType', zFdp: 'ZFdp', zPort: 'ZPort', zEquipment: 'ZEquipment', zEquipmentPort: 'ZEquipmentPort', zEquipmentFdp: 'ZEquipmentFdp', zEquipmentFdpPorts: 'ZEquipmentFdpPorts', zNni: 'ZNni', zNniSubinterface: 'ZNniSubinterface', hasCpe: 'HasCpe', cpeType: 'CpeType', cpeMgmtIp: 'CpeMgmtIp', cpeMgmtSubnet: 'CpeMgmtSubnet', cpeMgmtGateway: 'CpeMgmtGateway', cpeMgmtVlan: 'CpeMgmtVLAN', additionalLocations: 'AdditionalLocations', notes: 'Notes' },
-                nnis: { id: 'Title', name: 'NniID', siteId: 'SiteID', connectionType: 'ConnectionType', equipmentID: 'EquipmentID', equipmentPorts: 'EquipmentPorts', fdpId: 'FdpID', fdpPorts: 'FdpPorts', direction: 'Direction', contact: 'Contact', description: 'Description', notes: 'Notes' },
-                templates: { id: 'Title', name: 'TemplateName', manufacturer: 'Manufacturer', model: 'Model', type: 'EquipmentType', rackUnits: 'RackUnits', powerType: 'PowerType', powerDraw: 'PowerDraw', maxPowerDraw: 'MaxPowerDraw', voltage: 'Voltage', weight: 'Weight', portConfig: 'PortConfig', notes: 'Notes' },
-                darkfiberroutes: { id: 'Title', routeName: 'RouteName', aLocationSiteId: 'ALocationSiteID', zLocationSiteId: 'ZLocationSiteID', totalDistance: 'TotalDistance', purpose: 'Purpose', equipmentType: 'EquipmentType', aEndEquipment: 'AEndEquipment', zEndEquipment: 'ZEndEquipment', status: 'Status', routeMapURL: 'RouteMapURL', installDate: 'InstallDate', lastVerified: 'LastVerified', notes: 'Notes' },
-                darkfibersegments: { id: 'Title', routeId: 'RouteID', segmentOrder: 'SegmentOrder', segmentName: 'SegmentName', ownershipType: 'OwnershipType', usageType: 'UsageType', providerName: 'ProviderName', customerName: 'CustomerName', distance: 'Distance', strandNumbers: 'StrandNumbers', fiberType: 'FiberType', fiberCount: 'FiberCount', aEndLocation: 'AEndLocation', zEndLocation: 'ZEndLocation', aEndConnectionType: 'AEndConnectionType', aEndFDP: 'AEndFDP', aEndPort: 'AEndPort', aEndEquipment: 'AEndEquipment', zEndConnectionType: 'ZEndConnectionType', zEndFDP: 'ZEndFDP', zEndPort: 'ZEndPort', zEndEquipment: 'ZEndEquipment', providerCircuitID: 'ProviderCircuitID', notes: 'Notes' }
+                sites: { id: 'Title', name: 'SiteID', cidCode: 'CidCode', location: 'Location', type: 'SiteType', address: 'Address', city: 'City', state: 'State', zip: 'ZipCode', contact: 'Contact', latitude: 'Latitude', longitude: 'Longitude', soNumber: 'SONumber' },
+                racks: { id: 'Title', name: 'RackID', siteId: 'SiteID', location: 'RackLocation', rackUnits: 'RackUnits', hasAC: 'HasAC', purchasedPowerAC: 'PurchasedPowerAC', hasDC: 'HasDC', purchasedPowerDC: 'PurchasedPowerDC', notes: 'Notes', soNumber: 'SONumber' },
+                equipment: { id: 'Title', name: 'EquipmentID', siteId: 'SiteID', rackId: 'RackID', manufacturer: 'Manufacturer', model: 'Model', type: 'EquipmentType', serialNumber: 'SerialNumber', rackUnits: 'RackUnits', rackPosition: 'RackPosition', powerType: 'PowerType', powerDraw: 'PowerDraw', maxPowerDraw: 'MaxPowerDraw', voltage: 'Voltage', weight: 'Weight', portConfig: 'PortConfig', installDate: 'InstallDate', notes: 'Notes', linePorts: 'LinePorts', lineCapacity: 'LineCapacity', lineWavelength: 'LineWavelength', parentEquipmentID: 'ParentEquipmentID', slotNumber: 'SlotNumber', mgmtIp: 'MgmtIP', mgmtSubnet: 'MgmtSubnet', mgmtGateway: 'MgmtGateway', soNumber: 'SONumber' },
+                fdps: { id: 'Title', name: 'FdpID', siteId: 'SiteID', mountingType: 'MountingType', rackId: 'RackID', location: 'FdpLocation', portCount: 'PortCount', connectorType: 'ConnectorType', type: 'FdpType', rackUnits: 'RackUnits', rackPosition: 'RackPosition', notes: 'Notes', soNumber: 'SONumber' },
+                circuits: { id: 'Title', circuitId: 'CircuitID', previousCircuitId: 'PreviousCircuitID', type: 'CircuitType', direction: 'Direction', networkType: 'NetworkType', provider: 'Provider', bandwidth: 'Bandwidth', status: 'Status', circuitVlans: 'CircuitVLANs', aLocationSiteId: 'ALocationSiteID', aConnectionType: 'AConnectionType', aFdp: 'AFdp', aPort: 'APort', aEquipment: 'AEquipment', aEquipmentPort: 'AEquipmentPort', aEquipmentFdp: 'AEquipmentFdp', aEquipmentFdpPorts: 'AEquipmentFdpPorts', aNni: 'ANni', aNniSubinterface: 'ANniSubinterface', zLocationSiteId: 'ZLocationSiteID', zConnectionType: 'ZConnectionType', zFdp: 'ZFdp', zPort: 'ZPort', zEquipment: 'ZEquipment', zEquipmentPort: 'ZEquipmentPort', zEquipmentFdp: 'ZEquipmentFdp', zEquipmentFdpPorts: 'ZEquipmentFdpPorts', zNni: 'ZNni', zNniSubinterface: 'ZNniSubinterface', hasCpe: 'HasCpe', cpeType: 'CpeType', cpeMgmtIp: 'CpeMgmtIp', cpeMgmtSubnet: 'CpeMgmtSubnet', cpeMgmtGateway: 'CpeMgmtGateway', cpeMgmtVlan: 'CpeMgmtVLAN', additionalLocations: 'AdditionalLocations', notes: 'Notes', tunable: 'Tunable', wavelength: 'Wavelength', soNumber: 'SONumber' },
+                nnis: { id: 'Title', name: 'NniID', siteId: 'SiteID', connectionType: 'ConnectionType', equipmentID: 'EquipmentID', equipmentPorts: 'EquipmentPorts', fdpId: 'FdpID', fdpPorts: 'FdpPorts', direction: 'Direction', contact: 'Contact', description: 'Description', notes: 'Notes', soNumber: 'SONumber' },
+                templates: { id: 'Title', name: 'TemplateName', manufacturer: 'Manufacturer', model: 'Model', type: 'EquipmentType', rackUnits: 'RackUnits', powerType: 'PowerType', powerDraw: 'PowerDraw', maxPowerDraw: 'MaxPowerDraw', voltage: 'Voltage', weight: 'Weight', portConfig: 'PortConfig', notes: 'Notes', linePorts: 'LinePorts', lineCapacity: 'LineCapacity' },
+                darkfiberroutes: { id: 'Title', routeName: 'RouteName', aLocationSiteId: 'ALocationSiteID', zLocationSiteId: 'ZLocationSiteID', totalDistance: 'TotalDistance', purpose: 'Purpose', equipmentType: 'EquipmentType', aEndEquipment: 'AEndEquipment', zEndEquipment: 'ZEndEquipment', status: 'Status', routeMapURL: 'RouteMapURL', installDate: 'InstallDate', lastVerified: 'LastVerified', notes: 'Notes', soNumber: 'SONumber' },
+                darkfibersegments: { id: 'Title', routeId: 'RouteID', segmentOrder: 'SegmentOrder', segmentName: 'SegmentName', ownershipType: 'OwnershipType', usageType: 'UsageType', providerName: 'ProviderName', customerName: 'CustomerName', distance: 'Distance', strandNumbers: 'StrandNumbers', fiberType: 'FiberType', fiberCount: 'FiberCount', aEndLocation: 'AEndLocation', zEndLocation: 'ZEndLocation', aEndConnectionType: 'AEndConnectionType', aEndFDP: 'AEndFDP', aEndPort: 'AEndPort', aEndEquipment: 'AEndEquipment', zEndConnectionType: 'ZEndConnectionType', zEndFDP: 'ZEndFDP', zEndPort: 'ZEndPort', zEndEquipment: 'ZEndEquipment', providerCircuitID: 'ProviderCircuitID', notes: 'Notes', soNumber: 'SONumber' }
             },
             
             cacheEnabled: true,
@@ -1566,6 +1566,7 @@
             form.elements.maxPowerDraw.value = template.maxPowerDraw || '';
             form.elements.weight.value = template.weight || '';
             form.elements.portConfig.value = template.portConfig || '';
+            if (form.elements.soNumber) form.elements.soNumber.value = template.soNumber || '';
             form.elements.notes.value = template.notes || '';
             document.getElementById('templateModal').classList.add('active');
         }
@@ -1592,7 +1593,10 @@
                 maxPowerDraw: formData.get('maxPowerDraw') ? parseInt(formData.get('maxPowerDraw')) : null,
                 weight: formData.get('weight') ? parseFloat(formData.get('weight')) : null,
                 portConfig: formData.get('portConfig'),
-                notes: formData.get('notes')
+                linePorts: formData.get('linePorts') || '',
+                lineCapacity: formData.get('lineCapacity') || '',
+                lineWavelength: formData.get('lineWavelength') || '',
+                soNumber: formData.get('soNumber') || '', notes: formData.get('notes')
             };
             
             if (!(await confirmIfDuplicate('getTemplates', 'name', template.name, editingTemplateId, 'template named'))) return;
@@ -1676,6 +1680,10 @@
                     <div class="form-group">
                         <label>Contact</label>
                         <input type="text" name="contact" placeholder="Contact person">
+                    </div>
+                    <div class="form-group">
+                        <label>Order to Establish (SO #)</label>
+                        <input type="text" name="soNumber" placeholder="e.g., SO-12345">
                     </div>
                     <div style="margin: 1.5rem 0; padding: 1rem; background: var(--bg-tertiary); border-radius: 0.5rem;">
                         <h3 style="margin: 0 0 1rem 0; color: var(--accent-primary); font-size: 1rem;">📍 Map Coordinates</h3>
@@ -1785,6 +1793,10 @@
                         <div style="font-size: 0.85rem; color: var(--text-tertiary); margin-top: 0.25rem;">
                             Optional: Link to external route map
                         </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Order to Establish (SO #)</label>
+                        <input type="text" name="soNumber" placeholder="e.g., SO-12345">
                     </div>
                     <div class="form-group">
                         <label>Notes</label>
@@ -1959,6 +1971,10 @@
                         </div>
                     </div>
                     
+                    <div class="form-group">
+                        <label>Order to Establish (SO #)</label>
+                        <input type="text" name="soNumber" placeholder="e.g., SO-12345">
+                    </div>
                     <div class="form-group">
                         <label>Notes</label>
                         <textarea name="notes" rows="3" placeholder="Additional segment information..."></textarea>
@@ -3601,6 +3617,10 @@
                         <input type="number" name="purchasedPowerDC" placeholder="48">
                     </div>
                     <div class="form-group">
+                        <label>Order to Establish (SO #)</label>
+                        <input type="text" name="soNumber" placeholder="e.g., SO-12345">
+                    </div>
+                    <div class="form-group">
                         <label>Notes</label>
                         <textarea name="notes" rows="3" placeholder="Additional notes..."></textarea>
                     </div>
@@ -4007,6 +4027,7 @@
             form.elements.purchasedPowerAC.value = rack.purchasedPowerAC || '';
             form.elements.hasDC.value = (rack.hasDC === true || rack.hasDC === 'true') ? 'true' : 'false';
             form.elements.purchasedPowerDC.value = rack.purchasedPowerDC || '';
+            if (form.elements.soNumber) form.elements.soNumber.value = rack.soNumber || '';
             form.elements.notes.value = rack.notes || '';
             
             document.getElementById('rackModal').classList.add('active');
@@ -4031,7 +4052,7 @@
                 purchasedPowerAC: parseInt(formData.get('purchasedPowerAC')) || 0,
                 hasDC: formData.get('hasDC') === 'true',
                 purchasedPowerDC: parseInt(formData.get('purchasedPowerDC')) || 0,
-                notes: formData.get('notes')
+                soNumber: formData.get('soNumber') || '', notes: formData.get('notes')
             };
             
             if (!(await confirmIfDuplicate('getRacks', 'name', rack.name, editingRackId, 'rack named'))) return;
@@ -4176,7 +4197,25 @@
                     </div>
                     <div class="form-group">
                         <label>Port Configuration</label>
-                        <input type="text" name="portConfig" placeholder="e.g., 48x1G, 4x10G">
+                        <input type="text" name="portConfig" placeholder="e.g., 48x1G, 4x10G — list line ports first: 2x400G, 8x100G">
+                    </div>
+                    <div style="border: 1px dashed var(--border-color); border-radius: 0.5rem; padding: 0.9rem 1rem; margin-bottom: 1rem;">
+                        <div style="font-weight: 600; margin-bottom: 0.6rem;">🌊 Optical / Line Side (optional — DWDM gear)</div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.75rem;">
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <label style="font-size: 0.85rem;">Line Port(s)</label>
+                                <input type="text" name="linePorts" placeholder="e.g., 1 or 1,2">
+                            </div>
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <label style="font-size: 0.85rem;">Provisioned Line Capacity</label>
+                                <input type="text" name="lineCapacity" placeholder="e.g., 200G or 1:400G, 2:200G">
+                            </div>
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <label style="font-size: 0.85rem;">Channel / Wavelength</label>
+                                <input type="text" name="lineWavelength" placeholder="e.g., Ch 21 / 195.40 THz">
+                            </div>
+                        </div>
+                        <div style="font-size: 0.78rem; color: var(--text-tertiary); margin-top: 0.5rem;">Client ports activate per 100G of provisioned line capacity (e.g., 200G line → 2 active 100G clients).</div>
                     </div>
                     <div class="form-group">
                         <label>Parent Chassis (Optional)</label>
@@ -4210,6 +4249,10 @@
                     <div class="form-group">
                         <label>Install Date</label>
                         <input type="date" name="installDate">
+                    </div>
+                    <div class="form-group">
+                        <label>Order to Establish (SO #)</label>
+                        <input type="text" name="soNumber" placeholder="e.g., SO-12345">
                     </div>
                     <div class="form-group">
                         <label>Notes</label>
@@ -4357,6 +4400,8 @@
             setIf('maxPowerDraw', template.maxPowerDraw);
             setIf('weight', template.weight);
             setIf('portConfig', template.portConfig);
+            setIf('linePorts', template.linePorts);
+            setIf('lineCapacity', template.lineCapacity);
             
             // RU size may have changed — refresh available positions if a rack is selected
             updateAvailableRackPositions(editingEquipmentId);
@@ -4596,10 +4641,14 @@
             form.elements.voltage.value = equip.voltage || '';
             form.elements.weight.value = equip.weight || '';
             form.elements.portConfig.value = equip.portConfig || '';
+            if (form.elements.linePorts) form.elements.linePorts.value = equip.linePorts || '';
+            if (form.elements.lineCapacity) form.elements.lineCapacity.value = equip.lineCapacity || '';
+            if (form.elements.lineWavelength) form.elements.lineWavelength.value = equip.lineWavelength || '';
             form.elements.mgmtIp.value = equip.mgmtIp || '';
             form.elements.mgmtSubnet.value = equip.mgmtSubnet || '';
             form.elements.mgmtGateway.value = equip.mgmtGateway || '';
             form.elements.installDate.value = equip.installDate || '';
+            if (form.elements.soNumber) form.elements.soNumber.value = equip.soNumber || '';
             form.elements.notes.value = equip.notes || '';
             
             // Populate parent equipment dropdown (exclude self)
@@ -4718,7 +4767,7 @@
                 mgmtSubnet: formData.get('mgmtSubnet') || '',
                 mgmtGateway: formData.get('mgmtGateway') || '',
                 installDate: formData.get('installDate') || '',
-                notes: formData.get('notes') || ''
+                soNumber: formData.get('soNumber') || '', notes: formData.get('notes') || ''
             };
             
             // Only include rack-related fields if rack is selected
@@ -4867,6 +4916,10 @@
                             <option value="Distribution Frame">Distribution Frame</option>
                             <option value="Other">Other</option>
                         </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Order to Establish (SO #)</label>
+                        <input type="text" name="soNumber" placeholder="e.g., SO-12345">
                     </div>
                     <div class="form-group">
                         <label>Notes</label>
@@ -5075,6 +5128,7 @@
             form.elements.portCount.value = fdp.portCount || '';
             form.elements.connectorType.value = fdp.connectorType || '';
             form.elements.type.value = fdp.type || '';
+            if (form.elements.soNumber) form.elements.soNumber.value = fdp.soNumber || '';
             form.elements.notes.value = fdp.notes || '';
             
             // Set RU fields and trigger smart dropdown
@@ -5107,7 +5161,7 @@
                 location: formData.get('location') || '',
                 connectorType: formData.get('connectorType') || '',
                 type: formData.get('type') || '',
-                notes: formData.get('notes') || ''
+                soNumber: formData.get('soNumber') || '', notes: formData.get('notes') || ''
             };
             
             // Only include rack-related fields if rack is selected
@@ -5535,6 +5589,16 @@
                             <input type="text" name="bandwidth" required placeholder="e.g., 10G, 100M">
                         </div>
                         <div class="form-group">
+                            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                                <input type="checkbox" name="tunable" value="yes" onchange="toggleWavelengthField()" style="width: auto;">
+                                🌈 Tunable (DWDM facility circuit)
+                            </label>
+                            <div id="wavelengthFieldGroup" style="display: none; margin-top: 0.5rem;">
+                                <label style="font-size: 0.85rem;">Wavelength / Channel</label>
+                                <input type="text" name="wavelength" placeholder="e.g., Ch 21 / 195.40 THz / 1560.61 nm">
+                            </div>
+                        </div>
+                        <div class="form-group">
                             <label>Status *</label>
                             <select name="status" required>
                                 <option value="active">Active</option>
@@ -5545,6 +5609,10 @@
                         </div>
                     </div>
                     
+                    <div class="form-group">
+                        <label>Order to Establish (SO #)</label>
+                        <input type="text" name="soNumber" placeholder="e.g., SO-12345">
+                    </div>
                     <div class="form-group">
                         <label>Notes</label>
                         <textarea name="notes" rows="3" placeholder="Additional notes..."></textarea>
@@ -5584,6 +5652,12 @@
             }
         }
         
+        function toggleWavelengthField() {
+            const cb = document.querySelector('#circuitForm input[name="tunable"], input[name="tunable"]');
+            const grp = document.getElementById('wavelengthFieldGroup');
+            if (grp && cb) grp.style.display = cb.checked ? 'block' : 'none';
+        }
+
         function toggleCpeFields() {
             const hasCpe = document.querySelector('input[name="hasCpe"]:checked')?.value;
             const cpeDetails = document.getElementById('cpeDetailsFields');
@@ -6657,6 +6731,8 @@
             form.elements.type.value = circuit.type || '';
             if (circuit.networkType) form.querySelector(`input[name="networkType"][value="${circuit.networkType}"]`).checked = true;
             form.elements.provider.value = circuit.provider || '';
+            if (form.elements.tunable) { form.elements.tunable.checked = circuit.tunable === 'yes'; toggleWavelengthField(); }
+            if (form.elements.wavelength) form.elements.wavelength.value = circuit.wavelength || '';
             
             // A-Location
             form.elements.aLocationSiteId.value = circuit.aLocationSiteId || '';
@@ -6702,6 +6778,7 @@
             
             form.elements.bandwidth.value = circuit.bandwidth || '';
             form.elements.status.value = circuit.status || 'active';
+            if (form.elements.soNumber) form.elements.soNumber.value = circuit.soNumber || '';
             form.elements.notes.value = circuit.notes || '';
             
             // If FDP is selected, populate ports
@@ -6945,6 +7022,8 @@
                 networkType: formData.get('networkType'),
                 provider: formData.get('provider') || '',
                 bandwidth: formData.get('bandwidth'),
+                tunable: formData.get('tunable') ? 'yes' : 'no',
+                wavelength: formData.get('tunable') ? (formData.get('wavelength') || '') : '',
                 status: formData.get('status'),
                 
                 // A-Location (VLAN 1)
@@ -6979,7 +7058,7 @@
                 cpeMgmtGateway: formData.get('cpeMgmtGateway') || '',
                 cpeMgmtVlan: formData.get('cpeMgmtVlan') || '',
                 
-                notes: formData.get('notes') || '',
+                soNumber: formData.get('soNumber') || '', notes: formData.get('notes') || '',
                 additionalLocations: ''
             };
             
@@ -7215,6 +7294,10 @@
                         <textarea name="description" rows="2" placeholder="Brief description..."></textarea>
                     </div>
                     
+                    <div class="form-group">
+                        <label>Order to Establish (SO #)</label>
+                        <input type="text" name="soNumber" placeholder="e.g., SO-12345">
+                    </div>
                     <div class="form-group">
                         <label>Notes</label>
                         <textarea name="notes" rows="3" placeholder="Additional notes..."></textarea>
@@ -7997,6 +8080,7 @@
             form.elements.fdpId.value = nni.fdpId || '';
             form.elements.contact.value = nni.contact || '';
             form.elements.description.value = nni.description || '';
+            if (form.elements.soNumber) form.elements.soNumber.value = nni.soNumber || '';
             form.elements.notes.value = nni.notes || '';
             
             // Update port dropdowns if equipment/FDP selected
@@ -8054,7 +8138,7 @@
                 fdpPorts: fdpPorts || '',
                 contact: formData.get('contact') || '',
                 description: formData.get('description') || '',
-                notes: formData.get('notes') || ''
+                soNumber: formData.get('soNumber') || '', notes: formData.get('notes') || ''
             };
             
             if (!(await confirmIfDuplicate('getNnis', 'name', nni.name, editingNniId, 'NNI named'))) return;
@@ -9191,6 +9275,16 @@
                             </div>
                             <button class="close-btn" onclick="closeEquipmentPortsModal()">&times;</button>
                         </div>
+                        ${(() => {
+                            const li = getEquipmentLineInfo(equipment);
+                            if (!li && !equipment.lineWavelength && !equipment.lineCapacity) return '';
+                            const lineList = equipment.linePorts ? String(equipment.linePorts).split(',').map(p => 'P' + p.trim()).join(', ') : '—';
+                            return `<div style="margin: 1rem 1.5rem 0; padding: 0.75rem 1rem; border: 1px solid var(--accent-primary); border-radius: 0.5rem; font-size: 0.88rem; display: flex; flex-wrap: wrap; gap: 1.5rem;">
+                                <span>🌊 <strong>Line port${li && li.lineSet.size > 1 ? 's' : ''}:</strong> ${lineList}</span>
+                                ${equipment.lineCapacity ? `<span><strong>Provisioned:</strong> ${equipment.lineCapacity}${li && li.activeClients !== null ? ' → ' + li.activeClients + ' active 100G client' + (li.activeClients !== 1 ? 's' : '') : ''}</span>` : ''}
+                                ${equipment.lineWavelength ? `<span><strong>λ:</strong> ${equipment.lineWavelength}</span>` : ''}
+                            </div>`;
+                        })()}
                         <div style="padding: 1.5rem;">
                             <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 2rem;">
                                 <div>
@@ -9701,6 +9795,22 @@
             if (modal) modal.remove();
         }
         
+        // Line-side info for DWDM gear: which ports are line ports, and how many
+        // 100G client ports are active given the provisioned line capacity.
+        function getEquipmentLineInfo(equip) {
+            if (!equip || !equip.linePorts) return null;
+            const lineSet = new Set(String(equip.linePorts).split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n)));
+            if (lineSet.size === 0) return null;
+            let activeClients = null;
+            if (equip.lineCapacity) {
+                let total = 0;
+                const matches = String(equip.lineCapacity).match(/(\d+(?:\.\d+)?)\s*G/gi);
+                if (matches) matches.forEach(m => total += parseFloat(m));
+                if (total > 0) activeClients = Math.floor(total / 100);
+            }
+            return { lineSet, activeClients };
+        }
+
         async function updateNniEquipmentPorts() {
             const equipmentId = document.getElementById('nniEquipmentSelect').value;
             const portsGroup = document.getElementById('nniEquipmentPortsGroup');
@@ -9768,6 +9878,16 @@
                             }
                         }
                     });
+                }
+            }
+            
+            // Line-side gating: line ports are facility endpoints (not NNI clients),
+            // and only the first N client ports are active per provisioned line capacity.
+            const lineInfo = getEquipmentLineInfo(equipment);
+            if (lineInfo && ports.length > 0) {
+                ports = ports.filter((p, i) => !lineInfo.lineSet.has(i + 1));
+                if (lineInfo.activeClients !== null) {
+                    ports = ports.map((p, i) => i < lineInfo.activeClients ? p : p + ' [inactive - line capacity]');
                 }
             }
             
@@ -10812,6 +10932,7 @@ ${entityActionButtons('nni', `${n.id}`, true)}
             form.elements.status.value = route.status || 'Active';
             form.elements.installDate.value = route.installDate || '';
             form.elements.routeMapURL.value = route.routeMapURL || '';
+            if (form.elements.soNumber) form.elements.soNumber.value = route.soNumber || '';
             form.elements.notes.value = route.notes || '';
             document.getElementById('darkFiberRouteModal').classList.add('active');
         }
@@ -10833,7 +10954,7 @@ ${entityActionButtons('nni', `${n.id}`, true)}
                 status: formData.get('status') || 'Active',
                 routeMapURL: formData.get('routeMapURL'),
                 installDate: formData.get('installDate'),
-                notes: formData.get('notes')
+                soNumber: formData.get('soNumber') || '', notes: formData.get('notes')
             };
             
             if (!(await confirmIfDuplicate('getDarkFiberRoutes', 'routeName', route.routeName, editingDarkFiberRouteId, 'dark fiber route named'))) return;
@@ -11155,6 +11276,7 @@ ${entityActionButtons('nni', `${n.id}`, true)}
             form.elements.zEndPort.value = segment.zEndPort || '';
             form.elements.zEndEquipment.value = segment.zEndEquipment || '';
             form.elements.providerCircuitID.value = segment.providerCircuitID || '';
+            if (form.elements.soNumber) form.elements.soNumber.value = segment.soNumber || '';
             form.elements.notes.value = segment.notes || '';
             
             // Trigger visibility logic
@@ -11192,7 +11314,7 @@ ${entityActionButtons('nni', `${n.id}`, true)}
                 zEndPort: formData.get('zEndPort'),
                 zEndEquipment: formData.get('zEndEquipment'),
                 providerCircuitID: formData.get('providerCircuitID'),
-                notes: formData.get('notes')
+                soNumber: formData.get('soNumber') || '', notes: formData.get('notes')
             };
             
             // Auto-set provider name for owned fiber
