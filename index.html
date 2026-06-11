@@ -753,7 +753,7 @@
         // BUILD: 2024-05-19-23-00-TEMPLATE-LITERALS-FIXED
         // This timestamp forces browser to reload: 1747719600
         console.log('%c🔧 NetInventory Version: 2026-06-10-OTDR-PINPOINT', 'background: #8b5cf6; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;');
-        console.log('🔗 Port view connections (FDP/equipment), unified search actions + all prior!');
+        console.log('⬇️ Per-page exports, connections export, ⬆️ bulk equipment import + all prior!');
         console.log('✅ Edit buttons ACTUALLY work now - template literals fixed!');
         console.log('🔢 Build timestamp: 1747719600');
         
@@ -2681,7 +2681,7 @@
                         <div style="display: flex; gap: 1rem; align-items: center;">
                             <input type="text" id="sitesSearch" placeholder="🔍 Search sites..." style="padding: 0.5rem 1rem; border: 1px solid var(--border-color); border-radius: 4px; width: 250px;" oninput="filterSitesTable(this.value)">
                             <button class="btn-secondary" onclick="openGeocodeModal()" id="bulkGeocodeBtn" ${sitesNeedingGeocode === 0 ? 'disabled' : ''}>${geocodeBtnText}</button>
-                            <button class="btn-primary" onclick="openAddSiteModal()">Add Site</button>
+                            <button class="btn-secondary" onclick="exportEntityToExcel('sites', this)" title="Export Sites to Excel">⬇️ Export</button><button class="btn-primary" onclick="openAddSiteModal()">Add Site</button>
                         </div>
                     </div>
                     <div class="table-container">
@@ -3913,7 +3913,7 @@
                         <h1 style="font-size: 2rem;">Racks</h1>
                         <div style="display: flex; gap: 1rem; align-items: center;">
                             <input type="text" placeholder="🔍 Search racks..." style="padding: 0.5rem 1rem; border: 1px solid var(--border-color); border-radius: 4px; width: 250px;" oninput="filterRacksTable(this.value)">
-                            <button class="btn-primary" onclick="openAddRackModal()">Add Rack</button>
+                            <button class="btn-secondary" onclick="exportEntityToExcel('racks', this)" title="Export Racks to Excel">⬇️ Export</button><button class="btn-primary" onclick="openAddRackModal()">Add Rack</button>
                     </div>
                     <div class="table-container">
                         <table>
@@ -4233,7 +4233,7 @@
                         <h1 style="font-size: 2rem;">Equipment</h1>
                         <div style="display: flex; gap: 1rem; align-items: center;">
                             <input type="text" placeholder="🔍 Search equipment..." style="padding: 0.5rem 1rem; border: 1px solid var(--border-color); border-radius: 4px; width: 250px;" oninput="filterTable('equipment', this.value)">
-                            <button class="btn-primary" onclick="openAddEquipmentModal()">Add Equipment</button>
+                            <button class="btn-secondary" onclick="exportEntityToExcel('equipment', this)" title="Export Equipment to Excel">⬇️ Export</button><button class="btn-secondary" onclick="openEquipmentImport()" title="Bulk import equipment from CSV/XLSX">⬆️ Import</button><button class="btn-primary" onclick="openAddEquipmentModal()">Add Equipment</button>
                         </div>
                     </div>
                     <div class="table-container">
@@ -4896,7 +4896,7 @@
                 content.innerHTML = `
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
                         <h1 style="font-size: 2rem;">FDPs (Fiber Distribution Points)</h1>
-                        <button class="btn-primary" onclick="openAddFdpModal()">Add FDP</button>
+                        <button class="btn-secondary" onclick="exportEntityToExcel('fdps', this)" title="Export FDPs to Excel">⬇️ Export</button><button class="btn-primary" onclick="openAddFdpModal()">Add FDP</button>
                     </div>
                     <div class="table-container">
                         <table>
@@ -6207,7 +6207,7 @@
                         <h1 style="font-size: 2rem;">Circuits</h1>
                         <div style="display: flex; gap: 1rem; align-items: center;">
                             <input type="text" placeholder="🔍 Search circuits..." style="padding: 0.5rem 1rem; border: 1px solid var(--border-color); border-radius: 4px; width: 250px;" oninput="filterTable('circuit', this.value)">
-                            <button class="btn-primary" onclick="openAddCircuitModal()">Add Circuit</button>
+                            <button class="btn-secondary" onclick="exportEntityToExcel('circuits', this)" title="Export Circuits to Excel">⬇️ Export</button><button class="btn-primary" onclick="openAddCircuitModal()">Add Circuit</button>
                     </div>
                     <div class="table-container">
                         <table>
@@ -7257,6 +7257,251 @@
             return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + '_' + p(d.getHours()) + p(d.getMinutes());
         }
 
+        // Export one entity type to a single-sheet workbook
+        async function exportEntityToExcel(entityKey, btn) {
+            if (typeof XLSX === 'undefined') { alert('Excel library failed to load. Check your internet connection and refresh.'); return; }
+            const section = EXPORT_SECTIONS.find(s => s.entity === entityKey);
+            if (!section) return;
+            const orig = btn ? btn.textContent : '';
+            if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
+            try {
+                const items = await store[section.getter]();
+                const fields = Object.keys(SHAREPOINT_CONFIG.fieldMappings[entityKey]);
+                const rows = items.map(item => {
+                    const row = {};
+                    fields.forEach(f => {
+                        let v = item[f];
+                        if (v === null || v === undefined) v = '';
+                        if (typeof v === 'object') v = JSON.stringify(v);
+                        row[f] = v;
+                    });
+                    return row;
+                });
+                const wb = XLSX.utils.book_new();
+                const ws = XLSX.utils.json_to_sheet(rows, { header: fields });
+                ws['!cols'] = fields.map(f => ({ wch: Math.max(f.length + 2, 14) }));
+                XLSX.utils.book_append_sheet(wb, ws, section.sheet);
+                XLSX.writeFile(wb, 'NetInventory-' + section.sheet.replace(/ /g, '') + '-' + _exportStamp() + '.xlsx');
+            } catch (error) {
+                alert('Error exporting: ' + friendlyError(error));
+            } finally {
+                if (btn) { btn.disabled = false; btn.textContent = orig; }
+            }
+        }
+
+        // Export the connections shown in an FDP/equipment port view
+        function exportConnections(kind) {
+            if (typeof XLSX === 'undefined') { alert('Excel library failed to load.'); return; }
+            const data = kind === 'fdp' ? window._fdpConnExport : window._eqConnExport;
+            if (!data) { alert('Open a port view first.'); return; }
+            try {
+                const wb = XLSX.utils.book_new();
+                Object.keys(data.sheets).forEach(name => {
+                    const rows = data.sheets[name];
+                    const ws = XLSX.utils.json_to_sheet(rows.length ? rows : [{ note: 'none' }]);
+                    if (rows.length) ws['!cols'] = Object.keys(rows[0]).map(k => ({ wch: Math.max(k.length + 2, 14) }));
+                    XLSX.utils.book_append_sheet(wb, ws, name.slice(0, 31));
+                });
+                XLSX.writeFile(wb, 'NetInventory-' + data.label.replace(/[^a-zA-Z0-9._-]/g, '_') + '-connections-' + _exportStamp() + '.xlsx');
+            } catch (error) {
+                alert('Error exporting connections: ' + friendlyError(error));
+            }
+        }
+
+        // ============ EQUIPMENT BULK IMPORT (CSV/XLSX) ============
+        const IMPORT_COLUMNS = ['name', 'site', 'template', 'manufacturer', 'model', 'type', 'serialNumber', 'rackUnits', 'powerType', 'powerDraw', 'maxPowerDraw', 'voltage', 'weight', 'portConfig', 'mgmtIp', 'mgmtSubnet', 'mgmtGateway', 'installDate', 'notes'];
+        let _importRows = null;
+
+        function openEquipmentImport() {
+            closeEquipmentImportModal();
+            const html = `
+                <div class="modal active" id="equipmentImportModal" onclick="if(event.target === this) closeEquipmentImportModal()" style="z-index: 1095;">
+                    <div class="modal-content" style="max-width: 1100px; max-height: 92vh; overflow-y: auto;">
+                        <div class="modal-header">
+                            <h2>⬆️ Bulk Import Equipment</h2>
+                            <button class="close-btn" onclick="closeEquipmentImportModal()">&times;</button>
+                        </div>
+                        <div style="padding: 1.25rem 1.5rem;">
+                            <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 1rem;">
+                                Upload a CSV or XLSX. Required columns: <strong>name</strong>, <strong>site</strong> (site name or ID).
+                                Optional: <strong>template</strong> (a template name — fills any blank spec fields), manufacturer, model, type,
+                                serialNumber, rackUnits, powerType, powerDraw, maxPowerDraw, voltage, weight, portConfig, mgmtIp, mgmtSubnet, mgmtGateway, installDate, notes.
+                                Racks can be assigned later via Edit.
+                            </p>
+                            <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 1rem;">
+                                <button class="btn-secondary" onclick="downloadImportTemplate()">📄 Download CSV Template</button>
+                                <button class="btn-primary" onclick="pickImportFile()">📂 Choose File…</button>
+                                <span id="importStatus" style="font-size: 0.85rem; color: var(--text-tertiary); align-self: center;"></span>
+                            </div>
+                            <div id="importPreview"></div>
+                        </div>
+                    </div>
+                </div>`;
+            document.body.insertAdjacentHTML('beforeend', html);
+        }
+
+        function closeEquipmentImportModal() {
+            const m = document.getElementById('equipmentImportModal');
+            if (m) m.remove();
+            _importRows = null;
+        }
+
+        function downloadImportTemplate() {
+            const example = [
+                { name: 'CORE-SW-01', site: 'NYC-DC-01', template: '', manufacturer: 'Arista', model: 'DCS-7050X3', type: 'Switch', serialNumber: 'JPE12345678', rackUnits: 1, powerType: 'AC', powerDraw: '', maxPowerDraw: '', voltage: '', weight: '', portConfig: '48x10G/25G, 8x100G', mgmtIp: '10.0.0.10', mgmtSubnet: '255.255.255.0', mgmtGateway: '10.0.0.1', installDate: '', notes: '' },
+                { name: 'EDGE-RTR-01', site: 'BOS-COLO-02', template: 'Arista Router', manufacturer: '', model: '', type: '', serialNumber: 'JPE87654321', rackUnits: '', powerType: '', powerDraw: '', maxPowerDraw: '', voltage: '', weight: '', portConfig: '', mgmtIp: '10.0.1.10', mgmtSubnet: '', mgmtGateway: '', installDate: '', notes: 'Template fills the blanks' }
+            ];
+            const ws = XLSX.utils.json_to_sheet(example, { header: IMPORT_COLUMNS });
+            const csv = XLSX.utils.sheet_to_csv(ws);
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'NetInventory-Equipment-Import-Template.csv';
+            a.click();
+            URL.revokeObjectURL(a.href);
+        }
+
+        function pickImportFile() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.csv,.xlsx,.xls';
+            input.onchange = async () => {
+                const file = input.files[0];
+                if (!file) return;
+                const status = document.getElementById('importStatus');
+                if (status) status.textContent = 'Parsing ' + file.name + '…';
+                try {
+                    const buf = await file.arrayBuffer();
+                    const wb = XLSX.read(buf);
+                    const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' });
+                    await validateImportRows(rows);
+                } catch (error) {
+                    if (status) status.textContent = '';
+                    alert('Could not read file: ' + friendlyError(error));
+                }
+            };
+            input.click();
+        }
+
+        async function validateImportRows(rows) {
+            const status = document.getElementById('importStatus');
+            const preview = document.getElementById('importPreview');
+            const [sites, existingEquipment, templates] = await Promise.all([
+                store.getSites(), store.getEquipment(), store.getTemplates().catch(() => [])
+            ]);
+            const siteByKey = {};
+            sites.forEach(s => {
+                if (s.name) siteByKey[String(s.name).trim().toLowerCase()] = s;
+                siteByKey[String(s.id).trim().toLowerCase()] = s;
+            });
+            const tmplByName = {};
+            templates.forEach(t => { if (t.name) tmplByName[String(t.name).trim().toLowerCase()] = t; });
+            const existingNames = new Set(existingEquipment.map(e => String(e.name || '').trim().toLowerCase()));
+            const seenInFile = new Set();
+            
+            _importRows = rows.map((raw, idx) => {
+                const r = {};
+                IMPORT_COLUMNS.forEach(c => { r[c] = String(raw[c] !== undefined ? raw[c] : '').trim(); });
+                const problems = [];
+                let level = 'ok';
+                if (!r.name) { problems.push('missing name'); level = 'error'; }
+                const site = r.site ? siteByKey[r.site.toLowerCase()] : null;
+                if (!site) { problems.push(r.site ? `unknown site "${r.site}"` : 'missing site'); level = 'error'; }
+                let template = null;
+                if (r.template) {
+                    template = tmplByName[r.template.toLowerCase()];
+                    if (!template) { problems.push(`unknown template "${r.template}"`); level = 'error'; }
+                }
+                const nameKey = r.name.toLowerCase();
+                if (r.name && existingNames.has(nameKey)) { problems.push('name already exists in inventory'); if (level !== 'error') level = 'warn'; }
+                if (r.name && seenInFile.has(nameKey)) { problems.push('duplicate within file'); level = 'error'; }
+                if (r.name) seenInFile.add(nameKey);
+                if (r.rackUnits && isNaN(parseInt(r.rackUnits))) { problems.push('rackUnits not a number'); level = 'error'; }
+                if (r.weight && isNaN(parseFloat(r.weight))) { problems.push('weight not a number'); level = 'error'; }
+                return { idx: idx + 2, raw: r, site, template, problems, level };
+            });
+            
+            const ok = _importRows.filter(r => r.level === 'ok').length;
+            const warn = _importRows.filter(r => r.level === 'warn').length;
+            const err = _importRows.filter(r => r.level === 'error').length;
+            if (status) status.textContent = '';
+            
+            preview.innerHTML = `
+                <div style="display: flex; gap: 1.5rem; margin-bottom: 0.75rem; font-size: 0.9rem;">
+                    <span style="color: var(--success);">✅ ${ok} ready</span>
+                    <span style="color: #f59e0b;">⚠️ ${warn} warnings (will import)</span>
+                    <span style="color: var(--danger);">❌ ${err} errors (will be skipped)</span>
+                </div>
+                <div class="table-container" style="max-height: 380px; overflow-y: auto; margin-bottom: 1rem;">
+                    <table>
+                        <thead><tr><th>Row</th><th></th><th>Name</th><th>Site</th><th>Template</th><th>Model</th><th>Issues</th></tr></thead>
+                        <tbody>
+                            ${_importRows.map(r => `
+                                <tr>
+                                    <td>${r.idx}</td>
+                                    <td>${r.level === 'ok' ? '✅' : r.level === 'warn' ? '⚠️' : '❌'}</td>
+                                    <td><strong>${r.raw.name || '—'}</strong></td>
+                                    <td>${r.site ? r.site.name : '<span style="color: var(--danger);">' + (r.raw.site || '—') + '</span>'}</td>
+                                    <td>${r.raw.template || ''}</td>
+                                    <td>${r.raw.manufacturer || (r.template ? r.template.manufacturer : '')} ${r.raw.model || (r.template ? r.template.model : '')}</td>
+                                    <td style="font-size: 0.8rem; color: var(--text-secondary);">${r.problems.join('; ')}</td>
+                                </tr>`).join('')}
+                        </tbody>
+                    </table>
+                </div>
+                <button class="btn-primary" id="importConfirmBtn" onclick="runEquipmentImport()" ${ok + warn === 0 ? 'disabled' : ''}>
+                    Import ${ok + warn} device${ok + warn !== 1 ? 's' : ''}
+                </button>`;
+        }
+
+        async function runEquipmentImport() {
+            if (!_importRows) return;
+            const btn = document.getElementById('importConfirmBtn');
+            const status = document.getElementById('importStatus');
+            const importable = _importRows.filter(r => r.level !== 'error');
+            if (btn) { btn.disabled = true; }
+            let done = 0, failed = 0;
+            for (const r of importable) {
+                try {
+                    const t = r.template || {};
+                    const pick = (field, tField) => r.raw[field] || t[tField !== undefined ? tField : field] || '';
+                    const equip = {
+                        name: r.raw.name,
+                        siteId: r.site.id,
+                        rackId: '',
+                        manufacturer: pick('manufacturer'),
+                        model: pick('model'),
+                        type: pick('type'),
+                        serialNumber: r.raw.serialNumber,
+                        powerType: pick('powerType'),
+                        powerDraw: r.raw.powerDraw || (t.powerDraw !== undefined && t.powerDraw !== '' ? String(t.powerDraw) : ''),
+                        maxPowerDraw: r.raw.maxPowerDraw || (t.maxPowerDraw !== undefined && t.maxPowerDraw !== '' ? String(t.maxPowerDraw) : ''),
+                        voltage: pick('voltage'),
+                        portConfig: pick('portConfig'),
+                        mgmtIp: r.raw.mgmtIp,
+                        mgmtSubnet: r.raw.mgmtSubnet,
+                        mgmtGateway: r.raw.mgmtGateway,
+                        installDate: r.raw.installDate,
+                        notes: r.raw.notes
+                    };
+                    const ru = r.raw.rackUnits || t.rackUnits;
+                    if (ru !== '' && ru !== undefined && ru !== null && !isNaN(parseInt(ru))) equip.rackUnits = parseInt(ru);
+                    const w = r.raw.weight || t.weight;
+                    if (w !== '' && w !== undefined && w !== null && !isNaN(parseFloat(w))) equip.weight = parseInt(w);
+                    await store.addEquipment(equip);
+                    done++;
+                } catch (e) {
+                    console.error('Import row ' + r.idx + ' failed:', e);
+                    failed++;
+                }
+                if (status) status.textContent = `Importing… ${done + failed}/${importable.length}`;
+            }
+            if (status) status.textContent = '';
+            alert(`✅ Imported ${done} device(s).` + (failed ? `\n❌ ${failed} failed — see console for details.` : ''));
+            closeEquipmentImportModal();
+            renderEquipmentPage();
+        }
+
         async function exportAllToExcel(btn) {
             if (typeof XLSX === 'undefined') { alert('Excel library failed to load. Check your internet connection and refresh.'); return; }
             const origText = btn ? btn.textContent : '';
@@ -7640,7 +7885,7 @@
                         <h1 style="font-size: 2rem;">NNIs (Network-to-Network Interfaces)</h1>
                         <div style="display: flex; gap: 1rem; align-items: center;">
                             <input type="text" placeholder="🔍 Search NNIs..." style="padding: 0.5rem 1rem; border: 1px solid var(--border-color); border-radius: 4px; width: 250px;" oninput="filterTable('nni', this.value)">
-                            <button class="btn-primary" onclick="openAddNniModal()">Add NNI</button>
+                            <button class="btn-secondary" onclick="exportEntityToExcel('nnis', this)" title="Export NNIs to Excel">⬇️ Export</button><button class="btn-primary" onclick="openAddNniModal()">Add NNI</button>
                     </div>
                     <div class="table-container">
                         <table>
@@ -8570,6 +8815,7 @@
                         <div class="modal-header">
                             <h2>FDP Port Map: ${fdp.name}</h2>
                             <div class="port-zoom-controls" style="display: flex; gap: 0.4rem; align-items: center; margin-right: 0.75rem;">
+                                <button class="btn-secondary" onclick="exportConnections('fdp')" style="padding: 0.3rem 0.7rem; font-size: 0.85rem;" title="Export connections to Excel">⬇️ Export</button>
                                 <button class="btn-secondary" onclick="portZoom(-0.25)" style="padding: 0.3rem 0.7rem; font-size: 1rem;" title="Zoom out">−</button>
                                 <button class="btn-secondary" onclick="portZoom(0)" style="padding: 0.3rem 0.7rem; font-size: 0.8rem;" title="Reset zoom">100%</button>
                                 <button class="btn-secondary" onclick="portZoom(0.25)" style="padding: 0.3rem 0.7rem; font-size: 1rem;" title="Zoom in">+</button>
@@ -8714,6 +8960,12 @@
                                 if (c.zEquipmentFdp === fdpId && c.zEquipment) connEquipIds.add(c.zEquipment);
                             });
                             const connEquip = allEquipment.filter(e => connEquipIds.has(e.id));
+                            
+                            window._fdpConnExport = { label: fdp.name || fdpId, sheets: {
+                                'Circuits': fdpCircuits.map(c => ({ circuitId: c.circuitId || c.id, type: c.type || '', status: c.status || '', ports: circuitPortsFor(c), provider: c.provider || '', bandwidth: c.bandwidth || '' })),
+                                'NNIs': assignedNnis.map(n => ({ name: n.name || n.id, direction: n.direction || '', fdpPorts: n.fdpPorts || '', equipmentID: n.equipmentID || '', contact: n.contact || '' })),
+                                'Equipment': connEquip.map(e => ({ name: e.name, manufacturer: e.manufacturer || '', model: e.model || '', serialNumber: e.serialNumber || '', mgmtIp: e.mgmtIp || '' }))
+                            }};
                             
                             const sec = (title, rowsHtml, emptyMsg) => `
                                 <div style="margin-bottom: 1.25rem;">
@@ -8932,6 +9184,7 @@
                         <div class="modal-header">
                             <h2>Equipment Ports: ${equipment.name}</h2>
                             <div class="port-zoom-controls" style="display: flex; gap: 0.4rem; align-items: center; margin-right: 0.75rem;">
+                                <button class="btn-secondary" onclick="exportConnections('equipment')" style="padding: 0.3rem 0.7rem; font-size: 0.85rem;" title="Export connections to Excel">⬇️ Export</button>
                                 <button class="btn-secondary" onclick="portZoom(-0.25)" style="padding: 0.3rem 0.7rem; font-size: 1rem;" title="Zoom out">−</button>
                                 <button class="btn-secondary" onclick="portZoom(0)" style="padding: 0.3rem 0.7rem; font-size: 0.8rem;" title="Reset zoom">100%</button>
                                 <button class="btn-secondary" onclick="portZoom(0.25)" style="padding: 0.3rem 0.7rem; font-size: 1rem;" title="Zoom in">+</button>
@@ -9113,6 +9366,12 @@
                                 if (c.zEquipment === equipmentId && c.zEquipmentFdp) fdpIds.add(c.zEquipmentFdp);
                             });
                             const connFdps = allFdpsForConn.filter(f => fdpIds.has(f.id));
+                            
+                            window._eqConnExport = { label: equipment.name || equipmentId, sheets: {
+                                'NNIs': eqNnis.map(n => ({ name: n.name || n.id, direction: n.direction || '', equipmentPorts: n.equipmentPorts || '', fdpId: n.fdpId || '', contact: n.contact || '' })),
+                                'Circuits': eqCircuits.map(c => ({ circuitId: c.circuitId || c.id, type: c.type || '', status: c.status || '', via: viaLabel(c), provider: c.provider || '', bandwidth: c.bandwidth || '' })),
+                                'FDPs': connFdps.map(f => ({ name: f.name || f.id, connectorType: f.connectorType || '', portCount: f.portCount || '', location: f.location || '' }))
+                            }};
                             
                             const sec = (title, rowsHtml, emptyMsg) => `
                                 <div style="margin-bottom: 1.25rem;">
@@ -9907,7 +10166,7 @@ ${entityActionButtons('nni', `${n.id}`, true)}
                 content.innerHTML = `
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
                     <h1 style="font-size: 2rem;">📋 Equipment Templates</h1>
-                    <button class="btn-primary" onclick="openAddTemplateModal()">+ Add Template</button>
+                    <button class="btn-secondary" onclick="exportEntityToExcel('templates', this)" title="Export Templates to Excel">⬇️ Export</button><button class="btn-primary" onclick="openAddTemplateModal()">+ Add Template</button>
                 </div>
                 <p style="color: var(--text-secondary); margin-bottom: 2rem;">Reusable equipment configurations for faster deployment</p>
                 <div class="table-container">
@@ -9974,7 +10233,7 @@ ${entityActionButtons('nni', `${n.id}`, true)}
                         <h1 style="font-size: 2rem;">🌑 Dark Fiber Routes</h1>
                         <div style="display: flex; gap: 0.75rem;">
                             <button class="btn-secondary" onclick="renderDarkFiberProviderSummary()">📊 Provider Summary</button>
-                            <button class="btn-primary" onclick="openAddDarkFiberRouteModal()">+ Add Route</button>
+                            <button class="btn-secondary" onclick="exportEntityToExcel('darkfiberroutes', this)" title="Export DF Routes to Excel">⬇️ Export</button><button class="btn-primary" onclick="openAddDarkFiberRouteModal()">+ Add Route</button>
                         </div>
                     </div>
                     
