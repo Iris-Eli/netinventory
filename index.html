@@ -753,7 +753,7 @@
         // BUILD: 2024-05-19-23-00-TEMPLATE-LITERALS-FIXED
         // This timestamp forces browser to reload: 1747719600
         console.log('%c🔧 NetInventory Version: 2026-06-10-OTDR-PINPOINT', 'background: #8b5cf6; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;');
-        console.log('🌊 Optical line-side (capacity gating, λ), 🌈 tunable circuits, SO numbers + all prior!');
+        console.log('↻ Template sync to equipment, optical line-side, tunable circuits + all prior!');
         console.log('✅ Edit buttons ACTUALLY work now - template literals fixed!');
         console.log('🔢 Build timestamp: 1747719600');
         
@@ -7391,6 +7391,65 @@
             }
         }
 
+        // ============ TEMPLATE SYNC: push template spec changes to existing equipment ============
+        // Updates SPEC fields (port layout, line ports, RU, power specs) on every piece
+        // of equipment matching the template's manufacturer+model. Per-device fields
+        // (provisioned line capacity, wavelength, serial, mgmt IP, rack position) are never touched.
+        const TEMPLATE_SYNC_FIELDS = ['portConfig', 'linePorts', 'rackUnits', 'powerType', 'voltage', 'maxPowerDraw', 'weight'];
+
+        async function syncTemplateToEquipment(templateId) {
+            try {
+                const [templates, equipment] = await Promise.all([store.getTemplates(), store.getEquipment()]);
+                const t = templates.find(x => x.id === templateId);
+                if (!t) { alert('Template not found'); return; }
+                const matches = equipment.filter(e =>
+                    String(e.manufacturer || '').trim().toLowerCase() === String(t.manufacturer || '').trim().toLowerCase() &&
+                    String(e.model || '').trim().toLowerCase() === String(t.model || '').trim().toLowerCase()
+                );
+                if (matches.length === 0) {
+                    alert(`No equipment found matching ${t.manufacturer} ${t.model}.`);
+                    return;
+                }
+                // Diff: which devices actually differ from the template specs?
+                const toUpdate = [];
+                matches.forEach(e => {
+                    const changes = {};
+                    TEMPLATE_SYNC_FIELDS.forEach(f => {
+                        const tv = t[f];
+                        if (tv === undefined || tv === null || tv === '') return;  // template silent on this field
+                        const ev = e[f];
+                        const tvs = (f === 'rackUnits' || f === 'weight' || f === 'maxPowerDraw') ? String(parseInt(tv)) : String(tv);
+                        const evs = ev === undefined || ev === null ? '' : String(ev);
+                        if (tvs !== evs) changes[f] = (f === 'rackUnits' || f === 'weight') ? parseInt(tv) : ((f === 'maxPowerDraw' && e.maxPowerDraw !== undefined) ? String(tv) : tv);
+                    });
+                    if (Object.keys(changes).length > 0) toUpdate.push({ e, changes });
+                });
+                if (toUpdate.length === 0) {
+                    alert(`✅ All ${matches.length} ${t.model} device(s) already match the template.`);
+                    return;
+                }
+                const fieldList = [...new Set(toUpdate.flatMap(u => Object.keys(u.changes)))].join(', ');
+                const deviceList = toUpdate.slice(0, 12).map(u => u.e.name).join('\n  ') + (toUpdate.length > 12 ? `\n  …and ${toUpdate.length - 12} more` : '');
+                if (!confirm(`↻ Sync template "${t.name}" to equipment?\n\n${toUpdate.length} of ${matches.length} ${t.model} device(s) will be updated.\nFields: ${fieldList}\n\nDevices:\n  ${deviceList}\n\nPer-device data (line capacity, wavelength, serial, rack position) is NOT touched.`)) return;
+                
+                let done = 0, failed = 0;
+                for (const u of toUpdate) {
+                    try {
+                        // maxPowerDraw is TEXT on equipment but NUMBER on templates — convert
+                        if (u.changes.maxPowerDraw !== undefined) u.changes.maxPowerDraw = String(u.changes.maxPowerDraw);
+                        await store.updateEquipment(u.e.id, u.changes);
+                        done++;
+                    } catch (err) {
+                        console.error('Sync failed for', u.e.name, err);
+                        failed++;
+                    }
+                }
+                alert(`✅ Synced ${done} device(s) to template "${t.name}".` + (failed ? `\n❌ ${failed} failed — see console.` : ''));
+            } catch (error) {
+                alert('Error syncing template: ' + friendlyError(error));
+            }
+        }
+
         // ============ EQUIPMENT BULK IMPORT (CSV/XLSX) ============
         const IMPORT_COLUMNS = ['name', 'site', 'template', 'manufacturer', 'model', 'type', 'serialNumber', 'rackUnits', 'powerType', 'powerDraw', 'maxPowerDraw', 'voltage', 'weight', 'portConfig', 'mgmtIp', 'mgmtSubnet', 'mgmtGateway', 'installDate', 'notes'];
         let _importRows = null;
@@ -10312,7 +10371,7 @@ ${entityActionButtons('nni', `${n.id}`, true)}
                                     <td>${t.rackUnits || ''}U</td>
                                     <td>${t.powerDraw || ''}W ${t.powerType ? `(${t.powerType})` : ''}</td>
                                     <td>
-                                        <button class="btn-secondary" onclick="editTemplate('${t.id}')" style="padding: 0.4rem 0.75rem; font-size: 0.85rem; margin-right: 0.5rem;">Edit</button>
+                                        <button class="btn-secondary" onclick="syncTemplateToEquipment('${t.id}')" style="padding: 0.4rem 0.75rem; margin-right: 0.5rem; font-size: 0.85rem;" title="Push this template's specs to all equipment of this model">↻ Sync</button><button class="btn-secondary" onclick="editTemplate('${t.id}')" style="padding: 0.4rem 0.75rem; font-size: 0.85rem; margin-right: 0.5rem;">Edit</button>
                                         <button class="btn-danger" onclick="deleteTemplate('${t.id}')" style="padding: 0.4rem 0.75rem; font-size: 0.85rem;">Delete</button>
                                     </td>
                                 </tr>
