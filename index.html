@@ -753,7 +753,7 @@
         // BUILD: 2024-05-19-23-00-TEMPLATE-LITERALS-FIXED
         // This timestamp forces browser to reload: 1747719600
         console.log('%c🔧 NetInventory Version: 2026-06-10-OTDR-PINPOINT', 'background: #8b5cf6; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;');
-        console.log('🔘 Action buttons unified everywhere (Photos in rows/search/modals) + all prior!');
+        console.log('🔗 Port view connections (FDP/equipment), unified search actions + all prior!');
         console.log('✅ Edit buttons ACTUALLY work now - template literals fixed!');
         console.log('🔢 Build timestamp: 1747719600');
         
@@ -7424,6 +7424,38 @@
             }
         };
 
+        // Generates the standard action-button set for an entity from QUICK_ACTIONS,
+        // so table rows, search results, and modals can never drift apart.
+        const _DELETE_FNS = { site: 'deleteSite', rack: 'deleteRack', equipment: 'deleteEquipment', fdp: 'deleteFdp', circuit: 'deleteCircuit', nni: 'deleteNni', dfroute: 'deleteDarkFiberRoute' };
+        const _ACTION_FN_NAMES = {
+            '👁️ View Details': { site: 'viewSiteDetails', rack: 'viewRackDetails', equipment: 'viewEquipmentDetails', fdp: 'viewFdpDetails', circuit: 'viewCircuitDetails', nni: 'viewNniDetails', dfroute: 'viewDarkFiberRoute' },
+            '📷 Photos': { site: 'viewSitePhotos' },
+            '🔲 Rack Layout': { rack: 'viewRackLayout' },
+            '🔌 View Ports': { equipment: 'viewEquipmentPorts' },
+            '🔌 Port Layout': { fdp: 'viewFdpLayout' },
+            '📋 View DLR': { circuit: 'viewDLR' },
+            '✏️ Edit': { site: 'editSiteById', rack: 'editRackById', equipment: 'editEquipmentById', fdp: 'editFdpById', circuit: 'editCircuitById', nni: 'editNniById', dfroute: 'editDarkFiberRoute' },
+            '👁️ View Route & Segments': { dfroute: 'viewDarkFiberRoute' }
+        };
+        function entityActionButtons(type, idExpr, withDelete, preClick) {
+            const cfg = QUICK_ACTIONS[type];
+            if (!cfg) return '';
+            const pre = preClick || '';
+            const btnStyle = 'padding: 0.4rem 0.6rem; margin-right: 0.4rem; font-size: 0.85rem;';
+            let html = cfg.actions.map(a => {
+                const fnMap = _ACTION_FN_NAMES[a.label];
+                const fnName = fnMap && fnMap[type];
+                if (!fnName) return '';
+                const short = a.label.split(' ')[0];
+                const text = a.label.replace(/^[^ ]+ /, '');
+                return `<button class="btn-secondary" onclick="${pre}${fnName}('${idExpr}')" style="${btnStyle}" title="${text}">${short}</button>`;
+            }).join('');
+            if (withDelete && _DELETE_FNS[type]) {
+                html += `<button class="btn-secondary" onclick="${pre}${_DELETE_FNS[type]}('${idExpr}')" style="${btnStyle} background: var(--danger);" title="Delete">🗑️</button>`;
+            }
+            return html;
+        }
+
         let _quickActionFns = [];
 
         async function showQuickActions(entityType, id) {
@@ -8418,11 +8450,12 @@
                 return;
             }
             
-            const [circuits, nnis, site, rack] = await Promise.all([
+            const [circuits, nnis, site, rack, allEquipment] = await Promise.all([
                 store.getCircuits(),
                 store.getNnis(),
                 fdp.siteId ? store.getSites().then(s => s.find(site => site.id === fdp.siteId)) : Promise.resolve(null),
-                fdp.rackId ? store.getRacks().then(r => r.find(rack => rack.id === fdp.rackId)) : Promise.resolve(null)
+                fdp.rackId ? store.getRacks().then(r => r.find(rack => rack.id === fdp.rackId)) : Promise.resolve(null),
+                store.getEquipment()
             ]);
             
             // Map which ports are occupied and by which circuits
@@ -8662,6 +8695,61 @@
                                 </div>
                             </div>
                         </div>
+                        ${(() => {
+                            // ===== CONNECTIONS: everything linked to this FDP =====
+                            const PRE = 'closeFdpLayoutModal(); ';
+                            const fdpCircuits = [...new Map(Object.values(portCircuits).flat().map(c => [c.id, c])).values()];
+                            const circuitPortsFor = (c) => {
+                                const ports = [];
+                                if (c.aFdp === fdpId && c.aPort) ports.push('A: ' + c.aPort);
+                                if (c.zFdp === fdpId && c.zPort) ports.push('Z: ' + c.zPort);
+                                if (c.aEquipmentFdp === fdpId && c.aEquipmentFdpPorts) ports.push('A-eq: ' + c.aEquipmentFdpPorts);
+                                if (c.zEquipmentFdp === fdpId && c.zEquipmentFdpPorts) ports.push('Z-eq: ' + c.zEquipmentFdpPorts);
+                                return ports.join(' · ');
+                            };
+                            const connEquipIds = new Set();
+                            assignedNnis.forEach(n => { if (n.equipmentID) connEquipIds.add(n.equipmentID); });
+                            fdpCircuits.forEach(c => {
+                                if (c.aEquipmentFdp === fdpId && c.aEquipment) connEquipIds.add(c.aEquipment);
+                                if (c.zEquipmentFdp === fdpId && c.zEquipment) connEquipIds.add(c.zEquipment);
+                            });
+                            const connEquip = allEquipment.filter(e => connEquipIds.has(e.id));
+                            
+                            const sec = (title, rowsHtml, emptyMsg) => `
+                                <div style="margin-bottom: 1.25rem;">
+                                    <h3 style="font-size: 1.05rem; color: var(--accent-primary); margin-bottom: 0.6rem;">${title}</h3>
+                                    ${rowsHtml || `<div style="font-size: 0.85rem; color: var(--text-tertiary);">${emptyMsg}</div>`}
+                                </div>`;
+                            
+                            const row = (left, right) => `
+                                <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 0.5rem 0.75rem; border: 1px solid var(--border-color); border-radius: 0.5rem; margin-bottom: 0.5rem;">
+                                    <div style="font-size: 0.9rem;">${left}</div>
+                                    <div style="white-space: nowrap;">${right}</div>
+                                </div>`;
+                            
+                            return `
+                            <div style="padding: 1.25rem 1.5rem; border-top: 1px solid var(--border-color);">
+                                <h2 style="font-size: 1.2rem; margin-bottom: 1rem;">🔗 Connections</h2>
+                                ${sec(`⚡ Circuits (${fdpCircuits.length})`,
+                                    fdpCircuits.map(c => row(
+                                        `<strong>${c.circuitId || c.id}</strong> <span style="color: var(--text-tertiary); font-size: 0.8rem;">${c.type || ''} · ${c.status || ''}${circuitPortsFor(c) ? ' · ports ' + circuitPortsFor(c) : ''}</span>`,
+                                        entityActionButtons('circuit', c.id, false, PRE)
+                                    )).join(''),
+                                    'No circuits terminate on this FDP.')}
+                                ${sec(`🔗 NNIs (${assignedNnis.length})`,
+                                    assignedNnis.map(n => row(
+                                        `<strong>${n.name || n.id}</strong> <span style="color: var(--text-tertiary); font-size: 0.8rem;">${n.direction || ''}${n.fdpPorts ? ' · ports ' + n.fdpPorts : ''}</span>`,
+                                        entityActionButtons('nni', n.id, false, PRE)
+                                    )).join(''),
+                                    'No NNIs use this FDP.')}
+                                ${sec(`🖥️ Connected Equipment (${connEquip.length})`,
+                                    connEquip.map(e => row(
+                                        `<strong>${e.name || e.id}</strong> <span style="color: var(--text-tertiary); font-size: 0.8rem;">${e.manufacturer || ''} ${e.model || ''}</span>`,
+                                        entityActionButtons('equipment', e.id, false, PRE)
+                                    )).join(''),
+                                    'No equipment is linked to this FDP via NNIs or circuits.')}
+                            </div>`;
+                        })()}
                         <div style="padding: 1rem 1.5rem; border-top: 1px solid var(--border-color); display: flex; justify-content: flex-end;">
                             <button onclick="closeFdpLayoutModal()" class="btn-secondary">Close</button>
                         </div>
@@ -9000,6 +9088,66 @@
                                 </div>
                             </div>
                         </div>
+                        ${(() => {
+                            // ===== CONNECTIONS: everything linked to this equipment =====
+                            const PRE = 'closeEquipmentPortsModal(); ';
+                            const eqNnis = nnis.filter(n => n.equipmentID === equipmentId);
+                            const eqCircuits = circuits.filter(c =>
+                                c.aEquipment === equipmentId || c.zEquipment === equipmentId ||
+                                eqNnis.some(n => c.aNni === n.id || c.zNni === n.id)
+                            );
+                            const viaLabel = (c) => {
+                                const parts = [];
+                                if (c.aEquipment === equipmentId) parts.push('A-end' + (c.aEquipmentPort ? ' port ' + c.aEquipmentPort : ''));
+                                if (c.zEquipment === equipmentId) parts.push('Z-end' + (c.zEquipmentPort ? ' port ' + c.zEquipmentPort : ''));
+                                eqNnis.forEach(n => {
+                                    if (c.aNni === n.id) parts.push('via NNI ' + (n.name || n.id) + ' (A)');
+                                    if (c.zNni === n.id) parts.push('via NNI ' + (n.name || n.id) + ' (Z)');
+                                });
+                                return parts.join(' · ');
+                            };
+                            const fdpIds = new Set();
+                            eqNnis.forEach(n => { if (n.fdpId) fdpIds.add(n.fdpId); });
+                            circuits.forEach(c => {
+                                if (c.aEquipment === equipmentId && c.aEquipmentFdp) fdpIds.add(c.aEquipmentFdp);
+                                if (c.zEquipment === equipmentId && c.zEquipmentFdp) fdpIds.add(c.zEquipmentFdp);
+                            });
+                            const connFdps = allFdpsForConn.filter(f => fdpIds.has(f.id));
+                            
+                            const sec = (title, rowsHtml, emptyMsg) => `
+                                <div style="margin-bottom: 1.25rem;">
+                                    <h3 style="font-size: 1.05rem; color: var(--accent-primary); margin-bottom: 0.6rem;">${title}</h3>
+                                    ${rowsHtml || `<div style="font-size: 0.85rem; color: var(--text-tertiary);">${emptyMsg}</div>`}
+                                </div>`;
+                            const row = (left, right) => `
+                                <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 0.5rem 0.75rem; border: 1px solid var(--border-color); border-radius: 0.5rem; margin-bottom: 0.5rem;">
+                                    <div style="font-size: 0.9rem;">${left}</div>
+                                    <div style="white-space: nowrap;">${right}</div>
+                                </div>`;
+                            
+                            return `
+                            <div style="padding: 1.25rem 1.5rem; border-top: 1px solid var(--border-color);">
+                                <h2 style="font-size: 1.2rem; margin-bottom: 1rem;">🔗 Connections</h2>
+                                ${sec(`🔗 NNIs on this equipment (${eqNnis.length})`,
+                                    eqNnis.map(n => row(
+                                        `<strong>${n.name || n.id}</strong> <span style="color: var(--text-tertiary); font-size: 0.8rem;">${n.direction || ''}${n.equipmentPorts ? ' · ports ' + n.equipmentPorts : ''}${n.fdpId ? ' · → FDP' : ''}</span>`,
+                                        entityActionButtons('nni', n.id, false, PRE)
+                                    )).join(''),
+                                    'No NNIs are configured on this equipment.')}
+                                ${sec(`⚡ Circuits (${eqCircuits.length})`,
+                                    eqCircuits.map(c => row(
+                                        `<strong>${c.circuitId || c.id}</strong> <span style="color: var(--text-tertiary); font-size: 0.8rem;">${c.type || ''} · ${c.status || ''}${viaLabel(c) ? ' · ' + viaLabel(c) : ''}</span>`,
+                                        entityActionButtons('circuit', c.id, false, PRE)
+                                    )).join(''),
+                                    'No circuits touch this equipment directly or via its NNIs.')}
+                                ${sec(`🔆 Connected FDPs (${connFdps.length})`,
+                                    connFdps.map(f => row(
+                                        `<strong>${f.name || f.id}</strong> <span style="color: var(--text-tertiary); font-size: 0.8rem;">${f.connectorType || ''}${f.portCount ? ' · ' + f.portCount + ' ports' : ''}</span>`,
+                                        entityActionButtons('fdp', f.id, false, PRE)
+                                    )).join(''),
+                                    'No FDPs are linked to this equipment via NNIs or circuits.')}
+                            </div>`;
+                        })()}
                         <div style="padding: 1rem 1.5rem; border-top: 1px solid var(--border-color); display: flex; justify-content: flex-end;">
                             <button onclick="closeEquipmentPortsModal()" class="btn-secondary">Close</button>
                         </div>
@@ -9545,9 +9693,7 @@
                                                 <td>${s.city || ''}</td>
                                                 <td>${s.state || ''}</td>
                                                 <td>
-                                                    <button class="btn-secondary" onclick="viewSiteDetails('${s.id}')" style="padding: 0.4rem 0.75rem; margin-right: 0.5rem; font-size: 0.85rem;" title="View site details">👁️ View</button>
-                                                    <button class="btn-secondary" onclick="editSiteById('${s.id}')" style="padding: 0.4rem 0.75rem; margin-right: 0.5rem; font-size: 0.85rem;">Edit</button>
-                                                    <button class="btn-secondary" onclick="deleteSite('${s.id}')" style="padding: 0.4rem 0.75rem; background: var(--danger); font-size: 0.85rem;">Delete</button>
+                                                    ${entityActionButtons('site', `${s.id}`, true)}
                                                 </td>
                                             </tr>
                                         `).join('')}
@@ -9576,10 +9722,7 @@
                                                     <td>${site ? `<a href="javascript:void(0)" onclick="viewSiteDetails('${site.id}')" style="color: var(--accent-primary); text-decoration: none; cursor: pointer;">${site.name}</a>` : ''}</td>
                                                     <td>${r.location || ''}</td>
                                                     <td>
-                                                        <button class="btn-secondary" onclick="viewRackDetails('${r.id}')" style="padding: 0.4rem 0.75rem; margin-right: 0.5rem; font-size: 0.85rem;" title="View rack details">👁️ View</button>
-                                                        <button class="btn-secondary" onclick="viewRackLayout('${r.id}')" style="padding: 0.4rem 0.75rem; margin-right: 0.5rem; font-size: 0.85rem;" title="View rack layout">🔲 Layout</button>
-                                                        <button class="btn-secondary" onclick="editRackById('${r.id}')" style="padding: 0.4rem 0.75rem; margin-right: 0.5rem; font-size: 0.85rem;">Edit</button>
-                                                        <button class="btn-secondary" onclick="deleteRack('${r.id}')" style="padding: 0.4rem 0.75rem; background: var(--danger); font-size: 0.85rem;">Delete</button>
+${entityActionButtons('rack', `${r.id}`, true)}
                                                     </td>
                                                 </tr>
                                             `;
@@ -9608,11 +9751,7 @@
                                                 <td>${e.model || ''}</td>
                                                 <td>${e.type || ''}</td>
                                                 <td>
-                                                    <button class="btn-secondary" onclick="viewEquipmentDetails('${e.id}')" style="padding: 0.4rem 0.75rem; margin-right: 0.5rem; font-size: 0.85rem;" title="View equipment details">👁️ View</button>
-                                                    <button class="btn-secondary" onclick="viewEquipmentPorts('${e.id}')" style="padding: 0.4rem 0.75rem; margin-right: 0.5rem; font-size: 0.85rem;" title="View port map">🔌 Ports</button>
-                                                    ${e.mgmtIp ? `<button class="btn-secondary" onclick="openSSH('${e.mgmtIp}', '${e.name}')" style="padding: 0.4rem 0.75rem; margin-right: 0.5rem; font-size: 0.85rem;" title="SSH to equipment">🔐 SSH</button>` : ''}
-                                                    <button class="btn-secondary" onclick="editEquipmentById('${e.id}')" style="padding: 0.4rem 0.75rem; margin-right: 0.5rem; font-size: 0.85rem;">Edit</button>
-                                                    <button class="btn-secondary" onclick="deleteEquipment('${e.id}')" style="padding: 0.4rem 0.75rem; background: var(--danger); font-size: 0.85rem;">Delete</button>
+${entityActionButtons('equipment', `${e.id}`, true)}${e.mgmtIp ? `<button class="btn-secondary" onclick="openSSH('${e.mgmtIp}', '${e.name}')" style="padding: 0.4rem 0.6rem; margin-right: 0.4rem; font-size: 0.85rem;" title="SSH">🔐</button>` : ''}
                                                 </td>
                                             </tr>
                                         `).join('')}
@@ -9641,10 +9780,7 @@
                                                     <td>${site ? `<a href="javascript:void(0)" onclick="viewSiteDetails('${site.id}')" style="color: var(--accent-primary); text-decoration: none; cursor: pointer;">${site.name}</a>` : ''}</td>
                                                     <td>${f.connectorType || ''}</td>
                                                     <td>
-                                                        <button class="btn-secondary" onclick="viewFdpDetails('${f.id}')" style="padding: 0.4rem 0.75rem; margin-right: 0.5rem; font-size: 0.85rem;" title="View FDP details">👁️ View</button>
-                                                        <button class="btn-secondary" onclick="viewFdpLayout('${f.id}')" style="padding: 0.4rem 0.75rem; margin-right: 0.5rem; font-size: 0.85rem;" title="View port map">🔌 Ports</button>
-                                                        <button class="btn-secondary" onclick="editFdpById('${f.id}')" style="padding: 0.4rem 0.75rem; margin-right: 0.5rem; font-size: 0.85rem;">Edit</button>
-                                                        <button class="btn-secondary" onclick="deleteFdp('${f.id}')" style="padding: 0.4rem 0.75rem; background: var(--danger); font-size: 0.85rem;">Delete</button>
+${entityActionButtons('fdp', `${f.id}`, true)}
                                                     </td>
                                                 </tr>
                                             `;
@@ -9673,10 +9809,7 @@
                                                 <td>${c.direction || ''}</td>
                                                 <td>${c.status || ''}</td>
                                                 <td>
-                                                    <button class="btn-secondary" onclick="viewCircuitDetails('${c.id}')" style="padding: 0.4rem 0.75rem; margin-right: 0.5rem; font-size: 0.85rem;" title="View circuit details">👁️ View</button>
-                                                    <button class="btn-secondary" onclick="viewDLR('${c.id}')" style="padding: 0.4rem 0.75rem; margin-right: 0.5rem; font-size: 0.85rem;" title="Design Layout Record">📄 DLR</button>
-                                                    <button class="btn-secondary" onclick="editCircuitById('${c.id}')" style="padding: 0.4rem 0.75rem; margin-right: 0.5rem; font-size: 0.85rem;">Edit</button>
-                                                    <button class="btn-secondary" onclick="deleteCircuit('${c.id}')" style="padding: 0.4rem 0.75rem; background: var(--danger); font-size: 0.85rem;">Delete</button>
+${entityActionButtons('circuit', `${c.id}`, true)}
                                                 </td>
                                             </tr>
                                         `).join('')}
@@ -9705,9 +9838,7 @@
                                                     <td>${n.direction || ''}</td>
                                                     <td>${site ? `<a href="javascript:void(0)" onclick="viewSiteDetails('${site.id}')" style="color: var(--accent-primary); text-decoration: none; cursor: pointer;">${site.name}</a>` : ''}</td>
                                                     <td>
-                                                        <button class="btn-secondary" onclick="viewNniDetails('${n.id}')" style="padding: 0.4rem 0.75rem; margin-right: 0.5rem; font-size: 0.85rem;" title="View NNI details">👁️ View</button>
-                                                        <button class="btn-secondary" onclick="editNniById('${n.id}')" style="padding: 0.4rem 0.75rem; margin-right: 0.5rem; font-size: 0.85rem;">Edit</button>
-                                                        <button class="btn-secondary" onclick="deleteNni('${n.id}')" style="padding: 0.4rem 0.75rem; background: var(--danger); font-size: 0.85rem;">Delete</button>
+${entityActionButtons('nni', `${n.id}`, true)}
                                                     </td>
                                                 </tr>
                                             `;
