@@ -753,7 +753,7 @@
         // BUILD: 2024-05-19-23-00-TEMPLATE-LITERALS-FIXED
         // This timestamp forces browser to reload: 1747719600
         console.log('%c🔧 NetInventory Version: 2026-06-10-OTDR-PINPOINT', 'background: #8b5cf6; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;');
-        console.log('🔧 Fixed equipment Ports modal (getFdps), template sync, optical + all prior!');
+        console.log('📦 Ciena import support (parent/slot columns), Ports fix + all prior!');
         console.log('✅ Edit buttons ACTUALLY work now - template literals fixed!');
         console.log('🔢 Build timestamp: 1747719600');
         
@@ -7451,7 +7451,7 @@
         }
 
         // ============ EQUIPMENT BULK IMPORT (CSV/XLSX) ============
-        const IMPORT_COLUMNS = ['name', 'site', 'template', 'manufacturer', 'model', 'type', 'serialNumber', 'rackUnits', 'powerType', 'powerDraw', 'maxPowerDraw', 'voltage', 'weight', 'portConfig', 'mgmtIp', 'mgmtSubnet', 'mgmtGateway', 'installDate', 'notes'];
+        const IMPORT_COLUMNS = ['name', 'site', 'template', 'manufacturer', 'model', 'type', 'serialNumber', 'rackUnits', 'powerType', 'powerDraw', 'maxPowerDraw', 'voltage', 'weight', 'portConfig', 'linePorts', 'lineCapacity', 'parentName', 'slotNumber', 'mgmtIp', 'mgmtSubnet', 'mgmtGateway', 'installDate', 'notes'];
         let _importRows = null;
 
         function openEquipmentImport() {
@@ -7539,6 +7539,8 @@
             const tmplByName = {};
             templates.forEach(t => { if (t.name) tmplByName[String(t.name).trim().toLowerCase()] = t; });
             const existingNames = new Set(existingEquipment.map(e => String(e.name || '').trim().toLowerCase()));
+            const equipByName = {};
+            existingEquipment.forEach(e => { if (e.name) equipByName[String(e.name).trim().toLowerCase()] = e; });
             const seenInFile = new Set();
             
             _importRows = rows.map((raw, idx) => {
@@ -7558,9 +7560,14 @@
                 if (r.name && existingNames.has(nameKey)) { problems.push('name already exists in inventory'); if (level !== 'error') level = 'warn'; }
                 if (r.name && seenInFile.has(nameKey)) { problems.push('duplicate within file'); level = 'error'; }
                 if (r.name) seenInFile.add(nameKey);
+                let parent = null;
+                if (r.parentName) {
+                    parent = equipByName[r.parentName.toLowerCase()];
+                    if (!parent) { problems.push(`parent chassis "${r.parentName}" not found — import chassis first`); level = 'error'; }
+                }
                 if (r.rackUnits && isNaN(parseInt(r.rackUnits))) { problems.push('rackUnits not a number'); level = 'error'; }
                 if (r.weight && isNaN(parseFloat(r.weight))) { problems.push('weight not a number'); level = 'error'; }
-                return { idx: idx + 2, raw: r, site, template, problems, level };
+                return { idx: idx + 2, raw: r, site, template, parent, problems, level };
             });
             
             const ok = _importRows.filter(r => r.level === 'ok').length;
@@ -7620,6 +7627,10 @@
                         maxPowerDraw: r.raw.maxPowerDraw || (t.maxPowerDraw !== undefined && t.maxPowerDraw !== '' ? String(t.maxPowerDraw) : ''),
                         voltage: pick('voltage'),
                         portConfig: pick('portConfig'),
+                        linePorts: pick('linePorts'),
+                        lineCapacity: r.raw.lineCapacity || '',
+                        parentEquipmentID: r.parent ? r.parent.id : '',
+                        slotNumber: r.raw.slotNumber || '',
                         mgmtIp: r.raw.mgmtIp,
                         mgmtSubnet: r.raw.mgmtSubnet,
                         mgmtGateway: r.raw.mgmtGateway,
