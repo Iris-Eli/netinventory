@@ -753,7 +753,7 @@
         // BUILD: 2024-05-19-23-00-TEMPLATE-LITERALS-FIXED
         // This timestamp forces browser to reload: 1747719600
         console.log('%c🔧 NetInventory Version: 2026-06-10-OTDR-PINPOINT', 'background: #8b5cf6; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;');
-        console.log('🗂️ Dedicated storage libraries (RouteMaps, SitePhotos), configurable + all prior!');
+        console.log('🔘 Action buttons unified everywhere (Photos in rows/search/modals) + all prior!');
         console.log('✅ Edit buttons ACTUALLY work now - template literals fixed!');
         console.log('🔢 Build timestamp: 1747719600');
         
@@ -2712,6 +2712,7 @@
                                             <td>${site.contact || ''}</td>
                                             <td>
                                                 <button onclick="viewSiteDetails('${site.id}')" class="btn-secondary" style="padding: 0.5rem 0.75rem; margin-right: 0.5rem;" title="View all assets at this site">👁️ View</button>
+                                                <button onclick="viewSitePhotos('${site.id}')" class="btn-secondary" style="padding: 0.5rem 0.75rem; margin-right: 0.5rem;" title="Site photos">📷 Photos</button>
                                                 <button onclick="editSiteById('${site.id}')"  class="btn-secondary" style="padding: 0.5rem 0.75rem; margin-right: 0.5rem;">Edit</button>
                                                 <button onclick="deleteSite('${site.id}')" class="btn-secondary" style="padding: 0.5rem 0.75rem; background: var(--danger);">Delete</button>
                                             </td>
@@ -2779,6 +2780,7 @@
             
             showViewModal({
                 title: `Site Details: ${site.name}`,
+                entityType: 'site', entityId: siteId,
                 sections: [
                     {
                         title: 'Site Information',
@@ -3725,7 +3727,7 @@
                                                 ${s.latitude}, ${s.longitude}
                                             </td>
                                             <td>
-                                                <button class="btn-secondary" onclick="viewSiteDetails('${s.id}')" style="padding: 0.4rem 0.75rem; font-size: 0.85rem; margin-right: 0.5rem;" title="View site details">👁️ View</button>
+                                                <button class="btn-secondary" onclick="viewSiteDetails('${s.id}')" style="padding: 0.4rem 0.75rem; font-size: 0.85rem; margin-right: 0.5rem;" title="View site details">👁️ View</button><button class="btn-secondary" onclick="viewSitePhotos('${s.id}')" style="padding: 0.4rem 0.75rem; font-size: 0.85rem; margin-right: 0.5rem;" title="Site photos">📷</button>
                                                 <button class="btn-secondary" onclick="editSiteById('${s.id}')" style="padding: 0.4rem 0.75rem; font-size: 0.85rem; margin-right: 0.5rem;" title="Edit site">Edit</button>
                                                 <a href="https://www.google.com/maps?q=${s.latitude},${s.longitude}" target="_blank" class="btn-secondary" style="padding: 0.4rem 0.75rem; font-size: 0.85rem; text-decoration: none; display: inline-block;" title="Open in Google Maps">🗺️ Maps</a>
                                             </td>
@@ -7486,6 +7488,17 @@
             // Handler registry for clickable detail rows (e.g., Parent Chassis)
             window._viewModalDetailFns = [];
             
+            // Action bar for the viewed entity — same set as quick actions (minus View Details)
+            window._viewModalEntityFns = [];
+            let entityActionsHTML = '';
+            if (config.entityType && config.entityId && QUICK_ACTIONS[config.entityType]) {
+                const eActions = QUICK_ACTIONS[config.entityType].actions.filter(a => !a.label.includes('View Details'));
+                entityActionsHTML = eActions.map(a => {
+                    const idx = window._viewModalEntityFns.push(() => { closeViewModal(); a.fn(config.entityId); }) - 1;
+                    return `<button class="btn-secondary" onclick="_viewModalEntityFns[${idx}]()">${a.label}</button>`;
+                }).join('');
+            }
+            
             // Build sections HTML
             let sectionsHTML = '';
             
@@ -7566,8 +7579,9 @@
                             ${sectionsHTML}
                         </div>
                         <div style="padding: 1rem 1.5rem; border-top: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
-                            <div>
-                                ${viewModalStack.length > 0 ? `<button onclick="viewModalBack()" class="btn-secondary">← Back</button><span style="margin-left: 0.75rem; font-size: 0.8rem; color: var(--text-tertiary);">${viewModalStack.length} previous view${viewModalStack.length > 1 ? 's' : ''}</span>` : ''}
+                            <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+                                ${viewModalStack.length > 0 ? `<button onclick="viewModalBack()" class="btn-secondary">← Back</button>` : ''}
+                                ${entityActionsHTML}
                             </div>
                             <button onclick="closeViewModal()" class="btn-secondary">Close</button>
                         </div>
@@ -7813,6 +7827,7 @@
             
             showViewModal({
                 title: `NNI Details: ${nni.name}`,
+                entityType: 'nni', entityId: nniId,
                 sections: [
                     {
                         title: 'NNI Information',
@@ -7857,6 +7872,7 @@
             
             showViewModal({
                 title: `Rack Details: ${rack.name}`,
+                entityType: 'rack', entityId: rackId,
                 sections: [
                     {
                         title: 'Rack Information',
@@ -7958,6 +7974,7 @@
             
             showViewModal({
                 title: `Equipment Details: ${equipment.name}`,
+                entityType: 'equipment', entityId: equipmentId,
                 sections: sections
             });
         }
@@ -7977,6 +7994,7 @@
             
             showViewModal({
                 title: `FDP Details: ${fdp.name}`,
+                entityType: 'fdp', entityId: fdpId,
                 sections: [
                     {
                         title: 'FDP Information',
@@ -8055,6 +8073,7 @@
             
             showViewModal({
                 title: `Circuit Details: ${circuit.circuitId}`,
+                entityType: 'circuit', entityId: circuitId,
                 sections: [
                     {
                         title: 'Circuit Information',
