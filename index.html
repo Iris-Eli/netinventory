@@ -756,7 +756,7 @@
         // BUILD: 2024-05-19-23-00-TEMPLATE-LITERALS-FIXED
         // This timestamp forces browser to reload: 1747719600
         console.log('%c🔧 NetInventory Version: 2026-06-10-OTDR-PINPOINT', 'background: #8b5cf6; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;');
-        console.log('⬇️ Export on view modals, wrap-proof headers, update mode + all prior!');
+        console.log('🔧 Import validation order fix, view exports, update mode + all prior!');
         console.log('✅ Edit buttons ACTUALLY work now - template literals fixed!');
         console.log('🔢 Build timestamp: 1747719600');
         
@@ -7571,6 +7571,11 @@
                     template = tmplByName[r.template.toLowerCase()];
                     if (!template) { problems.push(`unknown template "${r.template}"`); level = 'error'; }
                 }
+                let parent = null;
+                if (r.parentName) {
+                    parent = equipByName[r.parentName.toLowerCase()];
+                    if (!parent) { problems.push(`parent chassis "${r.parentName}" not found — import chassis first`); level = 'error'; }
+                }
                 const nameKey = r.name.toLowerCase();
                 const updateMode = document.getElementById('importUpdateMode') && document.getElementById('importUpdateMode').checked;
                 let existing = null, updates = null;
@@ -7591,11 +7596,6 @@
                 }
                 if (r.name && seenInFile.has(nameKey)) { problems.push('duplicate within file'); level = 'error'; }
                 if (r.name) seenInFile.add(nameKey);
-                let parent = null;
-                if (r.parentName) {
-                    parent = equipByName[r.parentName.toLowerCase()];
-                    if (!parent) { problems.push(`parent chassis "${r.parentName}" not found — import chassis first`); level = 'error'; }
-                }
                 if (r.rackUnits && isNaN(parseInt(r.rackUnits))) { problems.push('rackUnits not a number'); level = 'error'; }
                 if (r.weight && isNaN(parseFloat(r.weight))) { problems.push('weight not a number'); level = 'error'; }
                 return { idx: idx + 2, raw: r, site, template, parent, existing, updates, problems, level };
