@@ -756,7 +756,7 @@
         // BUILD: 2024-05-19-23-00-TEMPLATE-LITERALS-FIXED
         // This timestamp forces browser to reload: 1747719600
         console.log('%c🔧 NetInventory Version: 2026-06-10-OTDR-PINPOINT', 'background: #8b5cf6; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;');
-        console.log('🔧 Import validation order fix, view exports, update mode + all prior!');
+        console.log('🔗 CPE linking on circuits (select or create-new), SF-sync columns + all prior!');
         console.log('✅ Edit buttons ACTUALLY work now - template literals fixed!');
         console.log('🔢 Build timestamp: 1747719600');
         
@@ -795,7 +795,7 @@
                 racks: { id: 'Title', name: 'RackID', siteId: 'SiteID', location: 'RackLocation', rackUnits: 'RackUnits', hasAC: 'HasAC', purchasedPowerAC: 'PurchasedPowerAC', hasDC: 'HasDC', purchasedPowerDC: 'PurchasedPowerDC', notes: 'Notes', soNumber: 'SONumber' },
                 equipment: { id: 'Title', name: 'EquipmentID', siteId: 'SiteID', rackId: 'RackID', manufacturer: 'Manufacturer', model: 'Model', type: 'EquipmentType', serialNumber: 'SerialNumber', rackUnits: 'RackUnits', rackPosition: 'RackPosition', powerType: 'PowerType', powerDraw: 'PowerDraw', maxPowerDraw: 'MaxPowerDraw', voltage: 'Voltage', weight: 'Weight', portConfig: 'PortConfig', installDate: 'InstallDate', notes: 'Notes', linePorts: 'LinePorts', lineCapacity: 'LineCapacity', lineWavelength: 'LineWavelength', parentEquipmentID: 'ParentEquipmentID', slotNumber: 'SlotNumber', mgmtIp: 'MgmtIP', mgmtSubnet: 'MgmtSubnet', mgmtGateway: 'MgmtGateway', soNumber: 'SONumber' },
                 fdps: { id: 'Title', name: 'FdpID', siteId: 'SiteID', mountingType: 'MountingType', rackId: 'RackID', location: 'FdpLocation', portCount: 'PortCount', connectorType: 'ConnectorType', type: 'FdpType', rackUnits: 'RackUnits', rackPosition: 'RackPosition', notes: 'Notes', soNumber: 'SONumber' },
-                circuits: { id: 'Title', circuitId: 'CircuitID', previousCircuitId: 'PreviousCircuitID', type: 'CircuitType', direction: 'Direction', networkType: 'NetworkType', provider: 'Provider', bandwidth: 'Bandwidth', status: 'Status', circuitVlans: 'CircuitVLANs', aLocationSiteId: 'ALocationSiteID', aConnectionType: 'AConnectionType', aFdp: 'AFdp', aPort: 'APort', aEquipment: 'AEquipment', aEquipmentPort: 'AEquipmentPort', aEquipmentFdp: 'AEquipmentFdp', aEquipmentFdpPorts: 'AEquipmentFdpPorts', aNni: 'ANni', aNniSubinterface: 'ANniSubinterface', zLocationSiteId: 'ZLocationSiteID', zConnectionType: 'ZConnectionType', zFdp: 'ZFdp', zPort: 'ZPort', zEquipment: 'ZEquipment', zEquipmentPort: 'ZEquipmentPort', zEquipmentFdp: 'ZEquipmentFdp', zEquipmentFdpPorts: 'ZEquipmentFdpPorts', zNni: 'ZNni', zNniSubinterface: 'ZNniSubinterface', hasCpe: 'HasCpe', cpeType: 'CpeType', cpeMgmtIp: 'CpeMgmtIp', cpeMgmtSubnet: 'CpeMgmtSubnet', cpeMgmtGateway: 'CpeMgmtGateway', cpeMgmtVlan: 'CpeMgmtVLAN', additionalLocations: 'AdditionalLocations', notes: 'Notes', tunable: 'Tunable', wavelength: 'Wavelength', soNumber: 'SONumber' },
+                circuits: { id: 'Title', circuitId: 'CircuitID', previousCircuitId: 'PreviousCircuitID', type: 'CircuitType', direction: 'Direction', networkType: 'NetworkType', provider: 'Provider', bandwidth: 'Bandwidth', status: 'Status', circuitVlans: 'CircuitVLANs', aLocationSiteId: 'ALocationSiteID', aConnectionType: 'AConnectionType', aFdp: 'AFdp', aPort: 'APort', aEquipment: 'AEquipment', aEquipmentPort: 'AEquipmentPort', aEquipmentFdp: 'AEquipmentFdp', aEquipmentFdpPorts: 'AEquipmentFdpPorts', aNni: 'ANni', aNniSubinterface: 'ANniSubinterface', zLocationSiteId: 'ZLocationSiteID', zConnectionType: 'ZConnectionType', zFdp: 'ZFdp', zPort: 'ZPort', zEquipment: 'ZEquipment', zEquipmentPort: 'ZEquipmentPort', zEquipmentFdp: 'ZEquipmentFdp', zEquipmentFdpPorts: 'ZEquipmentFdpPorts', zNni: 'ZNni', zNniSubinterface: 'ZNniSubinterface', hasCpe: 'HasCpe', cpeType: 'CpeType', cpeMgmtIp: 'CpeMgmtIp', cpeMgmtSubnet: 'CpeMgmtSubnet', cpeMgmtGateway: 'CpeMgmtGateway', cpeMgmtVlan: 'CpeMgmtVLAN', additionalLocations: 'AdditionalLocations', notes: 'Notes', tunable: 'Tunable', wavelength: 'Wavelength', soNumber: 'SONumber', cpeEquipmentId: 'CpeEquipmentID' },
                 nnis: { id: 'Title', name: 'NniID', siteId: 'SiteID', connectionType: 'ConnectionType', equipmentID: 'EquipmentID', equipmentPorts: 'EquipmentPorts', fdpId: 'FdpID', fdpPorts: 'FdpPorts', direction: 'Direction', contact: 'Contact', description: 'Description', notes: 'Notes', soNumber: 'SONumber' },
                 templates: { id: 'Title', name: 'TemplateName', manufacturer: 'Manufacturer', model: 'Model', type: 'EquipmentType', rackUnits: 'RackUnits', powerType: 'PowerType', powerDraw: 'PowerDraw', maxPowerDraw: 'MaxPowerDraw', voltage: 'Voltage', weight: 'Weight', portConfig: 'PortConfig', notes: 'Notes', linePorts: 'LinePorts', lineCapacity: 'LineCapacity' },
                 darkfiberroutes: { id: 'Title', routeName: 'RouteName', aLocationSiteId: 'ALocationSiteID', zLocationSiteId: 'ZLocationSiteID', totalDistance: 'TotalDistance', purpose: 'Purpose', equipmentType: 'EquipmentType', aEndEquipment: 'AEndEquipment', zEndEquipment: 'ZEndEquipment', status: 'Status', routeMapURL: 'RouteMapURL', installDate: 'InstallDate', lastVerified: 'LastVerified', notes: 'Notes', soNumber: 'SONumber' },
@@ -4820,6 +4820,17 @@
                     alert('Equipment updated successfully!');
                 } else {
                     await store.addEquipment(equip);
+                if (window._linkCpeAfterSave) {
+                    window._linkCpeAfterSave = false;
+                    const cpeSel = document.getElementById('cpeEquipmentSelect');
+                    if (cpeSel) {
+                        const opt = document.createElement('option');
+                        opt.value = equip.id;
+                        opt.textContent = `${equip.name} (${equip.model || 'CPE'})`;
+                        cpeSel.insertBefore(opt, cpeSel.children[2] || null);
+                        cpeSel.value = equip.id;
+                    }
+                }
                     alert('Equipment added successfully!');
                 }
                 closeEquipmentModal();
@@ -5553,6 +5564,14 @@
                     
                     <div id="cpeDetailsFields" style="display: none;">
                         <div class="form-group">
+                            <label>🔗 CPE Device (link inventory record)</label>
+                            <select name="cpeEquipment" id="cpeEquipmentSelect" onchange="handleCpeEquipmentSelect(this)">
+                                <option value="">— Not linked / manual entry below —</option>
+                                <option value="__new__">➕ Create new CPE in inventory…</option>
+                            </select>
+                            <div style="font-size: 0.78rem; color: var(--text-tertiary); margin-top: 0.25rem;">Linking pulls model, serial and mgmt IP from the equipment record — the fields below become optional overrides.</div>
+                        </div>
+                        <div class="form-group">
                             <label>CPE Equipment Type</label>
                             <select name="cpeType">
                                 <option value="">Select Type...</option>
@@ -5659,6 +5678,19 @@
             const cb = document.querySelector('#circuitForm input[name="tunable"], input[name="tunable"]');
             const grp = document.getElementById('wavelengthFieldGroup');
             if (grp && cb) grp.style.display = cb.checked ? 'block' : 'none';
+        }
+
+        function handleCpeEquipmentSelect(sel) {
+            if (sel.value === '__new__') {
+                sel.value = '';
+                window._linkCpeAfterSave = true;
+                openAddEquipmentModal();
+                // Pre-set the type for convenience
+                setTimeout(() => {
+                    const f = document.getElementById('equipmentForm');
+                    if (f && f.elements.type && !f.elements.type.value) f.elements.type.value = 'CPE';
+                }, 100);
+            }
         }
 
         function toggleCpeFields() {
@@ -6728,6 +6760,20 @@
             document.getElementById('aEquipmentFdpSelect').innerHTML = fdpOptions;
             document.getElementById('zEquipmentFdpSelect').innerHTML = fdpOptions;
             
+            // CPE selector (edit flow) — load equipment and populate, then value set below
+            try {
+                const _cpeEq = await store.getEquipment();
+                const cpeDevices = _cpeEq.filter(e =>
+                    /cpe/i.test(e.type || '') || /^(39|51)\d\d/.test(e.model || '') || /accedian/i.test(e.manufacturer || '')
+                ).sort((a, b) => String(a.name).localeCompare(String(b.name)));
+                const cpeSel = document.getElementById('cpeEquipmentSelect');
+                if (cpeSel) {
+                    cpeSel.innerHTML = '<option value="">— Not linked / manual entry below —</option>' +
+                        '<option value="__new__">➕ Create new CPE in inventory…</option>' +
+                        cpeDevices.map(e => `<option value="${e.id}">${e.name} (${e.model || 'CPE'}${e.serialNumber ? ' · ' + e.serialNumber : ''})</option>`).join('');
+                }
+            } catch (e) { console.error('CPE selector load failed', e); }
+            
             form.elements.circuitId.value = circuit.circuitId || '';
             form.elements.previousCircuitId.value = circuit.previousCircuitId || '';
             if (circuit.direction) form.querySelector(`input[name="direction"][value="${circuit.direction}"]`).checked = true;
@@ -6735,6 +6781,7 @@
             if (circuit.networkType) form.querySelector(`input[name="networkType"][value="${circuit.networkType}"]`).checked = true;
             form.elements.provider.value = circuit.provider || '';
             if (form.elements.tunable) { form.elements.tunable.checked = circuit.tunable === 'yes'; toggleWavelengthField(); }
+            if (form.elements.cpeEquipment) form.elements.cpeEquipment.value = circuit.cpeEquipmentId || '';
             if (form.elements.wavelength) form.elements.wavelength.value = circuit.wavelength || '';
             
             // A-Location
@@ -7025,6 +7072,7 @@
                 networkType: formData.get('networkType'),
                 provider: formData.get('provider') || '',
                 bandwidth: formData.get('bandwidth'),
+                cpeEquipmentId: formData.get('cpeEquipment') === '__new__' ? '' : (formData.get('cpeEquipment') || ''),
                 tunable: formData.get('tunable') ? 'yes' : 'no',
                 wavelength: formData.get('tunable') ? (formData.get('wavelength') || '') : '',
                 status: formData.get('status'),
