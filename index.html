@@ -756,7 +756,7 @@
         // BUILD: 2024-05-19-23-00-TEMPLATE-LITERALS-FIXED
         // This timestamp forces browser to reload: 1747719600
         console.log('%c🔧 NetInventory Version: 2026-06-10-OTDR-PINPOINT', 'background: #8b5cf6; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;');
-        console.log('🧩 Orphans & data quality on Duplicates page, CFA/DLR editor + all prior!');
+        console.log('🔌 Interface names (ET43/1 on 100G+) in port pickers + CFA prefill + all prior!');
         console.log('✅ Edit buttons ACTUALLY work now - template literals fixed!');
         console.log('🔢 Build timestamp: 1747719600');
         
@@ -6341,7 +6341,7 @@
                         
                         const option = document.createElement('option');
                         option.value = portNumStr;
-                        option.textContent = `Port ${portNum} (${speed})${isUsed ? ' - IN USE' : ' - Available'}`;
+                        option.textContent = `Port ${portNum} — ${interfaceNameForPort(portNum, speed)} (${speed})${isUsed ? ' - IN USE' : ' - Available'}`;
                         option.disabled = isUsed;
                         option.style.color = isUsed ? 'var(--text-tertiary)' : 'var(--text-primary)';
                         portSelect.appendChild(option);
@@ -6460,6 +6460,24 @@
         }
         
         // Populate equipment ports when equipment is selected in circuit form
+        // Platform interface naming: 100G+ ports carry a /1 lane suffix (Arista convention);
+        // breakout ports would be /1-/4 — engineer adjusts in the CFA grid for those.
+        function interfaceNameForPort(portNum, speed) {
+            return /(100|400|800)\s*G/i.test(speed || '') ? `ET${portNum}/1` : `ET${portNum}`;
+        }
+        function interfaceNameFromEquip(equip, portNum) {
+            if (!equip || !equip.portConfig) return `ET${portNum}`;
+            let cur = 1;
+            for (const seg of String(equip.portConfig).split(',')) {
+                const m = seg.trim().match(/(\d+)\s*x\s*(.+)/i);
+                if (!m) continue;
+                const count = parseInt(m[1]);
+                if (portNum >= cur && portNum < cur + count) return interfaceNameForPort(portNum, m[2]);
+                cur += count;
+            }
+            return `ET${portNum}`;
+        }
+
         async function updateCircuitEquipmentPorts(end) {
             const equipmentSelectId = end === 'a' ? 'aEquipmentSelect' : 'zEquipmentSelect';
             const portSelectId = end === 'a' ? 'aEquipmentPortSelect' : 'zEquipmentPortSelect';
@@ -6534,7 +6552,7 @@
                         
                         const option = document.createElement('option');
                         option.value = portNumStr;
-                        option.textContent = `Port ${portNum} (${speed})${isUsed ? ' - IN USE' : ' - Available'}`;
+                        option.textContent = `Port ${portNum} — ${interfaceNameForPort(portNum, speed)} (${speed})${isUsed ? ' - IN USE' : ' - Available'}`;
                         option.disabled = isUsed;
                         option.style.color = isUsed ? 'var(--text-tertiary)' : 'var(--text-primary)';
                         portSelect.appendChild(option);
@@ -7165,6 +7183,24 @@
         function addCfaPathRow(data = {}) {
             const wrap = document.getElementById('cfaPathRows');
             if (!wrap) return;
+            // Prefill from the circuit form's A/Z selections when adding a fresh row
+            if (!data.aDevice && !data.zDevice) {
+                try {
+                    const aSel = document.getElementById('aEquipmentSelect');
+                    const zSel = document.getElementById('zEquipmentSelect');
+                    if (aSel && aSel.value) data.aDevice = aSel.options[aSel.selectedIndex].text;
+                    if (zSel && zSel.value) data.zDevice = zSel.options[zSel.selectedIndex].text;
+                    const aPort = document.getElementById('aEquipmentPortSelect');
+                    const zPort = document.getElementById('zEquipmentPortSelect');
+                    const grab = sel => sel && sel.selectedOptions && sel.selectedOptions.length ? sel.selectedOptions[0] : null;
+                    const aOpt = grab(aPort), zOpt = grab(zPort);
+                    // Interface name is embedded in the option label: "Port 43 — ET43/1 (100G)…"
+                    const fromLabel = opt => { const m = opt && opt.textContent.match(/—\s*(ET\S+)\s*\(/); return m ? m[1] : ''; };
+                    if (aOpt && !data.aInterface) data.aInterface = fromLabel(aOpt);
+                    if (zOpt && !data.zInterface) data.zInterface = fromLabel(zOpt);
+                    const vlanField = document.querySelector('#circuitForm [name="wavelength"]');
+                } catch (e) { /* prefill is best-effort */ }
+            }
             const i = wrap.children.length;
             const row = document.createElement('div');
             row.className = 'cfa-path-row';
