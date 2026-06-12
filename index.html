@@ -753,7 +753,7 @@
         // BUILD: 2024-05-19-23-00-TEMPLATE-LITERALS-FIXED
         // This timestamp forces browser to reload: 1747719600
         console.log('%c🔧 NetInventory Version: 2026-06-10-OTDR-PINPOINT', 'background: #8b5cf6; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;');
-        console.log('📦 Import: optional sites, safe re-runs (existing names skip) + all prior!');
+        console.log('🔄 Import update mode (fill blanks on existing) + all prior features!');
         console.log('✅ Edit buttons ACTUALLY work now - template literals fixed!');
         console.log('🔢 Build timestamp: 1747719600');
         
@@ -7470,6 +7470,10 @@
                                 serialNumber, rackUnits, powerType, powerDraw, maxPowerDraw, voltage, weight, portConfig, mgmtIp, mgmtSubnet, mgmtGateway, installDate, notes.
                                 Racks can be assigned later via Edit.
                             </p>
+                            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; margin-bottom: 0.75rem; font-size: 0.9rem;">
+                                <input type="checkbox" id="importUpdateMode" onchange="revalidateImport()" style="width: auto;">
+                                🔄 Update existing equipment — matches by name, fills <strong>blank fields only</strong> (never overwrites)
+                            </label>
                             <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 1rem;">
                                 <button class="btn-secondary" onclick="downloadImportTemplate()">📄 Download CSV Template</button>
                                 <button class="btn-primary" onclick="pickImportFile()">📂 Choose File…</button>
@@ -7516,6 +7520,7 @@
                     const buf = await file.arrayBuffer();
                     const wb = XLSX.read(buf);
                     const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' });
+                    window._importRawRows = rows;
                     await validateImportRows(rows);
                 } catch (error) {
                     if (status) status.textContent = '';
@@ -7524,6 +7529,12 @@
             };
             input.click();
         }
+
+        async function revalidateImport() {
+            if (window._importRawRows) await validateImportRows(window._importRawRows);
+        }
+
+        const IMPORT_UPDATE_FIELDS = ['manufacturer','model','type','serialNumber','rackUnits','powerType','powerDraw','maxPowerDraw','voltage','weight','portConfig','linePorts','lineCapacity','slotNumber','mgmtIp','mgmtSubnet','mgmtGateway','installDate','notes'];
 
         async function validateImportRows(rows) {
             const status = document.getElementById('importStatus');
@@ -7558,7 +7569,23 @@
                     if (!template) { problems.push(`unknown template "${r.template}"`); level = 'error'; }
                 }
                 const nameKey = r.name.toLowerCase();
-                if (r.name && existingNames.has(nameKey)) { problems.push('already in inventory — skipped (safe re-run)'); level = 'error'; }
+                const updateMode = document.getElementById('importUpdateMode') && document.getElementById('importUpdateMode').checked;
+                let existing = null, updates = null;
+                if (r.name && existingNames.has(nameKey)) {
+                    if (!updateMode) { problems.push('already in inventory — skipped (safe re-run)'); level = 'error'; }
+                    else {
+                        existing = equipByName[nameKey];
+                        updates = {};
+                        IMPORT_UPDATE_FIELDS.forEach(f => {
+                            const cur = existing[f];
+                            if (r[f] && (cur === undefined || cur === null || String(cur).trim() === '')) updates[f] = r[f];
+                        });
+                        if (site && !existing.siteId) updates.siteId = site.id;
+                        if (parent && !existing.parentEquipmentID) updates.parentEquipmentID = parent.id;
+                        if (Object.keys(updates).length === 0) { problems.push('exists — nothing blank to fill'); level = 'error'; }
+                        else { problems.push('UPDATE: ' + Object.keys(updates).join(', ')); if (level !== 'error') level = 'warn'; }
+                    }
+                }
                 if (r.name && seenInFile.has(nameKey)) { problems.push('duplicate within file'); level = 'error'; }
                 if (r.name) seenInFile.add(nameKey);
                 let parent = null;
@@ -7568,7 +7595,7 @@
                 }
                 if (r.rackUnits && isNaN(parseInt(r.rackUnits))) { problems.push('rackUnits not a number'); level = 'error'; }
                 if (r.weight && isNaN(parseFloat(r.weight))) { problems.push('weight not a number'); level = 'error'; }
-                return { idx: idx + 2, raw: r, site, template, parent, problems, level };
+                return { idx: idx + 2, raw: r, site, template, parent, existing, updates, problems, level };
             });
             
             const ok = _importRows.filter(r => r.level === 'ok').length;
@@ -7613,6 +7640,14 @@
             let done = 0, failed = 0;
             for (const r of importable) {
                 try {
+                    if (r.existing && r.updates) {
+                        if (r.updates.rackUnits !== undefined) r.updates.rackUnits = parseInt(r.updates.rackUnits);
+                        if (r.updates.weight !== undefined) r.updates.weight = parseInt(r.updates.weight);
+                        await store.updateEquipment(r.existing.id, r.updates);
+                        done++;
+                        if (status) status.textContent = `Importing… ${done + failed}/${importable.length}`;
+                        continue;
+                    }
                     const t = r.template || {};
                     const pick = (field, tField) => r.raw[field] || t[tField !== undefined ? tField : field] || '';
                     const equip = {
