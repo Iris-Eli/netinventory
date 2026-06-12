@@ -756,7 +756,7 @@
         // BUILD: 2024-05-19-23-00-TEMPLATE-LITERALS-FIXED
         // This timestamp forces browser to reload: 1747719600
         console.log('%c🔧 NetInventory Version: 2026-06-10-OTDR-PINPOINT', 'background: #8b5cf6; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;');
-        console.log('🔗 CPE linking on circuits (select or create-new), SF-sync columns + all prior!');
+        console.log('📋 CFA/DLR path editor + generator, activation gate, SF columns + all prior!');
         console.log('✅ Edit buttons ACTUALLY work now - template literals fixed!');
         console.log('🔢 Build timestamp: 1747719600');
         
@@ -795,7 +795,7 @@
                 racks: { id: 'Title', name: 'RackID', siteId: 'SiteID', location: 'RackLocation', rackUnits: 'RackUnits', hasAC: 'HasAC', purchasedPowerAC: 'PurchasedPowerAC', hasDC: 'HasDC', purchasedPowerDC: 'PurchasedPowerDC', notes: 'Notes', soNumber: 'SONumber' },
                 equipment: { id: 'Title', name: 'EquipmentID', siteId: 'SiteID', rackId: 'RackID', manufacturer: 'Manufacturer', model: 'Model', type: 'EquipmentType', serialNumber: 'SerialNumber', rackUnits: 'RackUnits', rackPosition: 'RackPosition', powerType: 'PowerType', powerDraw: 'PowerDraw', maxPowerDraw: 'MaxPowerDraw', voltage: 'Voltage', weight: 'Weight', portConfig: 'PortConfig', installDate: 'InstallDate', notes: 'Notes', linePorts: 'LinePorts', lineCapacity: 'LineCapacity', lineWavelength: 'LineWavelength', parentEquipmentID: 'ParentEquipmentID', slotNumber: 'SlotNumber', mgmtIp: 'MgmtIP', mgmtSubnet: 'MgmtSubnet', mgmtGateway: 'MgmtGateway', soNumber: 'SONumber' },
                 fdps: { id: 'Title', name: 'FdpID', siteId: 'SiteID', mountingType: 'MountingType', rackId: 'RackID', location: 'FdpLocation', portCount: 'PortCount', connectorType: 'ConnectorType', type: 'FdpType', rackUnits: 'RackUnits', rackPosition: 'RackPosition', notes: 'Notes', soNumber: 'SONumber' },
-                circuits: { id: 'Title', circuitId: 'CircuitID', previousCircuitId: 'PreviousCircuitID', type: 'CircuitType', direction: 'Direction', networkType: 'NetworkType', provider: 'Provider', bandwidth: 'Bandwidth', status: 'Status', circuitVlans: 'CircuitVLANs', aLocationSiteId: 'ALocationSiteID', aConnectionType: 'AConnectionType', aFdp: 'AFdp', aPort: 'APort', aEquipment: 'AEquipment', aEquipmentPort: 'AEquipmentPort', aEquipmentFdp: 'AEquipmentFdp', aEquipmentFdpPorts: 'AEquipmentFdpPorts', aNni: 'ANni', aNniSubinterface: 'ANniSubinterface', zLocationSiteId: 'ZLocationSiteID', zConnectionType: 'ZConnectionType', zFdp: 'ZFdp', zPort: 'ZPort', zEquipment: 'ZEquipment', zEquipmentPort: 'ZEquipmentPort', zEquipmentFdp: 'ZEquipmentFdp', zEquipmentFdpPorts: 'ZEquipmentFdpPorts', zNni: 'ZNni', zNniSubinterface: 'ZNniSubinterface', hasCpe: 'HasCpe', cpeType: 'CpeType', cpeMgmtIp: 'CpeMgmtIp', cpeMgmtSubnet: 'CpeMgmtSubnet', cpeMgmtGateway: 'CpeMgmtGateway', cpeMgmtVlan: 'CpeMgmtVLAN', additionalLocations: 'AdditionalLocations', notes: 'Notes', tunable: 'Tunable', wavelength: 'Wavelength', soNumber: 'SONumber', cpeEquipmentId: 'CpeEquipmentID' },
+                circuits: { id: 'Title', circuitId: 'CircuitID', previousCircuitId: 'PreviousCircuitID', type: 'CircuitType', direction: 'Direction', networkType: 'NetworkType', provider: 'Provider', bandwidth: 'Bandwidth', status: 'Status', circuitVlans: 'CircuitVLANs', aLocationSiteId: 'ALocationSiteID', aConnectionType: 'AConnectionType', aFdp: 'AFdp', aPort: 'APort', aEquipment: 'AEquipment', aEquipmentPort: 'AEquipmentPort', aEquipmentFdp: 'AEquipmentFdp', aEquipmentFdpPorts: 'AEquipmentFdpPorts', aNni: 'ANni', aNniSubinterface: 'ANniSubinterface', zLocationSiteId: 'ZLocationSiteID', zConnectionType: 'ZConnectionType', zFdp: 'ZFdp', zPort: 'ZPort', zEquipment: 'ZEquipment', zEquipmentPort: 'ZEquipmentPort', zEquipmentFdp: 'ZEquipmentFdp', zEquipmentFdpPorts: 'ZEquipmentFdpPorts', zNni: 'ZNni', zNniSubinterface: 'ZNniSubinterface', hasCpe: 'HasCpe', cpeType: 'CpeType', cpeMgmtIp: 'CpeMgmtIp', cpeMgmtSubnet: 'CpeMgmtSubnet', cpeMgmtGateway: 'CpeMgmtGateway', cpeMgmtVlan: 'CpeMgmtVLAN', additionalLocations: 'AdditionalLocations', notes: 'Notes', tunable: 'Tunable', wavelength: 'Wavelength', soNumber: 'SONumber', cpeEquipmentId: 'CpeEquipmentID', salesforceId: 'SalesforceID', syncStatus: 'SyncStatus', mtu: 'MTU', irisUni: 'IrisUNI', irisEvc1: 'IrisEVC1', irisEvc2: 'IrisEVC2', assignedEngineer: 'AssignedEngineer', dueDate: 'DueDate', cfaPaths: 'CfaPaths', dlrText: 'DLRText' },
                 nnis: { id: 'Title', name: 'NniID', siteId: 'SiteID', connectionType: 'ConnectionType', equipmentID: 'EquipmentID', equipmentPorts: 'EquipmentPorts', fdpId: 'FdpID', fdpPorts: 'FdpPorts', direction: 'Direction', contact: 'Contact', description: 'Description', notes: 'Notes', soNumber: 'SONumber' },
                 templates: { id: 'Title', name: 'TemplateName', manufacturer: 'Manufacturer', model: 'Model', type: 'EquipmentType', rackUnits: 'RackUnits', powerType: 'PowerType', powerDraw: 'PowerDraw', maxPowerDraw: 'MaxPowerDraw', voltage: 'Voltage', weight: 'Weight', portConfig: 'PortConfig', notes: 'Notes', linePorts: 'LinePorts', lineCapacity: 'LineCapacity' },
                 darkfiberroutes: { id: 'Title', routeName: 'RouteName', aLocationSiteId: 'ALocationSiteID', zLocationSiteId: 'ZLocationSiteID', totalDistance: 'TotalDistance', purpose: 'Purpose', equipmentType: 'EquipmentType', aEndEquipment: 'AEndEquipment', zEndEquipment: 'ZEndEquipment', status: 'Status', routeMapURL: 'RouteMapURL', installDate: 'InstallDate', lastVerified: 'LastVerified', notes: 'Notes', soNumber: 'SONumber' },
@@ -5629,6 +5629,15 @@
                                 <option value="maintenance">Maintenance</option>
                             </select>
                         </div>
+                    <div style="border: 1px solid var(--border-color); border-radius: 0.5rem; padding: 1rem; margin: 1rem 0;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                            <strong>📋 CFA / DLR Paths</strong>
+                            <button type="button" class="btn-secondary" onclick="addCfaPathRow()" style="padding: 0.3rem 0.7rem; font-size: 0.85rem;">➕ Add VLAN Path</button>
+                        </div>
+                        <div style="font-size: 0.78rem; color: var(--text-tertiary); margin-bottom: 0.75rem;">One row per VLAN. Interfaces default from selected equipment ports (Arista: ≥100G gets /1, breakouts /1-/4 — edit as needed). The DLR text is generated from these on save.</div>
+                        <div id="cfaPathRows"></div>
+                    </div>
+
                     </div>
                     
                     <div class="form-group">
@@ -6718,6 +6727,24 @@
             document.getElementById('aEquipmentSelect').innerHTML = equipmentOptions;
             document.getElementById('zEquipmentSelect').innerHTML = equipmentOptions;
             
+            // CPE selector (add flow): CPE-typed equipment, link or create-new
+            (() => {
+                const cpeDevices = equipment.filter(e =>
+                    /cpe/i.test(e.type || '') || /^(39|51)\d\d/.test(e.model || '') || /accedian/i.test(e.manufacturer || '')
+                ).sort((a, b) => String(a.name).localeCompare(String(b.name)));
+                const cpeSel = document.getElementById('cpeEquipmentSelect');
+                if (cpeSel) {
+                    cpeSel.innerHTML = '<option value="">— Not linked / manual entry below —</option>' +
+                        '<option value="__new__">➕ Create new CPE in inventory…</option>' +
+                        cpeDevices.map(e => `<option value="${e.id}">${e.name} (${e.model || 'CPE'}${e.serialNumber ? ' · ' + e.serialNumber : ''})</option>`).join('');
+                }
+            })();
+            
+            // CFA/DLR path grid: device options + reset rows (add flow)
+            _cfaEquipOptions = '<option value="">device…</option>' + equipment.slice().sort((a,b)=>String(a.name).localeCompare(String(b.name))).map(e => `<option value="${e.name}">${e.name}</option>`).join('');
+            const _cfaWrap = document.getElementById('cfaPathRows');
+            if (_cfaWrap) _cfaWrap.innerHTML = '';
+            
             // Note: NNI and port dropdowns will be populated when site is selected
             // via updateCircuitNniDropdowns and updateCircuitFdpPorts
             
@@ -6773,6 +6800,17 @@
                         cpeDevices.map(e => `<option value="${e.id}">${e.name} (${e.model || 'CPE'}${e.serialNumber ? ' · ' + e.serialNumber : ''})</option>`).join('');
                 }
             } catch (e) { console.error('CPE selector load failed', e); }
+            try {
+                const _allEq = await store.getEquipment();
+                _cfaEquipOptions = '<option value="">device…</option>' + _allEq.slice().sort((a,b)=>String(a.name).localeCompare(String(b.name))).map(e => `<option value="${e.name}">${e.name}</option>`).join('');
+                const cfaWrap = document.getElementById('cfaPathRows');
+                if (cfaWrap) {
+                    cfaWrap.innerHTML = '';
+                    let paths = [];
+                    try { paths = JSON.parse(circuit.cfaPaths || '[]'); } catch (e2) {}
+                    paths.forEach(p => addCfaPathRow(p));
+                }
+            } catch (e) { console.error('CFA path load failed', e); }
             
             form.elements.circuitId.value = circuit.circuitId || '';
             form.elements.previousCircuitId.value = circuit.previousCircuitId || '';
@@ -7047,6 +7085,64 @@
             additionalLocationCounter = 0;
         }
         
+        // ===== CFA/DLR path grid =====
+        let _cfaEquipOptions = '';
+        function addCfaPathRow(data = {}) {
+            const wrap = document.getElementById('cfaPathRows');
+            if (!wrap) return;
+            const i = wrap.children.length;
+            const row = document.createElement('div');
+            row.className = 'cfa-path-row';
+            row.style.cssText = 'display: grid; grid-template-columns: 70px 1fr 90px 70px 1fr 90px 60px 30px; gap: 0.4rem; margin-bottom: 0.4rem; align-items: center;';
+            row.innerHTML = `
+                <input type="text" placeholder="VLAN" value="${data.vlan || ''}" data-cfa="vlan" style="padding: 0.4rem;">
+                <select data-cfa="aDevice" style="padding: 0.4rem;">${_cfaEquipOptions}</select>
+                <input type="text" placeholder="ET43/1" value="${data.aInterface || ''}" data-cfa="aInterface" style="padding: 0.4rem;">
+                <input type="text" value="${data.transport || 'VPWS'}" data-cfa="transport" style="padding: 0.4rem;">
+                <select data-cfa="zDevice" style="padding: 0.4rem;">${_cfaEquipOptions}</select>
+                <input type="text" placeholder="ET44/1" value="${data.zInterface || ''}" data-cfa="zInterface" style="padding: 0.4rem;">
+                <label style="display: flex; align-items: center; gap: 0.2rem; font-size: 0.75rem;"><input type="checkbox" data-cfa="isMgmt" ${data.isMgmt ? 'checked' : ''} style="width: auto;">mgmt</label>
+                <button type="button" onclick="this.parentElement.remove()" style="background: none; border: none; cursor: pointer; color: var(--accent-danger);">✕</button>`;
+            wrap.appendChild(row);
+            if (data.aDevice) row.querySelector('[data-cfa="aDevice"]').value = data.aDevice;
+            if (data.zDevice) row.querySelector('[data-cfa="zDevice"]').value = data.zDevice;
+            // Interface smart defaults on device pick
+            ['a', 'z'].forEach(side => {
+                row.querySelector(`[data-cfa="${side}Device"]`).addEventListener('change', async (e) => {
+                    const intfEl = row.querySelector(`[data-cfa="${side}Interface"]`);
+                    if (intfEl.value) return;
+                    const eq = (await store.getEquipment()).find(x => x.name === e.target.value);
+                    if (eq) intfEl.placeholder = 'ET<port>' + (/(100|400|800)G/.test(eq.portConfig || '') ? '/1' : '');
+                });
+            });
+        }
+        function collectCfaPaths() {
+            return Array.from(document.querySelectorAll('#cfaPathRows .cfa-path-row')).map(row => {
+                const get = k => { const el = row.querySelector(`[data-cfa="${k}"]`); return el.type === 'checkbox' ? el.checked : el.value.trim(); };
+                return { vlan: get('vlan'), aDevice: get('aDevice'), aInterface: get('aInterface'), transport: get('transport') || 'VPWS', zDevice: get('zDevice'), zInterface: get('zInterface'), isMgmt: get('isMgmt') };
+            }).filter(p => p.vlan || p.aDevice || p.zDevice);
+        }
+        function generateCfaText(paths, cpe, circuit) {
+            const blocks = [];
+            paths.forEach(p => {
+                const header = p.isMgmt ? `Shared MGMT VLAN ${p.vlan}` : `VLAN ${p.vlan}`;
+                const lines = [header];
+                if (p.aDevice) lines.push(`${p.aDevice} ${p.aInterface || ''}${p.aInterface && p.vlan ? '.' + p.vlan : ''}`.trim());
+                lines.push(p.transport || 'VPWS');
+                if (p.zDevice) lines.push(`${p.zDevice} ${p.zInterface || ''}${p.zInterface && p.vlan ? '.' + p.vlan : ''}`.trim());
+                blocks.push(lines.join('\n'));
+            });
+            if (cpe) {
+                const cpeLines = [cpe.model || 'CPE'];
+                // Port roles from CPE port notes embedded in equipment notes are out of scope v1; engineers add via notes
+                if (circuit.cpeMgmtIp || cpe.mgmtIp) cpeLines.push(`MGMT IP: ${circuit.cpeMgmtIp || cpe.mgmtIp}`);
+                if (circuit.cpeMgmtGateway || cpe.mgmtGateway) cpeLines.push(`MGMT GW: ${circuit.cpeMgmtGateway || cpe.mgmtGateway}`);
+                if (circuit.cpeMgmtSubnet || cpe.mgmtSubnet) cpeLines.push(`MGMT Subnet: ${circuit.cpeMgmtSubnet || cpe.mgmtSubnet}`);
+                blocks.push(cpeLines.join('\n'));
+            }
+            return blocks.join('\n\n');
+        }
+
         async function saveCircuit(event) {
             event.preventDefault();
             const form = event.target;
@@ -7073,9 +7169,11 @@
                 provider: formData.get('provider') || '',
                 bandwidth: formData.get('bandwidth'),
                 cpeEquipmentId: formData.get('cpeEquipment') === '__new__' ? '' : (formData.get('cpeEquipment') || ''),
+                cfaPaths: JSON.stringify(collectCfaPaths()),
                 tunable: formData.get('tunable') ? 'yes' : 'no',
                 wavelength: formData.get('tunable') ? (formData.get('wavelength') || '') : '',
                 status: formData.get('status'),
+                // dlrText + activation gate applied after object build (see below)
                 
                 // A-Location (VLAN 1)
                 aLocationSiteId: formData.get('aLocationSiteId'),
@@ -7231,6 +7329,29 @@
                         }
                     }
                 }
+            // ===== DLR generation + activation gate =====
+            try {
+                const cpeId = circuit.cpeEquipmentId;
+                const cpeEq = cpeId ? (await store.getEquipment()).find(e => e.id === cpeId) : null;
+                const paths = JSON.parse(circuit.cfaPaths || '[]');
+                if (paths.length > 0 || cpeEq) circuit.dlrText = generateCfaText(paths, cpeEq, circuit);
+                // Gate: Salesforce-linked circuits must have CFA paths + bandwidth to go Active
+                let sfLinked = circuit.salesforceId;
+                if (!sfLinked && editingCircuitId) {
+                    const prev = (await store.getCircuits()).find(c => c.id === editingCircuitId);
+                    if (prev) { sfLinked = prev.salesforceId; circuit.salesforceId = prev.salesforceId || ''; }
+                }
+                if (sfLinked && circuit.status === 'active') {
+                    const missing = [];
+                    if (paths.length === 0) missing.push('at least one CFA/DLR path');
+                    if (!circuit.bandwidth) missing.push('bandwidth');
+                    if (missing.length) {
+                        alert('⛔ This circuit is linked to a Salesforce Service Order. Before it can go Active (which pushes the DLR back to Salesforce), please complete: ' + missing.join(', ') + '.');
+                        return;
+                    }
+                }
+            } catch (gateErr) { console.error('DLR/gate error', gateErr); }
+
                 
                 if (editingCircuitId) {
                     await store.updateCircuit(editingCircuitId, circuit);
