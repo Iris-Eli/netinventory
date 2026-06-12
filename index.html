@@ -582,6 +582,9 @@
             border-color: #3b82f6;
         }
 
+        .modal-header { flex-wrap: wrap; gap: 0.4rem; }
+        .port-zoom-controls { flex-wrap: wrap; }
+
         /* Port map zoom */
         .port-zoomable { transform-origin: top left; transition: transform 0.12s ease-out; touch-action: pan-x pan-y; }
 
@@ -753,7 +756,7 @@
         // BUILD: 2024-05-19-23-00-TEMPLATE-LITERALS-FIXED
         // This timestamp forces browser to reload: 1747719600
         console.log('%c🔧 NetInventory Version: 2026-06-10-OTDR-PINPOINT', 'background: #8b5cf6; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;');
-        console.log('🔄 Import update mode (fill blanks on existing) + all prior features!');
+        console.log('⬇️ Export on view modals, wrap-proof headers, update mode + all prior!');
         console.log('✅ Edit buttons ACTUALLY work now - template literals fixed!');
         console.log('🔢 Build timestamp: 1747719600');
         
@@ -7945,6 +7948,37 @@
             }
         }
 
+        function exportViewModal() {
+            const config = currentViewModalConfig;
+            if (!config || typeof XLSX === 'undefined') { alert('Nothing to export.'); return; }
+            try {
+                const wb = XLSX.utils.book_new();
+                const used = new Set();
+                (config.sections || []).forEach((section, i) => {
+                    const rows = (section.data || []).map(row => {
+                        const o = {};
+                        (section.columns || []).forEach((col, ci) => {
+                            const header = (section.headers && section.headers[ci]) || col;
+                            let v = row[col];
+                            if (v === null || v === undefined) v = '';
+                            o[header] = typeof v === 'object' ? JSON.stringify(v) : v;
+                        });
+                        return o;
+                    });
+                    const ws = XLSX.utils.json_to_sheet(rows.length ? rows : [{ note: 'none' }]);
+                    if (rows.length) ws['!cols'] = Object.keys(rows[0]).map(k => ({ wch: Math.max(String(k).length + 2, 14) }));
+                    let name = String(section.title || ('Sheet' + (i + 1))).replace(/[\\\/\?\*\[\]:]/g, ' ').slice(0, 31).trim() || ('Sheet' + (i + 1));
+                    while (used.has(name)) name = name.slice(0, 28) + '_' + i;
+                    used.add(name);
+                    XLSX.utils.book_append_sheet(wb, ws, name);
+                });
+                const label = String(config.title || 'view').replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 60);
+                XLSX.writeFile(wb, 'NetInventory-' + label + '-' + _exportStamp() + '.xlsx');
+            } catch (error) {
+                alert('Error exporting view: ' + friendlyError(error));
+            }
+        }
+
         function showViewModal(config, isBack = false) {
             currentViewModalConfig = config;
             // Remove existing view modal if any
@@ -8048,6 +8082,7 @@
                             <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
                                 ${viewModalStack.length > 0 ? `<button onclick="viewModalBack()" class="btn-secondary">← Back</button>` : ''}
                                 ${entityActionsHTML}
+                                <button class="btn-secondary" onclick="exportViewModal()" title="Export this view to Excel">⬇️ Export</button>
                             </div>
                             <button onclick="closeViewModal()" class="btn-secondary">Close</button>
                         </div>
