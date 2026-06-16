@@ -756,7 +756,7 @@
         // BUILD: 2024-05-19-23-00-TEMPLATE-LITERALS-FIXED
         // This timestamp forces browser to reload: 1747719600
         console.log('%c🔧 NetInventory Version: 2026-06-10-OTDR-PINPOINT', 'background: #8b5cf6; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;');
-        console.log('🔍 Address & CLLI search on all entities, richer site dropdowns + all prior!');
+        console.log('🔄 NNI v1-ready: Direction consolidated (was ConnectionType), SyncSource staged + all prior!');
         console.log('✅ Edit buttons ACTUALLY work now - template literals fixed!');
         console.log('🔢 Build timestamp: 1747719600');
         
@@ -796,7 +796,7 @@
                 equipment: { id: 'Title', name: 'EquipmentID', siteId: 'SiteID', rackId: 'RackID', manufacturer: 'Manufacturer', model: 'Model', type: 'EquipmentType', serialNumber: 'SerialNumber', rackUnits: 'RackUnits', rackPosition: 'RackPosition', powerType: 'PowerType', powerDraw: 'PowerDraw', maxPowerDraw: 'MaxPowerDraw', voltage: 'Voltage', weight: 'Weight', portConfig: 'PortConfig', installDate: 'InstallDate', notes: 'Notes', linePorts: 'LinePorts', lineCapacity: 'LineCapacity', lineWavelength: 'LineWavelength', parentEquipmentID: 'ParentEquipmentID', slotNumber: 'SlotNumber', mgmtIp: 'MgmtIP', mgmtSubnet: 'MgmtSubnet', mgmtGateway: 'MgmtGateway', soNumber: 'SONumber' },
                 fdps: { id: 'Title', name: 'FdpID', siteId: 'SiteID', mountingType: 'MountingType', rackId: 'RackID', location: 'FdpLocation', portCount: 'PortCount', connectorType: 'ConnectorType', type: 'FdpType', rackUnits: 'RackUnits', rackPosition: 'RackPosition', notes: 'Notes', soNumber: 'SONumber' },
                 circuits: { id: 'Title', circuitId: 'CircuitID', previousCircuitId: 'PreviousCircuitID', type: 'CircuitType', direction: 'Direction', networkType: 'NetworkType', provider: 'Provider', bandwidth: 'Bandwidth', status: 'Status', circuitVlans: 'CircuitVLANs', aLocationSiteId: 'ALocationSiteID', aConnectionType: 'AConnectionType', aFdp: 'AFdp', aPort: 'APort', aEquipment: 'AEquipment', aEquipmentPort: 'AEquipmentPort', aEquipmentFdp: 'AEquipmentFdp', aEquipmentFdpPorts: 'AEquipmentFdpPorts', aNni: 'ANni', aNniSubinterface: 'ANniSubinterface', zLocationSiteId: 'ZLocationSiteID', zConnectionType: 'ZConnectionType', zFdp: 'ZFdp', zPort: 'ZPort', zEquipment: 'ZEquipment', zEquipmentPort: 'ZEquipmentPort', zEquipmentFdp: 'ZEquipmentFdp', zEquipmentFdpPorts: 'ZEquipmentFdpPorts', zNni: 'ZNni', zNniSubinterface: 'ZNniSubinterface', hasCpe: 'HasCpe', cpeType: 'CpeType', cpeMgmtIp: 'CpeMgmtIp', cpeMgmtSubnet: 'CpeMgmtSubnet', cpeMgmtGateway: 'CpeMgmtGateway', cpeMgmtVlan: 'CpeMgmtVLAN', additionalLocations: 'AdditionalLocations', notes: 'Notes', tunable: 'Tunable', wavelength: 'Wavelength', soNumber: 'SONumber', cpeEquipmentId: 'CpeEquipmentID', salesforceId: 'SalesforceID', syncStatus: 'SyncStatus', mtu: 'MTU', irisUni: 'IrisUNI', irisEvc1: 'IrisEVC1', irisEvc2: 'IrisEVC2', assignedEngineer: 'AssignedEngineer', dueDate: 'DueDate', cfaPaths: 'CfaPaths', dlrText: 'DLRText' },
-                nnis: { id: 'Title', name: 'NniID', siteId: 'SiteID', connectionType: 'ConnectionType', equipmentID: 'EquipmentID', equipmentPorts: 'EquipmentPorts', fdpId: 'FdpID', fdpPorts: 'FdpPorts', direction: 'Direction', contact: 'Contact', description: 'Description', notes: 'Notes', soNumber: 'SONumber', salesforceId: 'SalesforceID', syncStatus: 'SyncStatus', provider: 'Provider', nniStatus: 'NniStatus', bandwidth: 'Bandwidth' },
+                nnis: { id: 'Title', name: 'NniID', siteId: 'SiteID', equipmentID: 'EquipmentID', equipmentPorts: 'EquipmentPorts', fdpId: 'FdpID', fdpPorts: 'FdpPorts', direction: 'Direction', contact: 'Contact', description: 'Description', notes: 'Notes', soNumber: 'SONumber', salesforceId: 'SalesforceID', syncStatus: 'SyncStatus', syncSource: 'SyncSource', provider: 'Provider', nniStatus: 'NniStatus', bandwidth: 'Bandwidth' },
                 templates: { id: 'Title', name: 'TemplateName', manufacturer: 'Manufacturer', model: 'Model', type: 'EquipmentType', rackUnits: 'RackUnits', powerType: 'PowerType', powerDraw: 'PowerDraw', maxPowerDraw: 'MaxPowerDraw', voltage: 'Voltage', weight: 'Weight', portConfig: 'PortConfig', notes: 'Notes', linePorts: 'LinePorts', lineCapacity: 'LineCapacity' },
                 darkfiberroutes: { id: 'Title', routeName: 'RouteName', aLocationSiteId: 'ALocationSiteID', zLocationSiteId: 'ZLocationSiteID', totalDistance: 'TotalDistance', purpose: 'Purpose', equipmentType: 'EquipmentType', aEndEquipment: 'AEndEquipment', zEndEquipment: 'ZEndEquipment', status: 'Status', routeMapURL: 'RouteMapURL', installDate: 'InstallDate', lastVerified: 'LastVerified', notes: 'Notes', soNumber: 'SONumber' },
                 darkfibersegments: { id: 'Title', routeId: 'RouteID', segmentOrder: 'SegmentOrder', segmentName: 'SegmentName', ownershipType: 'OwnershipType', usageType: 'UsageType', providerName: 'ProviderName', customerName: 'CustomerName', distance: 'Distance', strandNumbers: 'StrandNumbers', fiberType: 'FiberType', fiberCount: 'FiberCount', aEndLocation: 'AEndLocation', zEndLocation: 'ZEndLocation', aEndConnectionType: 'AEndConnectionType', aEndFDP: 'AEndFDP', aEndPort: 'AEndPort', aEndEquipment: 'AEndEquipment', zEndConnectionType: 'ZEndConnectionType', zEndFDP: 'ZEndFDP', zEndPort: 'ZEndPort', zEndEquipment: 'ZEndEquipment', providerCircuitID: 'ProviderCircuitID', notes: 'Notes', soNumber: 'SONumber' }
@@ -7532,11 +7532,7 @@
                         </select>
                     </div>
                     
-                    <div class="form-group">
-                        <label>Connection Type</label>
-                        <input type="text" name="connectionType" placeholder="e.g., Direct, Cross-connect">
-                    </div>
-                    
+
                     <div class="form-group">
                         <label>Equipment</label>
                         <select name="equipmentID" id="nniEquipmentSelect" onchange="updateNniEquipmentPorts()">
@@ -8551,10 +8547,11 @@
             const fdpPorts = Array.from(fdpPortsSelect.selectedOptions).map(o => o.value).join(', ');
             
             const nni = {
+                syncSource: 'netinventory',  // engineer edits in app — v2 flow uses this to decide push direction
                 name: formData.get('name'),
                 direction: formData.get('direction'),
                 siteId: formData.get('siteId'),
-                connectionType: formData.get('connectionType') || '',
+                
                 equipmentID: formData.get('equipmentID') || '',
                 equipmentPorts: equipmentPorts || '',
                 fdpId: formData.get('fdpId') || '',
