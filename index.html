@@ -756,7 +756,7 @@
         // BUILD: 2024-05-19-23-00-TEMPLATE-LITERALS-FIXED
         // This timestamp forces browser to reload: 1747719600
         console.log('%c🔧 NetInventory Version: 2026-06-10-OTDR-PINPOINT', 'background: #8b5cf6; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;');
-        console.log('🔌 Interface names (ET43/1 on 100G+) in port pickers + CFA prefill + all prior!');
+        console.log('🔧 NNIs page layout fix (proper header div closure) + all prior!');
         console.log('✅ Edit buttons ACTUALLY work now - template literals fixed!');
         console.log('🔢 Build timestamp: 1747719600');
         
@@ -8385,11 +8385,13 @@
                 const [nnis, sites, allEquipmentForNni, allFdpsForNni] = await Promise.all([store.getNnis(), store.getSites(), store.getEquipment(), store.getFdps()]);
                 
                 content.innerHTML = `
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
-                        <h1 style="font-size: 2rem;">NNIs (Network-to-Network Interfaces)</h1>
-                        <div style="display: flex; gap: 1rem; align-items: center;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem;">
+                        <h1 style="font-size: 2rem; margin: 0;">NNIs (Network-to-Network Interfaces)</h1>
+                        <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
                             <input type="text" placeholder="🔍 Search NNIs..." style="padding: 0.5rem 1rem; border: 1px solid var(--border-color); border-radius: 4px; width: 250px;" oninput="filterTable('nni', this.value)">
-                            <button class="btn-secondary" onclick="exportEntityToExcel('nnis', this)" title="Export NNIs to Excel">⬇️ Export</button><button class="btn-primary" onclick="openAddNniModal()">Add NNI</button>
+                            <button class="btn-secondary" onclick="exportEntityToExcel('nnis', this)" title="Export NNIs to Excel">⬇️ Export</button>
+                            <button class="btn-primary" onclick="openAddNniModal()">Add NNI</button>
+                        </div>
                     </div>
                     <div class="table-container">
                         <table>
