@@ -756,7 +756,7 @@
         // BUILD: 2024-05-19-23-00-TEMPLATE-LITERALS-FIXED
         // This timestamp forces browser to reload: 1747719600
         console.log('%c🔧 NetInventory Version: 2026-06-10-OTDR-PINPOINT', 'background: #8b5cf6; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;');
-        console.log('🔄 NNI v1-ready: Direction consolidated (was ConnectionType), SyncSource staged + all prior!');
+        console.log('📊 Circuits + NNI provider summaries (matching DF style), v1-ready + all prior!');
         console.log('✅ Edit buttons ACTUALLY work now - template literals fixed!');
         console.log('🔢 Build timestamp: 1747719600');
         
@@ -6400,7 +6400,7 @@
                         <h1 style="font-size: 2rem;">Circuits</h1>
                         <div style="display: flex; gap: 1rem; align-items: center;">
                             <input type="text" placeholder="🔍 Search circuits..." style="padding: 0.5rem 1rem; border: 1px solid var(--border-color); border-radius: 4px; width: 250px;" oninput="filterTable('circuit', this.value)">
-                            <button class="btn-secondary" onclick="exportEntityToExcel('circuits', this)" title="Export Circuits to Excel">⬇️ Export</button><button class="btn-primary" onclick="openAddCircuitModal()">Add Circuit</button>
+                            <button class="btn-secondary" onclick="renderCircuitsSummary()">📊 Provider Summary</button><button class="btn-secondary" onclick="exportEntityToExcel('circuits', this)" title="Export Circuits to Excel">⬇️ Export</button><button class="btn-primary" onclick="openAddCircuitModal()">Add Circuit</button>
                     </div>
                     <div class="table-container">
                         <table>
@@ -8385,6 +8385,7 @@
                         <h1 style="font-size: 2rem; margin: 0;">NNIs (Network-to-Network Interfaces)</h1>
                         <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
                             <input type="text" placeholder="🔍 Search NNIs..." style="padding: 0.5rem 1rem; border: 1px solid var(--border-color); border-radius: 4px; width: 250px;" oninput="filterTable('nni', this.value)">
+                            <button class="btn-secondary" onclick="renderNnisSummary()">📊 Provider Summary</button>
                             <button class="btn-secondary" onclick="exportEntityToExcel('nnis', this)" title="Export NNIs to Excel">⬇️ Export</button>
                             <button class="btn-primary" onclick="openAddNniModal()">Add NNI</button>
                         </div>
@@ -10979,6 +10980,178 @@ ${entityActionButtons('nni', `${n.id}`, true)}
         // ============ DARK FIBER PROVIDER SUMMARY ============
         // Roll-up of all segments grouped by provider — who to call when OTDR pinpoints a fault,
         // total leased footprint per provider, and which routes each provider touches.
+        // ===== Circuits Provider Summary =====
+        let circuitsSummaryFilter = 'all';
+        async function renderCircuitsSummary(filter) {
+            if (filter !== undefined) circuitsSummaryFilter = filter;
+            try {
+                const [circuits, sites] = await Promise.all([store.getCircuits(), store.getSites()]);
+                const siteById = Object.fromEntries(sites.map(s => [s.id, s]));
+                const filtered = circuits.filter(c => {
+                    if (circuitsSummaryFilter === 'all') return true;
+                    if (circuitsSummaryFilter === 'active') return (c.status || '').toLowerCase() === 'active';
+                    if (circuitsSummaryFilter === 'planned') return (c.status || '').toLowerCase() === 'planned';
+                    if (circuitsSummaryFilter === 'salesforce') return !!c.salesforceId;
+                    return true;
+                });
+                const groups = {};
+                filtered.forEach(c => {
+                    const key = (c.provider || c.customer || '(no provider)').trim() || '(no provider)';
+                    if (!groups[key]) groups[key] = { circuits: [], active: 0, planned: 0, sfLinked: 0, bandwidthTotal: 0 };
+                    groups[key].circuits.push(c);
+                    const st = (c.status || '').toLowerCase();
+                    if (st === 'active') groups[key].active++;
+                    if (st === 'planned') groups[key].planned++;
+                    if (c.salesforceId) groups[key].sfLinked++;
+                    const bw = parseFloat(String(c.bandwidth || '').match(/(\d+(?:\.\d+)?)/) ? String(c.bandwidth).match(/(\d+(?:\.\d+)?)/)[1] : 0);
+                    const unit = /T(?:bps|GbE)/i.test(c.bandwidth || '') ? 1000 : 1;
+                    if (bw) groups[key].bandwidthTotal += bw * unit;
+                });
+                const names = Object.keys(groups).sort();
+                const totalSf = circuits.filter(c => c.salesforceId).length;
+                const chip = (val, label) => `<button onclick="renderCircuitsSummary('${val}')" class="${circuitsSummaryFilter === val ? 'btn-primary' : 'btn-secondary'}" style="padding: 0.4rem 1rem; font-size: 0.9rem;">${label}</button>`;
+                content.innerHTML = `
+                    <div style="margin-bottom: 2rem;">
+                        <button class="btn-secondary" onclick="renderCircuitsPage()" style="margin-bottom: 1rem;">← Back to Circuits</button>
+                        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+                            <h1 style="font-size: 2rem; margin: 0;">📊 Circuits Provider Summary</h1>
+                            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                                ${chip('all', 'All')} ${chip('active', '✅ Active')} ${chip('planned', '📋 Planned')} ${chip('salesforce', '☁️ SF-linked')}
+                            </div>
+                        </div>
+                    </div>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+                        <div class="stat-card"><div class="stat-value">${names.length}</div><div class="stat-label">Providers</div></div>
+                        <div class="stat-card"><div class="stat-value">${filtered.length}</div><div class="stat-label">Circuits</div></div>
+                        <div class="stat-card"><div class="stat-value">${totalSf}</div><div class="stat-label">Salesforce-linked</div></div>
+                    </div>
+                    ${names.length === 0 ? `<div style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 0.75rem; padding: 3rem; text-align: center; color: var(--text-secondary);">No circuits match this filter.</div>` :
+                    names.map(name => {
+                        const g = groups[name];
+                        return `
+                        <div style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 0.75rem; padding: 1.5rem; margin-bottom: 1.5rem;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem;">
+                                <h2 style="margin: 0; font-size: 1.3rem;">${name}</h2>
+                                <div style="display: flex; gap: 1.5rem; font-size: 0.9rem; color: var(--text-secondary); flex-wrap: wrap;">
+                                    <span><strong style="color: var(--text-primary);">${g.circuits.length}</strong> circuit${g.circuits.length !== 1 ? 's' : ''}</span>
+                                    ${g.active ? `<span>✅ ${g.active} active</span>` : ''}
+                                    ${g.planned ? `<span>📋 ${g.planned} planned</span>` : ''}
+                                    ${g.sfLinked ? `<span>☁️ ${g.sfLinked} SF</span>` : ''}
+                                </div>
+                            </div>
+                            <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+                                <thead><tr style="border-bottom: 1px solid var(--border-color); text-align: left; color: var(--text-secondary);">
+                                    <th style="padding: 0.5rem;">Circuit ID</th><th style="padding: 0.5rem;">Customer</th><th style="padding: 0.5rem;">A → Z</th><th style="padding: 0.5rem;">Bandwidth</th><th style="padding: 0.5rem;">Status</th><th style="padding: 0.5rem;">SO #</th>
+                                </tr></thead>
+                                <tbody>${g.circuits.sort((a,b) => String(a.circuitId||a.id).localeCompare(String(b.circuitId||b.id))).map(c => {
+                                    const a = siteById[c.aLocationSiteId];
+                                    const z = siteById[c.zLocationSiteId];
+                                    return `<tr style="border-bottom: 1px solid var(--border-color);">
+                                        <td style="padding: 0.5rem;"><a href="javascript:void(0)" onclick="viewCircuitDetails('${c.id}')" style="color: var(--accent-primary); text-decoration: none;">${c.circuitId || c.id}</a></td>
+                                        <td style="padding: 0.5rem;">${c.customer || '-'}</td>
+                                        <td style="padding: 0.5rem; font-size: 0.85em;">${a ? (a.name || a.location || '-') : '-'} → ${z ? (z.name || z.location || '-') : '-'}</td>
+                                        <td style="padding: 0.5rem;">${c.bandwidth || '-'}</td>
+                                        <td style="padding: 0.5rem;"><span class="badge ${(c.status||'').toLowerCase() === 'active' ? 'badge-success' : 'badge-info'}">${c.status || '-'}</span></td>
+                                        <td style="padding: 0.5rem;">${c.soNumber || (c.salesforceId ? '☁️' : '-')}</td>
+                                    </tr>`;
+                                }).join('')}</tbody>
+                            </table>
+                        </div>`;
+                    }).join('')}
+                `;
+            } catch (error) { alert('Error loading circuits summary: ' + friendlyError(error)); }
+        }
+
+        // ===== NNIs Provider Summary =====
+        let nnisSummaryFilter = 'all';
+        async function renderNnisSummary(filter) {
+            if (filter !== undefined) nnisSummaryFilter = filter;
+            try {
+                const [nnis, sites, equipment, fdps, circuits] = await Promise.all([
+                    store.getNnis(), store.getSites(), store.getEquipment(), store.getFdps(), store.getCircuits()
+                ]);
+                const siteById = Object.fromEntries(sites.map(s => [s.id, s]));
+                const equipById = Object.fromEntries(equipment.map(e => [e.id, e]));
+                const fdpById = Object.fromEntries(fdps.map(f => [f.id, f]));
+                const circuitsByNni = {};
+                circuits.forEach(c => { [c.aNni, c.zNni].filter(Boolean).forEach(n => { (circuitsByNni[n] = circuitsByNni[n] || []).push(c); }); });
+                const filtered = nnis.filter(n => {
+                    if (nnisSummaryFilter === 'all') return true;
+                    if (nnisSummaryFilter === 'customer') return n.direction === 'customer';
+                    if (nnisSummaryFilter === 'type-ii') return n.direction === 'type-ii-provider';
+                    if (nnisSummaryFilter === 'internal') return n.direction === 'router-internal';
+                    if (nnisSummaryFilter === 'salesforce') return !!n.salesforceId;
+                    return true;
+                });
+                const groups = {};
+                filtered.forEach(n => {
+                    const key = (n.provider || '(no provider)').trim() || '(no provider)';
+                    if (!groups[key]) groups[key] = { nnis: [], cust: 0, t2: 0, internal: 0, sfLinked: 0 };
+                    groups[key].nnis.push(n);
+                    if (n.direction === 'customer') groups[key].cust++;
+                    if (n.direction === 'type-ii-provider') groups[key].t2++;
+                    if (n.direction === 'router-internal') groups[key].internal++;
+                    if (n.salesforceId) groups[key].sfLinked++;
+                });
+                const names = Object.keys(groups).sort();
+                const totalSf = nnis.filter(n => n.salesforceId).length;
+                const chip = (val, label) => `<button onclick="renderNnisSummary('${val}')" class="${nnisSummaryFilter === val ? 'btn-primary' : 'btn-secondary'}" style="padding: 0.4rem 1rem; font-size: 0.9rem;">${label}</button>`;
+                content.innerHTML = `
+                    <div style="margin-bottom: 2rem;">
+                        <button class="btn-secondary" onclick="renderNnisPage()" style="margin-bottom: 1rem;">← Back to NNIs</button>
+                        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+                            <h1 style="font-size: 2rem; margin: 0;">📊 NNI Provider Summary</h1>
+                            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                                ${chip('all', 'All')} ${chip('customer', '👤 Customer')} ${chip('type-ii', '🤝 Type II')} ${chip('internal', '🏠 Internal')} ${chip('salesforce', '☁️ SF-linked')}
+                            </div>
+                        </div>
+                    </div>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+                        <div class="stat-card"><div class="stat-value">${names.length}</div><div class="stat-label">Providers</div></div>
+                        <div class="stat-card"><div class="stat-value">${filtered.length}</div><div class="stat-label">NNIs</div></div>
+                        <div class="stat-card"><div class="stat-value">${totalSf}</div><div class="stat-label">Salesforce-linked</div></div>
+                    </div>
+                    ${names.length === 0 ? `<div style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 0.75rem; padding: 3rem; text-align: center; color: var(--text-secondary);">No NNIs match this filter.</div>` :
+                    names.map(name => {
+                        const g = groups[name];
+                        return `
+                        <div style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 0.75rem; padding: 1.5rem; margin-bottom: 1.5rem;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem;">
+                                <h2 style="margin: 0; font-size: 1.3rem;">${name}</h2>
+                                <div style="display: flex; gap: 1.5rem; font-size: 0.9rem; color: var(--text-secondary); flex-wrap: wrap;">
+                                    <span><strong style="color: var(--text-primary);">${g.nnis.length}</strong> NNI${g.nnis.length !== 1 ? 's' : ''}</span>
+                                    ${g.cust ? `<span>👤 ${g.cust}</span>` : ''}
+                                    ${g.t2 ? `<span>🤝 ${g.t2}</span>` : ''}
+                                    ${g.internal ? `<span>🏠 ${g.internal}</span>` : ''}
+                                    ${g.sfLinked ? `<span>☁️ ${g.sfLinked} SF</span>` : ''}
+                                </div>
+                            </div>
+                            <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+                                <thead><tr style="border-bottom: 1px solid var(--border-color); text-align: left; color: var(--text-secondary);">
+                                    <th style="padding: 0.5rem;">NNI Name</th><th style="padding: 0.5rem;">Direction</th><th style="padding: 0.5rem;">Site</th><th style="padding: 0.5rem;">Equipment</th><th style="padding: 0.5rem;">Bandwidth</th><th style="padding: 0.5rem;">Status</th><th style="padding: 0.5rem;">Circuits</th>
+                                </tr></thead>
+                                <tbody>${g.nnis.sort((a,b) => String(a.name||'').localeCompare(String(b.name||''))).map(n => {
+                                    const site = siteById[n.siteId];
+                                    const eq = equipById[n.equipmentID];
+                                    const dirLabel = n.direction === 'customer' ? '👤 Customer' : n.direction === 'type-ii-provider' ? '🤝 Type II' : '🏠 Internal';
+                                    const usedBy = (circuitsByNni[n.id] || []).length;
+                                    return `<tr style="border-bottom: 1px solid var(--border-color);">
+                                        <td style="padding: 0.5rem;"><a href="javascript:void(0)" onclick="viewNniDetails('${n.id}')" style="color: var(--accent-primary); text-decoration: none;">${n.name || '-'}</a></td>
+                                        <td style="padding: 0.5rem;">${dirLabel}</td>
+                                        <td style="padding: 0.5rem; font-size: 0.85em;">${site ? (site.name || site.location || '-') : '-'}</td>
+                                        <td style="padding: 0.5rem; font-size: 0.85em;">${eq ? eq.name : '-'}${n.equipmentPorts ? ' :' + n.equipmentPorts : ''}</td>
+                                        <td style="padding: 0.5rem;">${n.bandwidth || '-'}</td>
+                                        <td style="padding: 0.5rem;">${n.nniStatus || '-'}</td>
+                                        <td style="padding: 0.5rem;">${usedBy}</td>
+                                    </tr>`;
+                                }).join('')}</tbody>
+                            </table>
+                        </div>`;
+                    }).join('')}
+                `;
+            } catch (error) { alert('Error loading NNI summary: ' + friendlyError(error)); }
+        }
+
         let dfSummaryFilter = 'all';
 
         async function renderDarkFiberProviderSummary(filter) {
