@@ -756,7 +756,7 @@
         // BUILD: 2024-05-19-23-00-TEMPLATE-LITERALS-FIXED
         // This timestamp forces browser to reload: 1747719600
         console.log('%c🔧 NetInventory Version: 2026-06-10-OTDR-PINPOINT', 'background: #8b5cf6; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;');
-        console.log('🔧 NNIs page layout fix (proper header div closure) + all prior!');
+        console.log('🔍 Address & CLLI search on all entities, richer site dropdowns + all prior!');
         console.log('✅ Edit buttons ACTUALLY work now - template literals fixed!');
         console.log('🔢 Build timestamp: 1747719600');
         
@@ -2796,7 +2796,7 @@
                                 ${sites.length === 0 ? 
                                     '<tr><td colspan="8" style="text-align: center; padding: 3rem; color: var(--text-secondary);">No sites yet. Click "Add Site" to get started.</td></tr>' :
                                     sites.map(site => `
-                                        <tr class="site-row" data-searchable="${[site.name, site.cidCode, site.location, site.type, site.city, site.state, site.contact].filter(Boolean).join(' ').toLowerCase()}">
+                                        <tr class="site-row" data-searchable="${[site.name, site.cidCode, site.location, site.address, site.type, site.city, site.state, site.contact].filter(Boolean).join(' ').toLowerCase()}">
                                             <td><strong><a href="javascript:void(0)" onclick="showQuickActions('site','${site.id}')" style="color: var(--accent-primary); text-decoration: none; cursor: pointer;" title="Quick actions">${site.name || ''}</a></strong></td>
                                             <td>${site.cidCode || ''}</td>
                                             <td>${site.location || ''}</td>
@@ -4074,7 +4074,7 @@
             const sites = await store.getSites();
             const siteSelect = document.getElementById('rackSiteSelect');
             siteSelect.innerHTML = '<option value="">Select Site...</option>' + 
-                sites.map(site => `<option value="${site.id}">${site.name}</option>`).join('');
+                sites.map(site => `<option value="${site.id}">${(site.name || site.location || '(unnamed)') + (site.address ? ' — ' + site.address.split(',')[0] : '') + (site.name && site.cidCode ? ' [' + site.cidCode + ']' : '')}</option>`).join('');
             
             document.getElementById('rackModal').classList.add('active');
         }
@@ -4094,7 +4094,7 @@
             const sites = await store.getSites();
             const siteSelect = document.getElementById('rackSiteSelect');
             siteSelect.innerHTML = '<option value="">Select Site...</option>' + 
-                sites.map(site => `<option value="${site.id}">${site.name}</option>`).join('');
+                sites.map(site => `<option value="${site.id}">${(site.name || site.location || '(unnamed)') + (site.address ? ' — ' + site.address.split(',')[0] : '') + (site.name && site.cidCode ? ' [' + site.cidCode + ']' : '')}</option>`).join('');
             
             // Fill form
             form.elements.name.value = rack.name || '';
@@ -4389,7 +4389,7 @@
                                             
                                             // Chassis row
                                             rows.push(`
-                                                <tr class="equipment-row chassis-row" data-searchable="${[equip.name, site?.name, rack?.name, equip.manufacturer, equip.model, equip.type].filter(Boolean).join(' ').toLowerCase()}">
+                                                <tr class="equipment-row chassis-row" data-searchable="${[equip.name, site?.name, site?.location, site?.address, site?.cidCode, rack?.name, equip.manufacturer, equip.model, equip.type, equip.mgmtIp].filter(Boolean).join(' ').toLowerCase()}">
                                                     <td>
                                                         <strong><a href="javascript:void(0)" onclick="showQuickActions('equipment','${equip.id}')" style="color: var(--accent-primary); text-decoration: none; cursor: pointer;" title="Quick actions">${equip.name || ''}</a></strong>
                                                         ${childCards.length > 0 ? `<span style="font-size: 0.75rem; color: var(--text-tertiary); margin-left: 0.5rem;">(${childCards.length} cards)</span>` : ''}
@@ -4420,7 +4420,7 @@
                                                 const lcSite = sites.find(s => s.id === lc.siteId);
                                                 const lcRack = racks.find(r => r.id === lc.rackId);
                                                 rows.push(`
-                                                    <tr class="equipment-row linecard-row" data-searchable="${[lc.name, lcSite?.name, lcRack?.name, lc.manufacturer, lc.model, lc.type].filter(Boolean).join(' ').toLowerCase()}" style="background: var(--bg-tertiary);">
+                                                    <tr class="equipment-row linecard-row" data-searchable="${[lc.name, lcSite?.name, lcSite?.location, lcSite?.address, lcSite?.cidCode, lcRack?.name, lc.manufacturer, lc.model, lc.type].filter(Boolean).join(' ').toLowerCase()}" style="background: var(--bg-tertiary);">
                                                         <td style="padding-left: 3rem;">
                                                             <span style="color: var(--text-tertiary);">├─</span> 
                                                             <strong><a href="javascript:void(0)" onclick="showQuickActions('equipment','${lc.id}')" style="color: var(--accent-primary); text-decoration: none; cursor: pointer;" title="Quick actions">${lc.name || ''}</a></strong>
@@ -4491,7 +4491,7 @@
             document.getElementById('equipmentForm').reset();
             const sites = await store.getSites();
             const siteSelect = document.getElementById('equipmentSiteSelect');
-            siteSelect.innerHTML = '<option value="">Select Site...</option>' + sites.map(site => `<option value="${site.id}">${site.name}</option>`).join('');
+            siteSelect.innerHTML = '<option value="">Select Site...</option>' + sites.map(site => `<option value="${site.id}">${(site.name || site.location || '(unnamed)') + (site.address ? ' — ' + site.address.split(',')[0] : '') + (site.name && site.cidCode ? ' [' + site.cidCode + ']' : '')}</option>`).join('');
             document.getElementById('equipmentRackSelect').innerHTML = '<option value="">Select Rack...</option>';
             
             // Populate template picker (Add mode only)
@@ -4694,7 +4694,7 @@
             const form = document.getElementById('equipmentForm');
             const sites = await store.getSites();
             const siteSelect = document.getElementById('equipmentSiteSelect');
-            siteSelect.innerHTML = '<option value="">Select Site...</option>' + sites.map(site => `<option value="${site.id}">${site.name}</option>`).join('');
+            siteSelect.innerHTML = '<option value="">Select Site...</option>' + sites.map(site => `<option value="${site.id}">${(site.name || site.location || '(unnamed)') + (site.address ? ' — ' + site.address.split(',')[0] : '') + (site.name && site.cidCode ? ' [' + site.cidCode + ']' : '')}</option>`).join('');
             form.elements.siteId.value = equip.siteId || '';
             await updateEquipmentRackDropdown();
             form.elements.name.value = equip.name || '';
@@ -5061,7 +5061,7 @@
                                         const site = sites.find(s => s.id === fdp.siteId);
                                         const rack = racks.find(r => r.id === fdp.rackId);
                                         return `
-                                            <tr class="fdp-row" data-searchable="${[fdp.name, site?.name, fdp.mountingType, fdp.connectorType].filter(Boolean).join(' ').toLowerCase()}">
+                                            <tr class="fdp-row" data-searchable="${[fdp.name, site?.name, site?.location, site?.address, site?.cidCode, fdp.mountingType, fdp.connectorType].filter(Boolean).join(' ').toLowerCase()}">
                                                 <td><strong><a href="javascript:void(0)" onclick="showQuickActions('fdp','${fdp.id}')" style="color: var(--accent-primary); text-decoration: none; cursor: pointer;" title="Quick actions">${fdp.name || ''}</a></strong></td>
                                                 <td>${site ? `<a href="javascript:void(0)" onclick="showQuickActions('site','${site.id}')" style="color: var(--accent-primary); text-decoration: none; cursor: pointer;" title="Quick actions">${site.name}</a>` : fdp.siteId || ''}</td>
                                                 <td>${fdp.mountingType || ''}</td>
@@ -5176,7 +5176,7 @@
             document.getElementById('fdpForm').reset();
             const sites = await store.getSites();
             const siteSelect = document.getElementById('fdpSiteSelect');
-            siteSelect.innerHTML = '<option value="">Select Site...</option>' + sites.map(site => `<option value="${site.id}">${site.name}</option>`).join('');
+            siteSelect.innerHTML = '<option value="">Select Site...</option>' + sites.map(site => `<option value="${site.id}">${(site.name || site.location || '(unnamed)') + (site.address ? ' — ' + site.address.split(',')[0] : '') + (site.name && site.cidCode ? ' [' + site.cidCode + ']' : '')}</option>`).join('');
             document.getElementById('fdpRackSelect').innerHTML = '<option value="">Select Rack...</option>';
             toggleFdpRackFields();
             document.getElementById('fdpModal').classList.add('active');
@@ -5206,7 +5206,7 @@
             const form = document.getElementById('fdpForm');
             const sites = await store.getSites();
             const siteSelect = document.getElementById('fdpSiteSelect');
-            siteSelect.innerHTML = '<option value="">Select Site...</option>' + sites.map(site => `<option value="${site.id}">${site.name}</option>`).join('');
+            siteSelect.innerHTML = '<option value="">Select Site...</option>' + sites.map(site => `<option value="${site.id}">${(site.name || site.location || '(unnamed)') + (site.address ? ' — ' + site.address.split(',')[0] : '') + (site.name && site.cidCode ? ' [' + site.cidCode + ']' : '')}</option>`).join('');
             form.elements.siteId.value = fdp.siteId || '';
             await updateFdpRackDropdown();
             form.elements.name.value = fdp.name || '';
@@ -5915,7 +5915,7 @@
         async function generateVlanSectionHTML(vlanNum) {
             // Get sites for dropdowns
             const sites = await store.getSites();
-            const siteOptions = sites.map(site => `<option value="${site.id}">${site.name}</option>`).join('');
+            const siteOptions = sites.map(site => `<option value="${site.id}">${(site.name || site.location || '(unnamed)') + (site.address ? ' — ' + site.address.split(',')[0] : '') + (site.name && site.cidCode ? ' [' + site.cidCode + ']' : '')}</option>`).join('');
             
             return `
                 <hr style="border: none; border-top: 1px solid var(--border-color); margin: 2rem 0;">
@@ -6427,7 +6427,7 @@
                                         const zSite = sites.find(s => s.id === circuit.zLocationSiteId);
                                         const directionLabel = circuit.direction === 'provider' ? 'Purchasing' : circuit.direction === 'customer' ? 'Providing' : 'Internal';
                                         return `
-                                            <tr class="circuit-row" data-searchable="${[circuit.circuitId, circuit.previousCircuitId, circuit.type, circuit.direction, circuit.status].filter(Boolean).join(' ').toLowerCase()}">
+                                            <tr class="circuit-row" data-searchable="${[circuit.circuitId, circuit.previousCircuitId, circuit.type, circuit.direction, circuit.status, circuit.customer, circuit.soNumber].filter(Boolean).join(' ').toLowerCase()}">
                                                 <td><strong><a href="javascript:void(0)" onclick="showQuickActions('circuit','${circuit.id}')" style="color: var(--accent-primary); text-decoration: none; cursor: pointer;" title="Quick actions">${circuit.circuitId || ''}</a></strong></td>
                                                 <td style="color: var(--text-tertiary); font-size: 0.9rem;">${circuit.previousCircuitId || '-'}</td>
                                                 <td><span class="badge ${circuit.direction === 'provider' ? 'badge-warning' : circuit.direction === 'customer' ? 'badge-success' : 'badge-info'}">${directionLabel}</span></td>
@@ -6804,7 +6804,7 @@
             document.getElementById('circuitForm').reset();
             
             const sites = await store.getSites();
-            const siteOptions = '<option value="">Select Site...</option>' + sites.map(site => `<option value="${site.id}">${site.name}</option>`).join('');
+            const siteOptions = '<option value="">Select Site...</option>' + sites.map(site => `<option value="${site.id}">${(site.name || site.location || '(unnamed)') + (site.address ? ' — ' + site.address.split(',')[0] : '') + (site.name && site.cidCode ? ' [' + site.cidCode + ']' : '')}</option>`).join('');
             document.getElementById('circuitASiteSelect').innerHTML = siteOptions;
             document.getElementById('circuitZSiteSelect').innerHTML = siteOptions;
             
@@ -6869,7 +6869,7 @@
             const form = document.getElementById('circuitForm');
             
             const sites = await store.getSites();
-            const siteOptions = '<option value="">Select Site...</option>' + sites.map(site => `<option value="${site.id}">${site.name}</option>`).join('');
+            const siteOptions = '<option value="">Select Site...</option>' + sites.map(site => `<option value="${site.id}">${(site.name || site.location || '(unnamed)') + (site.address ? ' — ' + site.address.split(',')[0] : '') + (site.name && site.cidCode ? ' [' + site.cidCode + ']' : '')}</option>`).join('');
             document.getElementById('circuitASiteSelect').innerHTML = siteOptions;
             document.getElementById('circuitZSiteSelect').innerHTML = siteOptions;
             
@@ -8415,7 +8415,7 @@
                                         const nniFdp = nni.fdpId ? allFdpsForNni.find(f => f.id === nni.fdpId) : null;
                                         const directionLabel = nni.direction === 'customer' ? 'Customer' : nni.direction === 'type-ii-provider' ? 'Type II Provider' : 'Router/Internal';
                                         return `
-                                            <tr class="nni-row" data-searchable="${[nni.name, site?.name, nni.equipmentID, nni.fdpId].filter(Boolean).join(' ').toLowerCase()}">
+                                            <tr class="nni-row" data-searchable="${[nni.name, site?.name, site?.location, site?.address, site?.cidCode, nni.provider, nni.equipmentID, nni.fdpId].filter(Boolean).join(' ').toLowerCase()}">
                                                 <td><strong><a href="javascript:void(0)" onclick="showQuickActions('nni','${nni.id}')" style="color: var(--accent-primary); text-decoration: none; cursor: pointer;" title="Quick actions">${nni.name || ''}</a></strong></td>
                                                 <td><span class="badge ${nni.direction === 'customer' ? 'badge-success' : nni.direction === 'type-ii-provider' ? 'badge-warning' : 'badge-info'}">${directionLabel}</span></td>
                                                 <td>${site ? `<a href="javascript:void(0)" onclick="showQuickActions('site','${site.id}')" style="color: var(--accent-primary); text-decoration: none; cursor: pointer;" title="Quick actions">${site.name}</a>` : nni.siteId || ''}</td>
@@ -8455,7 +8455,7 @@
             ]);
             
             const siteSelect = document.getElementById('nniSiteSelect');
-            siteSelect.innerHTML = '<option value="">Select Site...</option>' + sites.map(site => `<option value="${site.id}">${site.name}</option>`).join('');
+            siteSelect.innerHTML = '<option value="">Select Site...</option>' + sites.map(site => `<option value="${site.id}">${(site.name || site.location || '(unnamed)') + (site.address ? ' — ' + site.address.split(',')[0] : '') + (site.name && site.cidCode ? ' [' + site.cidCode + ']' : '')}</option>`).join('');
             
             const equipmentSelect = document.getElementById('nniEquipmentSelect');
             equipmentSelect.innerHTML = '<option value="">Select Equipment...</option>' + equipment.map(eq => `<option value="${eq.id}">${eq.name} (${eq.type || 'N/A'})</option>`).join('');
@@ -8486,7 +8486,7 @@
             ]);
             
             const siteSelect = document.getElementById('nniSiteSelect');
-            siteSelect.innerHTML = '<option value="">Select Site...</option>' + sites.map(site => `<option value="${site.id}">${site.name}</option>`).join('');
+            siteSelect.innerHTML = '<option value="">Select Site...</option>' + sites.map(site => `<option value="${site.id}">${(site.name || site.location || '(unnamed)') + (site.address ? ' — ' + site.address.split(',')[0] : '') + (site.name && site.cidCode ? ' [' + site.cidCode + ']' : '')}</option>`).join('');
             
             const equipmentSelect = document.getElementById('nniEquipmentSelect');
             equipmentSelect.innerHTML = '<option value="">Select Equipment...</option>' + equipment.map(eq => `<option value="${eq.id}">${eq.name} (${eq.type || 'N/A'})</option>`).join('');
