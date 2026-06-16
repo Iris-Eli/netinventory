@@ -585,6 +585,16 @@
         .modal-header { flex-wrap: wrap; gap: 0.4rem; }
         .port-zoom-controls { flex-wrap: wrap; }
 
+        /* Disconnected circuit rows: hidden by default, shown when body has show-disco class */
+        body:not(.show-disco) .circuit-row[data-status="disconnected"],
+        body:not(.show-disco) .circuit-row[data-status="disconnect-ordered"] {
+            display: none;
+        }
+        /* When user actively searches for disconnect terms, reveal those rows */
+        body.searching-disco .circuit-row[data-status="disconnected"],
+        body.searching-disco .circuit-row[data-status="disconnect-ordered"] {
+            display: table-row;
+        }
         /* Port map zoom */
         .port-zoomable { transform-origin: top left; transition: transform 0.12s ease-out; touch-action: pan-x pan-y; }
 
@@ -756,7 +766,7 @@
         // BUILD: 2024-05-19-23-00-TEMPLATE-LITERALS-FIXED
         // This timestamp forces browser to reload: 1747719600
         console.log('%c🔧 NetInventory Version: 2026-06-10-OTDR-PINPOINT', 'background: #8b5cf6; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;');
-        console.log('🔧 Circuits + Racks page layout fix (same bug as NNIs) + all prior!');
+        console.log('👻 Disconnect circuit lifecycle + hide-from-reports + searchable + all prior!');
         console.log('✅ Edit buttons ACTUALLY work now - template literals fixed!');
         console.log('🔢 Build timestamp: 1747719600');
         
@@ -2846,9 +2856,19 @@
             });
         }
         
+        function toggleDisconnected() {
+            document.body.classList.toggle('show-disco');
+            const btn = document.getElementById('discoToggle');
+            const showing = document.body.classList.contains('show-disco');
+            if (btn) btn.textContent = showing ? '👻 Hide disconnected' : '👻 Show disconnected';
+        }
+
         function filterTable(entityType, searchTerm) {
             const rows = document.querySelectorAll(`.${entityType}-row`);
             const term = searchTerm.toLowerCase();
+            if (entityType === 'circuit') {
+                document.body.classList.toggle('searching-disco', /disco|disconnect/.test(term));
+            }
             rows.forEach(row => {
                 const searchable = row.getAttribute('data-searchable');
                 if (searchable) {
@@ -5702,6 +5722,8 @@
                                 <option value="planned">Planned</option>
                                 <option value="down">Down</option>
                                 <option value="maintenance">Maintenance</option>
+                                <option value="disconnect-ordered">Disconnect Ordered</option>
+                                <option value="disconnected">Disconnected (historical)</option>
                             </select>
                         </div>
                     <div style="border: 1px solid var(--border-color); border-radius: 0.5rem; padding: 1rem; margin: 1rem 0;">
@@ -6400,6 +6422,7 @@
                         <h1 style="font-size: 2rem; margin: 0;">Circuits</h1>
                         <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
                             <input type="text" placeholder="🔍 Search circuits..." style="padding: 0.5rem 1rem; border: 1px solid var(--border-color); border-radius: 4px; width: 250px;" oninput="filterTable('circuit', this.value)">
+                            <button class="btn-secondary" onclick="toggleDisconnected()" id="discoToggle" title="Toggle disconnected circuits">👻 Show disconnected</button>
                             <button class="btn-secondary" onclick="renderCircuitsSummary()">📊 Provider Summary</button>
                             <button class="btn-secondary" onclick="exportEntityToExcel('circuits', this)" title="Export Circuits to Excel">⬇️ Export</button>
                             <button class="btn-primary" onclick="openAddCircuitModal()">Add Circuit</button>
@@ -6430,7 +6453,7 @@
                                         const zSite = sites.find(s => s.id === circuit.zLocationSiteId);
                                         const directionLabel = circuit.direction === 'provider' ? 'Purchasing' : circuit.direction === 'customer' ? 'Providing' : 'Internal';
                                         return `
-                                            <tr class="circuit-row" data-searchable="${[circuit.circuitId, circuit.previousCircuitId, circuit.type, circuit.direction, circuit.status, circuit.customer, circuit.soNumber].filter(Boolean).join(' ').toLowerCase()}">
+                                            <tr class="circuit-row" data-searchable="${[circuit.circuitId, circuit.previousCircuitId, circuit.type, circuit.direction, circuit.status, circuit.customer, circuit.soNumber].filter(Boolean).join(' ').toLowerCase()}" data-status="${circuit.status || ''}">
                                                 <td><strong><a href="javascript:void(0)" onclick="showQuickActions('circuit','${circuit.id}')" style="color: var(--accent-primary); text-decoration: none; cursor: pointer;" title="Quick actions">${circuit.circuitId || ''}</a></strong></td>
                                                 <td style="color: var(--text-tertiary); font-size: 0.9rem;">${circuit.previousCircuitId || '-'}</td>
                                                 <td><span class="badge ${circuit.direction === 'provider' ? 'badge-warning' : circuit.direction === 'customer' ? 'badge-success' : 'badge-info'}">${directionLabel}</span></td>
@@ -10991,6 +11014,8 @@ ${entityActionButtons('nni', `${n.id}`, true)}
                 const [circuits, sites] = await Promise.all([store.getCircuits(), store.getSites()]);
                 const siteById = Object.fromEntries(sites.map(s => [s.id, s]));
                 const filtered = circuits.filter(c => {
+                    // reports never count disconnected/disconnect-ordered
+                    if (c.status === 'disconnected' || c.status === 'disconnect-ordered') return false;
                     if (circuitsSummaryFilter === 'all') return true;
                     if (circuitsSummaryFilter === 'active') return (c.status || '').toLowerCase() === 'active';
                     if (circuitsSummaryFilter === 'planned') return (c.status || '').toLowerCase() === 'planned';
