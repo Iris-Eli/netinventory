@@ -756,7 +756,7 @@
         // BUILD: 2024-05-19-23-00-TEMPLATE-LITERALS-FIXED
         // This timestamp forces browser to reload: 1747719600
         console.log('%c🔧 NetInventory Version: 2026-06-10-OTDR-PINPOINT', 'background: #8b5cf6; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;');
-        console.log('📊 Circuits + NNI provider summaries (matching DF style), v1-ready + all prior!');
+        console.log('🔧 Circuits + Racks page layout fix (same bug as NNIs) + all prior!');
         console.log('✅ Edit buttons ACTUALLY work now - template literals fixed!');
         console.log('🔢 Build timestamp: 1747719600');
         
@@ -6396,11 +6396,14 @@
                 const [circuits, sites] = await Promise.all([store.getCircuits(), store.getSites()]);
                 
                 content.innerHTML = `
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
-                        <h1 style="font-size: 2rem;">Circuits</h1>
-                        <div style="display: flex; gap: 1rem; align-items: center;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem;">
+                        <h1 style="font-size: 2rem; margin: 0;">Circuits</h1>
+                        <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
                             <input type="text" placeholder="🔍 Search circuits..." style="padding: 0.5rem 1rem; border: 1px solid var(--border-color); border-radius: 4px; width: 250px;" oninput="filterTable('circuit', this.value)">
-                            <button class="btn-secondary" onclick="renderCircuitsSummary()">📊 Provider Summary</button><button class="btn-secondary" onclick="exportEntityToExcel('circuits', this)" title="Export Circuits to Excel">⬇️ Export</button><button class="btn-primary" onclick="openAddCircuitModal()">Add Circuit</button>
+                            <button class="btn-secondary" onclick="renderCircuitsSummary()">📊 Provider Summary</button>
+                            <button class="btn-secondary" onclick="exportEntityToExcel('circuits', this)" title="Export Circuits to Excel">⬇️ Export</button>
+                            <button class="btn-primary" onclick="openAddCircuitModal()">Add Circuit</button>
+                        </div>
                     </div>
                     <div class="table-container">
                         <table>
