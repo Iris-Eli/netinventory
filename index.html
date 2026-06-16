@@ -585,6 +585,17 @@
         .modal-header { flex-wrap: wrap; gap: 0.4rem; }
         .port-zoom-controls { flex-wrap: wrap; }
 
+        /* === Print: render only the active view-details modal === */
+        @media print {
+            @page { size: letter; margin: 0.5in; }
+            body * { visibility: hidden !important; }
+            #universalViewModal, #universalViewModal * { visibility: visible !important; }
+            #universalViewModal { position: absolute !important; top: 0; left: 0; width: 100% !important; height: auto !important; background: white !important; color: black !important; padding: 0 !important; overflow: visible !important; }
+            #universalViewModal .modal-content { box-shadow: none !important; max-height: none !important; height: auto !important; overflow: visible !important; }
+            .modal-footer, .modal-close, button { display: none !important; }
+            a { color: black !important; text-decoration: none !important; }
+        }
+
         /* Disconnected circuit rows: hidden by default, shown when body has show-disco class */
         body:not(.show-disco) .circuit-row[data-status="disconnected"],
         body:not(.show-disco) .circuit-row[data-status="disconnect-ordered"] {
@@ -766,7 +777,7 @@
         // BUILD: 2024-05-19-23-00-TEMPLATE-LITERALS-FIXED
         // This timestamp forces browser to reload: 1747719600
         console.log('%c🔧 NetInventory Version: 2026-06-10-OTDR-PINPOINT', 'background: #8b5cf6; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;');
-        console.log('👻 Disconnect circuit lifecycle + hide-from-reports + searchable + all prior!');
+        console.log('🔀 Site merge (preserve refs), 📄 fixed DLR print + view export + all prior!');
         console.log('✅ Edit buttons ACTUALLY work now - template literals fixed!');
         console.log('🔢 Build timestamp: 1747719600');
         
@@ -2771,6 +2782,45 @@
             }
         }
 
+        async function mergeSite(sourceId) {
+            try {
+                const sites = await store.getSites();
+                const source = sites.find(s => s.id === sourceId);
+                if (!source) { alert('Site not found'); return; }
+                const candidates = sites.filter(s => s.id !== sourceId)
+                    .sort((a,b) => String(a.name||a.location||'').localeCompare(String(b.name||b.location||'')));
+                if (candidates.length === 0) { alert('No other sites available to merge into.'); return; }
+                const target = prompt('Merge "' + (source.name || source.location || sourceId) + '" INTO which site?\n\nPaste the target site ID (Title). Cancel to abort.\n\nFirst 20 candidates:\n' + candidates.slice(0,20).map(s => '  ' + s.id + '  =  ' + (s.name || s.location || '(no name)') + ' / ' + (s.address || '')).join('\n'));
+                if (!target) return;
+                const tgt = sites.find(s => s.id === target.trim());
+                if (!tgt) { alert('Target site not found.'); return; }
+                
+                const [racks, equipment, circuits, nnis, fdps] = await Promise.all([store.getRacks(), store.getEquipment(), store.getCircuits(), store.getNnis(), store.getFdps()]);
+                const refs = {
+                    racks: racks.filter(r => r.siteId === sourceId),
+                    equipment: equipment.filter(e => e.siteId === sourceId),
+                    fdps: fdps.filter(f => f.siteId === sourceId),
+                    nnis: nnis.filter(n => n.siteId === sourceId),
+                    circuitsA: circuits.filter(c => c.aLocationSiteId === sourceId),
+                    circuitsZ: circuits.filter(c => c.zLocationSiteId === sourceId),
+                };
+                if (!confirm('Merge "' + (source.name || sourceId) + '" → "' + (tgt.name || target) + '"?\n\nWill move:\n  ' + refs.racks.length + ' racks\n  ' + refs.equipment.length + ' equipment\n  ' + refs.fdps.length + ' FDPs\n  ' + refs.nnis.length + ' NNIs\n  ' + refs.circuitsA.length + ' circuits (A-side)\n  ' + refs.circuitsZ.length + ' circuits (Z-side)\n\nThen DELETE the source site.\n\nThis cannot be easily undone.')) return;
+                
+                let done = 0;
+                for (const r of refs.racks) { await store.updateRack(r.id, { siteId: tgt.id }); done++; }
+                for (const e of refs.equipment) { await store.updateEquipment(e.id, { siteId: tgt.id }); done++; }
+                for (const f of refs.fdps) { await store.updateFdp(f.id, { siteId: tgt.id }); done++; }
+                for (const n of refs.nnis) { await store.updateNni(n.id, { siteId: tgt.id }); done++; }
+                for (const c of refs.circuitsA) { await store.updateCircuit(c.id, { aLocationSiteId: tgt.id }); done++; }
+                for (const c of refs.circuitsZ) { await store.updateCircuit(c.id, { zLocationSiteId: tgt.id }); done++; }
+                await store.deleteSite(sourceId);
+                alert('Merged ' + done + ' references into "' + (tgt.name || target) + '" and deleted source.');
+                renderSitesPage();
+            } catch (err) {
+                alert('Merge failed: ' + friendlyError(err));
+            }
+        }
+
         async function renderSitesPage() {
             try {
                 const sites = await store.getSites();
@@ -2818,7 +2868,7 @@
                                                 <button onclick="viewSiteDetails('${site.id}')" class="btn-secondary" style="padding: 0.5rem 0.75rem; margin-right: 0.5rem;" title="View all assets at this site">👁️ View</button>
                                                 <button onclick="viewSitePhotos('${site.id}')" class="btn-secondary" style="padding: 0.5rem 0.75rem; margin-right: 0.5rem;" title="Site photos">📷 Photos</button>
                                                 <button onclick="editSiteById('${site.id}')"  class="btn-secondary" style="padding: 0.5rem 0.75rem; margin-right: 0.5rem;">Edit</button>
-                                                <button onclick="deleteSite('${site.id}')" class="btn-secondary" style="padding: 0.5rem 0.75rem; background: var(--danger);">Delete</button>
+                                                <button onclick="mergeSite('${site.id}')" class="btn-secondary" style="padding: 0.5rem 0.75rem; margin-right: 0.5rem;" title="Move this site's contents into another and delete the duplicate">🔀 Merge</button><button onclick="deleteSite('${site.id}')" class="btn-secondary" style="padding: 0.5rem 0.75rem; background: var(--danger);">Delete</button>
                                             </td>
                                         </tr>
                                     `).join('')
@@ -8257,16 +8307,29 @@
                 const wb = XLSX.utils.book_new();
                 const used = new Set();
                 (config.sections || []).forEach((section, i) => {
-                    const rows = (section.data || []).map(row => {
+                    let rows = [];
+                    if (section.type === 'details' && Array.isArray(section.data)) {
+                        // label/value pair sections export as a single-row {label: value} sheet
                         const o = {};
-                        (section.columns || []).forEach((col, ci) => {
-                            const header = (section.headers && section.headers[ci]) || col;
-                            let v = row[col];
+                        section.data.forEach(d => {
+                            let v = d.value;
                             if (v === null || v === undefined) v = '';
-                            o[header] = typeof v === 'object' ? JSON.stringify(v) : v;
+                            if (typeof v === 'object') v = JSON.stringify(v);
+                            o[d.label || '(field)'] = v;
                         });
-                        return o;
-                    });
+                        rows = [o];
+                    } else {
+                        rows = (section.data || []).map(row => {
+                            const o = {};
+                            (section.columns || []).forEach((col, ci) => {
+                                const header = (section.headers && section.headers[ci]) || col;
+                                let v = row[col];
+                                if (v === null || v === undefined) v = '';
+                                o[header] = typeof v === 'object' ? JSON.stringify(v) : v;
+                            });
+                            return o;
+                        });
+                    }
                     const ws = XLSX.utils.json_to_sheet(rows.length ? rows : [{ note: 'none' }]);
                     if (rows.length) ws['!cols'] = Object.keys(rows[0]).map(k => ({ wch: Math.max(String(k).length + 2, 14) }));
                     let name = String(section.title || ('Sheet' + (i + 1))).replace(/[\\\/\?\*\[\]:]/g, ' ').slice(0, 31).trim() || ('Sheet' + (i + 1));
