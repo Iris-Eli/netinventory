@@ -777,7 +777,7 @@
         // BUILD: 2024-05-19-23-00-TEMPLATE-LITERALS-FIXED
         // This timestamp forces browser to reload: 1747719600
         console.log('%c🔧 NetInventory Version: 2026-06-10-OTDR-PINPOINT', 'background: #8b5cf6; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;');
-        console.log('🔀 Merge on Duplicates page (all entity types, preserve refs) + all prior!');
+        console.log('🔧 VLAN/MTU/CPE-VLAN visible, CPE auto-link to Z-site + all prior!');
         console.log('✅ Edit buttons ACTUALLY work now - template literals fixed!');
         console.log('🔢 Build timestamp: 1747719600');
         
@@ -7603,6 +7603,17 @@
                         }
                     }
                 }
+            // ===== Auto-link CPE equipment to Z-site if it has no site set =====
+            try {
+                if (circuit.cpeEquipmentId && circuit.zLocationSiteId) {
+                    const cpeEq = (await store.getEquipment()).find(e => e.id === circuit.cpeEquipmentId);
+                    if (cpeEq && !cpeEq.siteId) {
+                        await store.updateEquipment(cpeEq.id, { siteId: circuit.zLocationSiteId });
+                        console.log('CPE ' + cpeEq.name + ' auto-linked to Z-site');
+                    }
+                }
+            } catch (e) { console.error('CPE auto-link failed', e); }
+
             // ===== DLR generation + activation gate =====
             try {
                 const cpeId = circuit.cpeEquipmentId;
@@ -9043,6 +9054,11 @@
                             { label: 'Status', value: circuit.status || '-' },
                             { label: 'Provider', value: circuit.provider || '-' },
                             { label: 'Bandwidth', value: circuit.bandwidth || '-' },
+                            { label: 'VLANs', value: circuit.circuitVlans || '-' },
+                            { label: 'MTU', value: circuit.mtu || '-' },
+                            { label: 'Customer', value: circuit.customer || '-' },
+                            { label: 'SO Number', value: circuit.soNumber || '-' },
+                            { label: 'Meetpoint', value: circuit.additionalLocations || '-' },
                             { label: 'Fiber Type', value: circuit.fiberType || '-' },
                             { label: 'Install Date', value: circuit.installDate || '-' },
                             { label: 'Activation Date', value: circuit.activationDate || '-' },
@@ -9078,7 +9094,11 @@
                             { label: 'CPE Type', value: circuit.cpeType || '-' },
                             { label: 'Management IP', value: circuit.cpeMgmtIp || '-' },
                             { label: 'Subnet', value: circuit.cpeMgmtSubnet || '-' },
-                            { label: 'Gateway', value: circuit.cpeMgmtGateway || '-' }
+                            { label: 'Gateway', value: circuit.cpeMgmtGateway || '-' },
+                            { label: 'Management VLAN', value: circuit.cpeMgmtVlan || '-' },
+                            { label: 'IRIS UNI', value: circuit.irisUni || '-' },
+                            { label: 'IRIS EVC1', value: circuit.irisEvc1 || '-' },
+                            { label: 'IRIS EVC2', value: circuit.irisEvc2 || '-' }
                         ]
                     }
                 ]
