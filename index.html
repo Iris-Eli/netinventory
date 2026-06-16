@@ -2645,7 +2645,7 @@
                                 <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
                                     ${group.items.map(item => `<li>${item.name || item.location} (ID: ${item.id})</li>`).join('')}
                                 </ul>
-                                <button class="btn-secondary" onclick='mergeDupGroup("site", ${JSON.stringify(group.items.map(i => i.id))})' style="padding: 0.4rem 0.8rem; margin-top: 0.5rem; font-size: 0.85rem;">🔀 Merge duplicates</button>
+                                <button class="btn-secondary" data-entity="site" data-ids="${encodeURIComponent(JSON.stringify(group.items.map(i => i.id)))}" onclick="mergeDupGroupFromBtn(this)" style="padding: 0.4rem 0.8rem; margin-top: 0.5rem; font-size: 0.85rem;">🔀 Merge duplicates</button>
                             </div>
                         `;
                     });
@@ -2660,7 +2660,7 @@
                                 <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
                                     ${group.items.map(item => `<li>${item.name} (ID: ${item.id})</li>`).join('')}
                                 </ul>
-                                <button class="btn-secondary" onclick='mergeDupGroup("rack", ${JSON.stringify(group.items.map(i => i.id))})' style="padding: 0.4rem 0.8rem; margin-top: 0.5rem; font-size: 0.85rem;">🔀 Merge duplicates</button>
+                                <button class="btn-secondary" data-entity="rack" data-ids="${encodeURIComponent(JSON.stringify(group.items.map(i => i.id)))}" onclick="mergeDupGroupFromBtn(this)" style="padding: 0.4rem 0.8rem; margin-top: 0.5rem; font-size: 0.85rem;">🔀 Merge duplicates</button>
                             </div>
                         `;
                     });
@@ -2675,7 +2675,7 @@
                                 <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
                                     ${group.items.map(item => `<li>${item.hostname || item.name} at Site ${item.siteId} (ID: ${item.id})</li>`).join('')}
                                 </ul>
-                                <button class="btn-secondary" onclick='mergeDupGroup("equipment", ${JSON.stringify(group.items.map(i => i.id))})' style="padding: 0.4rem 0.8rem; margin-top: 0.5rem; font-size: 0.85rem;">🔀 Merge duplicates</button>
+                                <button class="btn-secondary" data-entity="equipment" data-ids="${encodeURIComponent(JSON.stringify(group.items.map(i => i.id)))}" onclick="mergeDupGroupFromBtn(this)" style="padding: 0.4rem 0.8rem; margin-top: 0.5rem; font-size: 0.85rem;">🔀 Merge duplicates</button>
                             </div>
                         `;
                     });
@@ -2690,7 +2690,7 @@
                                 <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
                                     ${group.items.map(item => `<li>${item.circuitId} (ID: ${item.id})</li>`).join('')}
                                 </ul>
-                                <button class="btn-secondary" onclick='mergeDupGroup("circuit", ${JSON.stringify(group.items.map(i => i.id))})' style="padding: 0.4rem 0.8rem; margin-top: 0.5rem; font-size: 0.85rem;">🔀 Merge duplicates</button>
+                                <button class="btn-secondary" data-entity="circuit" data-ids="${encodeURIComponent(JSON.stringify(group.items.map(i => i.id)))}" onclick="mergeDupGroupFromBtn(this)" style="padding: 0.4rem 0.8rem; margin-top: 0.5rem; font-size: 0.85rem;">🔀 Merge duplicates</button>
                             </div>
                         `;
                     });
@@ -2719,7 +2719,7 @@
                                 <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
                                     ${group.items.map(item => `<li>${item.name} (ID: ${item.id})</li>`).join('')}
                                 </ul>
-                                <button class="btn-secondary" onclick='mergeDupGroup("fdp", ${JSON.stringify(group.items.map(i => i.id))})' style="padding: 0.4rem 0.8rem; margin-top: 0.5rem; font-size: 0.85rem;">🔀 Merge duplicates</button>
+                                <button class="btn-secondary" data-entity="fdp" data-ids="${encodeURIComponent(JSON.stringify(group.items.map(i => i.id)))}" onclick="mergeDupGroupFromBtn(this)" style="padding: 0.4rem 0.8rem; margin-top: 0.5rem; font-size: 0.85rem;">🔀 Merge duplicates</button>
                             </div>
                         `;
                     });
@@ -2833,9 +2833,19 @@
         }
 
         // Merge from the Duplicates page: present a target picker, merge all other items in the group into it
-        async function mergeDupGroup(entityType, itemIdsJson) {
+        async function mergeDupGroupFromBtn(btn) {
+            const entityType = btn.getAttribute('data-entity');
+            let ids;
+            try { ids = JSON.parse(decodeURIComponent(btn.getAttribute('data-ids') || '[]')); }
+            catch (e) { alert('Could not read duplicate group: ' + e.message); return; }
+            return mergeDupGroup(entityType, ids);
+        }
+
+        async function mergeDupGroup(entityType, idsOrJson) {
+            // accept either a parsed array or a JSON string (legacy)
+            const ids = Array.isArray(idsOrJson) ? idsOrJson : (typeof idsOrJson === 'string' ? JSON.parse(idsOrJson) : []);
+            const itemIdsJson = JSON.stringify(ids); // shim so old function body's variable name works
             try {
-                const ids = JSON.parse(itemIdsJson);
                 if (ids.length < 2) { alert('Need at least 2 items to merge.'); return; }
                 const labelFn = await (async () => {
                     if (entityType === 'site') { const all = await store.getSites(); return id => { const x = all.find(s => s.id === id); return x ? (x.name || x.location || x.address || id) + '  [' + id + ']' : id; }; }
