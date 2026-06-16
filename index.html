@@ -777,7 +777,7 @@
         // BUILD: 2024-05-19-23-00-TEMPLATE-LITERALS-FIXED
         // This timestamp forces browser to reload: 1747719600
         console.log('%c🔧 NetInventory Version: 2026-06-10-OTDR-PINPOINT', 'background: #8b5cf6; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;');
-        console.log('🔀 Site merge (preserve refs), 📄 fixed DLR print + view export + all prior!');
+        console.log('🔀 Merge on Duplicates page (all entity types, preserve refs) + all prior!');
         console.log('✅ Edit buttons ACTUALLY work now - template literals fixed!');
         console.log('🔢 Build timestamp: 1747719600');
         
@@ -2645,6 +2645,7 @@
                                 <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
                                     ${group.items.map(item => `<li>${item.name || item.location} (ID: ${item.id})</li>`).join('')}
                                 </ul>
+                                <button class="btn-secondary" onclick='mergeDupGroup("site", ${JSON.stringify(group.items.map(i => i.id))})' style="padding: 0.4rem 0.8rem; margin-top: 0.5rem; font-size: 0.85rem;">🔀 Merge duplicates</button>
                             </div>
                         `;
                     });
@@ -2659,6 +2660,7 @@
                                 <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
                                     ${group.items.map(item => `<li>${item.name} (ID: ${item.id})</li>`).join('')}
                                 </ul>
+                                <button class="btn-secondary" onclick='mergeDupGroup("rack", ${JSON.stringify(group.items.map(i => i.id))})' style="padding: 0.4rem 0.8rem; margin-top: 0.5rem; font-size: 0.85rem;">🔀 Merge duplicates</button>
                             </div>
                         `;
                     });
@@ -2673,6 +2675,7 @@
                                 <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
                                     ${group.items.map(item => `<li>${item.hostname || item.name} at Site ${item.siteId} (ID: ${item.id})</li>`).join('')}
                                 </ul>
+                                <button class="btn-secondary" onclick='mergeDupGroup("equipment", ${JSON.stringify(group.items.map(i => i.id))})' style="padding: 0.4rem 0.8rem; margin-top: 0.5rem; font-size: 0.85rem;">🔀 Merge duplicates</button>
                             </div>
                         `;
                     });
@@ -2687,6 +2690,7 @@
                                 <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
                                     ${group.items.map(item => `<li>${item.circuitId} (ID: ${item.id})</li>`).join('')}
                                 </ul>
+                                <button class="btn-secondary" onclick='mergeDupGroup("circuit", ${JSON.stringify(group.items.map(i => i.id))})' style="padding: 0.4rem 0.8rem; margin-top: 0.5rem; font-size: 0.85rem;">🔀 Merge duplicates</button>
                             </div>
                         `;
                     });
@@ -2715,6 +2719,7 @@
                                 <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
                                     ${group.items.map(item => `<li>${item.name} (ID: ${item.id})</li>`).join('')}
                                 </ul>
+                                <button class="btn-secondary" onclick='mergeDupGroup("fdp", ${JSON.stringify(group.items.map(i => i.id))})' style="padding: 0.4rem 0.8rem; margin-top: 0.5rem; font-size: 0.85rem;">🔀 Merge duplicates</button>
                             </div>
                         `;
                     });
@@ -2782,6 +2787,88 @@
             }
         }
 
+        // ===== Generic merge: move all references from source -> target, then delete source =====
+        // entityType: 'site' | 'rack' | 'equipment' | 'fdp' | 'nni' | 'circuit'
+        async function mergeRecord(entityType, sourceId, targetId, opts = {}) {
+            const [sites, racks, equipment, circuits, nnis, fdps] = await Promise.all([
+                store.getSites(), store.getRacks(), store.getEquipment(), store.getCircuits(), store.getNnis(), store.getFdps()
+            ]);
+            const refs = { count: 0 };
+            const moves = [];  // [{call, args}]
+            
+            if (entityType === 'site') {
+                racks.filter(r => r.siteId === sourceId).forEach(r => moves.push(() => store.updateRack(r.id, { siteId: targetId })));
+                equipment.filter(e => e.siteId === sourceId).forEach(e => moves.push(() => store.updateEquipment(e.id, { siteId: targetId })));
+                fdps.filter(f => f.siteId === sourceId).forEach(f => moves.push(() => store.updateFdp(f.id, { siteId: targetId })));
+                nnis.filter(n => n.siteId === sourceId).forEach(n => moves.push(() => store.updateNni(n.id, { siteId: targetId })));
+                circuits.filter(c => c.aLocationSiteId === sourceId).forEach(c => moves.push(() => store.updateCircuit(c.id, { aLocationSiteId: targetId })));
+                circuits.filter(c => c.zLocationSiteId === sourceId).forEach(c => moves.push(() => store.updateCircuit(c.id, { zLocationSiteId: targetId })));
+            } else if (entityType === 'rack') {
+                equipment.filter(e => e.rackId === sourceId).forEach(e => moves.push(() => store.updateEquipment(e.id, { rackId: targetId })));
+                fdps.filter(f => f.rackId === sourceId).forEach(f => moves.push(() => store.updateFdp(f.id, { rackId: targetId })));
+            } else if (entityType === 'equipment') {
+                equipment.filter(e => e.parentEquipmentID === sourceId).forEach(e => moves.push(() => store.updateEquipment(e.id, { parentEquipmentID: targetId })));
+                nnis.filter(n => n.equipmentID === sourceId).forEach(n => moves.push(() => store.updateNni(n.id, { equipmentID: targetId })));
+                circuits.filter(c => c.aEquipment === sourceId).forEach(c => moves.push(() => store.updateCircuit(c.id, { aEquipment: targetId })));
+                circuits.filter(c => c.zEquipment === sourceId).forEach(c => moves.push(() => store.updateCircuit(c.id, { zEquipment: targetId })));
+                circuits.filter(c => c.cpeEquipmentId === sourceId).forEach(c => moves.push(() => store.updateCircuit(c.id, { cpeEquipmentId: targetId })));
+            } else if (entityType === 'fdp') {
+                nnis.filter(n => n.fdpId === sourceId).forEach(n => moves.push(() => store.updateNni(n.id, { fdpId: targetId })));
+                circuits.filter(c => c.aFdp === sourceId).forEach(c => moves.push(() => store.updateCircuit(c.id, { aFdp: targetId })));
+                circuits.filter(c => c.zFdp === sourceId).forEach(c => moves.push(() => store.updateCircuit(c.id, { zFdp: targetId })));
+                circuits.filter(c => c.aEquipmentFdp === sourceId).forEach(c => moves.push(() => store.updateCircuit(c.id, { aEquipmentFdp: targetId })));
+                circuits.filter(c => c.zEquipmentFdp === sourceId).forEach(c => moves.push(() => store.updateCircuit(c.id, { zEquipmentFdp: targetId })));
+            } else if (entityType === 'nni') {
+                circuits.filter(c => c.aNni === sourceId).forEach(c => moves.push(() => store.updateCircuit(c.id, { aNni: targetId })));
+                circuits.filter(c => c.zNni === sourceId).forEach(c => moves.push(() => store.updateCircuit(c.id, { zNni: targetId })));
+            }
+            refs.count = moves.length;
+            if (opts.previewOnly) return refs;
+            
+            for (const m of moves) { try { await m(); } catch (e) { console.error('merge ref move failed', e); } }
+            // Delete source
+            const deleteFn = { site: 'deleteSite', rack: 'deleteRack', equipment: 'deleteEquipment', fdp: 'deleteFdp', nni: 'deleteNni', circuit: 'deleteCircuit' }[entityType];
+            if (deleteFn && store[deleteFn]) await store[deleteFn](sourceId);
+            return refs;
+        }
+
+        // Merge from the Duplicates page: present a target picker, merge all other items in the group into it
+        async function mergeDupGroup(entityType, itemIdsJson) {
+            try {
+                const ids = JSON.parse(itemIdsJson);
+                if (ids.length < 2) { alert('Need at least 2 items to merge.'); return; }
+                const labelFn = await (async () => {
+                    if (entityType === 'site') { const all = await store.getSites(); return id => { const x = all.find(s => s.id === id); return x ? (x.name || x.location || x.address || id) + '  [' + id + ']' : id; }; }
+                    if (entityType === 'rack') { const all = await store.getRacks(); return id => { const x = all.find(s => s.id === id); return x ? (x.name || id) + '  [' + id + ']' : id; }; }
+                    if (entityType === 'equipment') { const all = await store.getEquipment(); return id => { const x = all.find(s => s.id === id); return x ? (x.name || x.hostname || id) + '  [' + id + ']' : id; }; }
+                    if (entityType === 'fdp') { const all = await store.getFdps(); return id => { const x = all.find(s => s.id === id); return x ? (x.name || id) + '  [' + id + ']' : id; }; }
+                    if (entityType === 'nni') { const all = await store.getNnis(); return id => { const x = all.find(s => s.id === id); return x ? (x.name || id) + '  [' + id + ']' : id; }; }
+                    return id => id;
+                })();
+                const prompted = prompt('Merge duplicates — KEEP which one?\n\nPaste the ID of the record to KEEP. The others will be merged into it and deleted.\n\n' + ids.map(id => '  ' + labelFn(id)).join('\n'));
+                if (!prompted) return;
+                const keeper = prompted.trim();
+                if (!ids.includes(keeper)) { alert('That ID is not in the group.'); return; }
+                const sources = ids.filter(id => id !== keeper);
+                
+                // Preview total reference count
+                let totalRefs = 0;
+                for (const src of sources) { totalRefs += (await mergeRecord(entityType, src, keeper, { previewOnly: true })).count; }
+                if (!confirm('Merge ' + sources.length + ' duplicate(s) INTO ' + labelFn(keeper) + '?\n\nWill reassign ' + totalRefs + ' references and delete ' + sources.length + ' source record(s). This cannot be easily undone.')) return;
+                
+                let done = 0;
+                for (const src of sources) {
+                    await mergeRecord(entityType, src, keeper);
+                    done++;
+                }
+                alert('Merged ' + done + ' duplicate' + (done !== 1 ? 's' : '') + ' into the kept record.');
+                renderDuplicatesPage();
+            } catch (err) {
+                alert('Merge failed: ' + friendlyError(err));
+            }
+        }
+
+        // Legacy single-site merge (referenced nowhere now but kept harmlessly for back-compat)
         async function mergeSite(sourceId) {
             try {
                 const sites = await store.getSites();
@@ -2868,7 +2955,7 @@
                                                 <button onclick="viewSiteDetails('${site.id}')" class="btn-secondary" style="padding: 0.5rem 0.75rem; margin-right: 0.5rem;" title="View all assets at this site">👁️ View</button>
                                                 <button onclick="viewSitePhotos('${site.id}')" class="btn-secondary" style="padding: 0.5rem 0.75rem; margin-right: 0.5rem;" title="Site photos">📷 Photos</button>
                                                 <button onclick="editSiteById('${site.id}')"  class="btn-secondary" style="padding: 0.5rem 0.75rem; margin-right: 0.5rem;">Edit</button>
-                                                <button onclick="mergeSite('${site.id}')" class="btn-secondary" style="padding: 0.5rem 0.75rem; margin-right: 0.5rem;" title="Move this site's contents into another and delete the duplicate">🔀 Merge</button><button onclick="deleteSite('${site.id}')" class="btn-secondary" style="padding: 0.5rem 0.75rem; background: var(--danger);">Delete</button>
+                                                <button onclick="deleteSite('${site.id}')" class="btn-secondary" style="padding: 0.5rem 0.75rem; background: var(--danger);">Delete</button>
                                             </td>
                                         </tr>
                                     `).join('')
