@@ -806,7 +806,7 @@
         // BUILD: 2024-05-19-23-00-TEMPLATE-LITERALS-FIXED
         // This timestamp forces browser to reload: 1747719600
         console.log('%c🔧 NetInventory Version: 2026-06-10-OTDR-PINPOINT', 'background: #8b5cf6; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;');
-        console.log('🚀 Big update: Z-site create, CfaSourceText sync, CFA parser, per-VLAN, LMD field + all prior!');
+        console.log('🖨 Print DLR via popup window + SOQL fields actually added this time + all prior!');
         console.log('✅ Edit buttons ACTUALLY work now - template literals fixed!');
         console.log('🔢 Build timestamp: 1747719600');
         
@@ -8733,6 +8733,38 @@
             document.body.insertAdjacentHTML('beforeend', modalHTML);
         }
         
+        function printDlrModal() {
+            const modal = document.getElementById('universalViewModal');
+            if (!modal) { alert('No modal open to print.'); return; }
+            const content = modal.querySelector('.modal-content');
+            if (!content) { alert('Modal content not found.'); return; }
+            // Clone the modal content and strip interactive bits
+            const clone = content.cloneNode(true);
+            clone.querySelectorAll('button, .close-btn, .modal-footer').forEach(el => el.remove());
+            // Open a new window with just the content
+            const w = window.open('', '_blank', 'width=800,height=600');
+            if (!w) { alert('Please allow popups for this site to print.'); return; }
+            w.document.write(`<!DOCTYPE html><html><head><title>Print DLR</title>
+                <style>
+                    @page { size: letter; margin: 0.5in; }
+                    body { font-family: 'Outfit', sans-serif; color: black; background: white; padding: 0; margin: 0; line-height: 1.4; }
+                    h1, h2, h3, h4 { color: black; margin: 0.5em 0 0.3em 0; }
+                    a { color: black; text-decoration: none; }
+                    button { display: none; }
+                    .badge, [class*="badge"] { display: inline-block; padding: 2px 6px; border: 1px solid #999; border-radius: 4px; font-size: 0.85em; }
+                    table { border-collapse: collapse; width: 100%; margin: 0.5em 0; }
+                    th, td { border: 1px solid #ccc; padding: 4px 8px; text-align: left; font-size: 0.9em; }
+                    pre { white-space: pre-wrap; word-wrap: break-word; font-family: 'Courier New', monospace; font-size: 0.85em; background: #f5f5f5; padding: 0.5em; border: 1px solid #ddd; }
+                    .modal-header { border-bottom: 2px solid black; padding-bottom: 0.5em; margin-bottom: 1em; }
+                    div { color: black !important; background: white !important; }
+                </style>
+            </head><body></body></html>`);
+            w.document.body.appendChild(clone);
+            w.document.close();
+            // Give layout a tick then print
+            setTimeout(() => { w.focus(); w.print(); }, 250);
+        }
+
         function closeViewModal() {
             const modal = document.getElementById('universalViewModal');
             if (modal) modal.remove();
@@ -9553,7 +9585,7 @@
                             ` : ''}
                         </div>
                         <div style="padding: 1rem 1.5rem; border-top: 1px solid var(--border-color); display: flex; justify-content: space-between; gap: 1rem;">
-                            <button onclick="window.print()" class="btn-secondary">🖨️ Print DLR</button>
+                            <button onclick="printDlrModal()" class="btn-secondary">🖨️ Print DLR</button>
                             <button onclick="closeDLRModal()" class="btn-primary">Close</button>
                         </div>
                     </div>
