@@ -806,7 +806,7 @@
         // BUILD: 2024-05-19-23-00-TEMPLATE-LITERALS-FIXED
         // This timestamp forces browser to reload: 1747719600
         console.log('%c🔧 NetInventory Version: 2026-06-10-OTDR-PINPOINT', 'background: #8b5cf6; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;');
-        console.log('🖨 Print DLR via popup window + SOQL fields actually added this time + all prior!');
+        console.log('📋 _x000d_ → newlines, CFA section on DLR modal + print + all prior!');
         console.log('✅ Edit buttons ACTUALLY work now - template literals fixed!');
         console.log('🔢 Build timestamp: 1747719600');
         
@@ -9238,8 +9238,15 @@
         
         function stripHtmlWrap(s) {
             if (!s) return s;
-            // Strip Salesforce ExternalClass div wrappers and other simple HTML
-            return String(s).replace(/<div class="ExternalClass[^"]*">/g, '').replace(/<\/div>/g, '').replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '').trim();
+            return String(s)
+                .replace(/_x000d_/gi, '\n')
+                .replace(/\r\n/g, '\n')
+                .replace(/\r/g, '\n')
+                .replace(/<div class="ExternalClass[^"]*">/g, '')
+                .replace(/<\/div>/g, '')
+                .replace(/<br\s*\/?>/gi, '\n')
+                .replace(/<[^>]+>/g, '')
+                .trim();
         }
 
         async function viewCircuitDetails(circuitId) {
@@ -9583,7 +9590,13 @@
                             ${circuit.notes ? `
                                 <div style="margin-top: 2rem; padding: 1rem; background: var(--bg-tertiary); border-radius: 8px;">
                                     <div style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 1px;">NOTES</div>
-                                    <div style="color: var(--text-primary);">${circuit.notes}</div>
+                                    <div style="color: var(--text-primary); white-space: pre-wrap;">${stripHtmlWrap(circuit.notes) || '-'}</div>
+                                </div>
+                            ` : ''}
+                            ${circuit.cfaSourceText ? `
+                                <div style="margin-top: 2rem; padding: 1rem; background: var(--bg-tertiary); border-radius: 8px;">
+                                    <div style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 1px;">CFA / DLR (from Salesforce)</div>
+                                    <pre style="color: var(--text-primary); white-space: pre-wrap; font-family: 'JetBrains Mono', monospace; font-size: 0.85em; margin: 0;">${stripHtmlWrap(circuit.cfaSourceText)}</pre>
                                 </div>
                             ` : ''}
                         </div>
