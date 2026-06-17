@@ -585,15 +585,16 @@
         .modal-header { flex-wrap: wrap; gap: 0.4rem; }
         .port-zoom-controls { flex-wrap: wrap; }
 
-        /* === Print: render only the active view-details modal === */
+        /* === Print: render only the active universal view modal (visible state only) === */
         @media print {
             @page { size: letter; margin: 0.5in; }
-            body * { visibility: hidden !important; }
-            #universalViewModal, #universalViewModal * { visibility: visible !important; }
-            #universalViewModal { position: absolute !important; top: 0; left: 0; width: 100% !important; height: auto !important; background: white !important; color: black !important; padding: 0 !important; overflow: visible !important; }
-            #universalViewModal .modal-content { box-shadow: none !important; max-height: none !important; height: auto !important; overflow: visible !important; }
+            /* Hide siblings of the modal explicitly rather than recursive descendant hide */
+            body > *:not(.modal-overlay) { display: none !important; }
+            .modal-overlay { position: static !important; background: white !important; padding: 0 !important; }
+            .modal-overlay > .modal { box-shadow: none !important; max-height: none !important; height: auto !important; overflow: visible !important; width: 100% !important; max-width: 100% !important; border: none !important; }
             .modal-footer, .modal-close, button { display: none !important; }
             a { color: black !important; text-decoration: none !important; }
+            * { background: white !important; color: black !important; }
         }
 
         /* Disconnected circuit rows: hidden by default, shown when body has show-disco class */
@@ -777,7 +778,7 @@
         // BUILD: 2024-05-19-23-00-TEMPLATE-LITERALS-FIXED
         // This timestamp forces browser to reload: 1747719600
         console.log('%c🔧 NetInventory Version: 2026-06-10-OTDR-PINPOINT', 'background: #8b5cf6; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;');
-        console.log('🔧 VLAN/MTU/CPE-VLAN visible, CPE auto-link to Z-site + all prior!');
+        console.log('🩹 Print DLR fix, Z-site fallback by SF Id, HTML strip from Notes/VLANs + all prior!');
         console.log('✅ Edit buttons ACTUALLY work now - template literals fixed!');
         console.log('🔢 Build timestamp: 1747719600');
         
@@ -9034,6 +9035,12 @@
             return str;
         }
         
+        function stripHtmlWrap(s) {
+            if (!s) return s;
+            // Strip Salesforce ExternalClass div wrappers and other simple HTML
+            return String(s).replace(/<div class="ExternalClass[^"]*">/g, '').replace(/<\/div>/g, '').replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '').trim();
+        }
+
         async function viewCircuitDetails(circuitId) {
             const circuit = (await store.getCircuits()).find(c => c.id === circuitId);
             if (!circuit) {
@@ -9064,7 +9071,7 @@
                             { label: 'Status', value: circuit.status || '-' },
                             { label: 'Provider', value: circuit.provider || '-' },
                             { label: 'Bandwidth', value: circuit.bandwidth || '-' },
-                            { label: 'VLANs', value: circuit.circuitVlans || '-' },
+                            { label: 'VLANs', value: stripHtmlWrap(circuit.circuitVlans) || '-' },
                             { label: 'MTU', value: circuit.mtu || '-' },
                             { label: 'Customer', value: circuit.customer || '-' },
                             { label: 'SO Number', value: circuit.soNumber || '-' },
@@ -9073,7 +9080,7 @@
                             { label: 'Install Date', value: circuit.installDate || '-' },
                             { label: 'Activation Date', value: circuit.activationDate || '-' },
                             { label: 'Monthly Cost', value: circuit.monthlyCost ? `$${circuit.monthlyCost}` : '-' },
-                            { label: 'Notes', value: circuit.notes || '-' }
+                            { label: 'Notes', value: stripHtmlWrap(circuit.notes) || '-' }
                         ]
                     },
                     {
