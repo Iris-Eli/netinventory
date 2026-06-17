@@ -806,7 +806,7 @@
         // BUILD: 2024-05-19-23-00-TEMPLATE-LITERALS-FIXED
         // This timestamp forces browser to reload: 1747719600
         console.log('%c🔧 NetInventory Version: 2026-06-10-OTDR-PINPOINT', 'background: #8b5cf6; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;');
-        console.log('📋 _x000d_ → newlines, CFA section on DLR modal + print + all prior!');
+        console.log('🛠 Form save fixes — type lowercase, networkType default, vlanCount inferred, required tags eased + all prior!');
         console.log('✅ Edit buttons ACTUALLY work now - template literals fixed!');
         console.log('🔢 Build timestamp: 1747719600');
         
@@ -5626,7 +5626,7 @@
                         <label style="font-weight: 600; margin-bottom: 0.5rem; display: block;">Connection Type *</label>
                         <div style="display: flex; gap: 2rem;">
                             <label>
-                                <input type="radio" name="aConnectionType" value="fdp" required onchange="toggleConnectionFields('a')" >
+                                <input type="radio" name="aConnectionType" value="fdp" onchange="toggleConnectionFields('a')" >
                                 <span>FDP</span>
                             </label>
                             <label>
@@ -5722,7 +5722,7 @@
                     
                     <div class="form-group">
                         <label>Site *</label>
-                        <select name="zLocationSiteId" required id="circuitZSiteSelect" onchange="updateCircuitNniDropdowns('z'); updateCircuitFdpDropdowns('z'); updateCircuitEquipmentDropdown('z')">
+                        <select name="zLocationSiteId" id="circuitZSiteSelect" onchange="updateCircuitNniDropdowns('z'); updateCircuitFdpDropdowns('z'); updateCircuitEquipmentDropdown('z')">
                             <option value="">Select Site...</option>
                         </select>
                     </div>
@@ -5731,7 +5731,7 @@
                         <label style="font-weight: 600; margin-bottom: 0.5rem; display: block;">Connection Type *</label>
                         <div style="display: flex; gap: 2rem;">
                             <label>
-                                <input type="radio" name="zConnectionType" value="fdp" required onchange="toggleConnectionFields('z')" >
+                                <input type="radio" name="zConnectionType" value="fdp" onchange="toggleConnectionFields('z')" >
                                 <span>FDP</span>
                             </label>
                             <label>
@@ -7109,9 +7109,30 @@
             
             form.elements.circuitId.value = circuit.circuitId || '';
             form.elements.previousCircuitId.value = circuit.previousCircuitId || '';
-            if (circuit.direction) form.querySelector(`input[name="direction"][value="${circuit.direction}"]`).checked = true;
-            form.elements.type.value = circuit.type || '';
-            if (circuit.networkType) form.querySelector(`input[name="networkType"][value="${circuit.networkType}"]`).checked = true;
+            if (circuit.direction) {
+                const dirRadio = form.querySelector(`input[name="direction"][value="${circuit.direction}"]`);
+                if (dirRadio) dirRadio.checked = true;
+            }
+            // Defensive: SF-synced circuits may have uppercase or missing values; coerce to form-friendly values
+            const typeRaw = (circuit.type || '').toLowerCase();
+            form.elements.type.value = typeRaw || 'evpl';  // default EVPL since that's the common SF case
+            
+            // networkType: try the radio match, default to off-net if not present (most Type II circuits)
+            const ntRadio = circuit.networkType ? form.querySelector(`input[name="networkType"][value="${circuit.networkType}"]`) : null;
+            if (ntRadio) ntRadio.checked = true;
+            else {
+                // Default: off-net if there's a provider, else internal
+                const defaultNt = circuit.provider ? 'off-net' : 'internal';
+                const fallback = form.querySelector(`input[name="networkType"][value="${defaultNt}"]`);
+                if (fallback) fallback.checked = true;
+            }
+            
+            // vlanCount: infer from circuitVlans field
+            if (form.elements.vlanCount) {
+                const vlans = String(circuit.circuitVlans || '').split(',').filter(v => v.trim() && !/mgmt/i.test(v)).length;
+                form.elements.vlanCount.value = Math.max(1, vlans) + '';
+                if (typeof updateVlanSections === 'function') updateVlanSections();
+            }
             form.elements.provider.value = circuit.provider || '';
             if (form.elements.tunable) { form.elements.tunable.checked = circuit.tunable === 'yes'; toggleWavelengthField(); }
             if (form.elements.cpeEquipment) form.elements.cpeEquipment.value = circuit.cpeEquipmentId || '';
