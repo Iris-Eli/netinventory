@@ -8734,9 +8734,12 @@
         }
         
         function printDlrModal() {
-            const modal = document.getElementById('universalViewModal');
+            // Find any currently-open modal (universalViewModal, dlrModal, or anything else with .active)
+            let modal = document.querySelector('#dlrModal.active')
+                || document.querySelector('#universalViewModal.active')
+                || document.querySelector('.modal.active');
             if (!modal) { alert('No modal open to print.'); return; }
-            const content = modal.querySelector('.modal-content');
+            const content = modal.querySelector('.modal-content') || modal.querySelector('.modal-body') || modal.firstElementChild;
             if (!content) { alert('Modal content not found.'); return; }
             // Clone the modal content and strip interactive bits
             const clone = content.cloneNode(true);
