@@ -778,7 +778,7 @@
         // BUILD: 2024-05-19-23-00-TEMPLATE-LITERALS-FIXED
         // This timestamp forces browser to reload: 1747719600
         console.log('%c🔧 NetInventory Version: 2026-06-10-OTDR-PINPOINT', 'background: #8b5cf6; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;');
-        console.log('🩹 Print DLR fix, Z-site fallback by SF Id, HTML strip from Notes/VLANs + all prior!');
+        console.log('📂 KMZ folder shortcut + 🩹 Print DLR + Z-site fallback + all prior!');
         console.log('✅ Edit buttons ACTUALLY work now - template literals fixed!');
         console.log('🔢 Build timestamp: 1747719600');
         
@@ -11665,6 +11665,19 @@ ${entityActionButtons('nni', `${n.id}`, true)}
             });
         }
 
+        async function openKmzFolder() {
+            try {
+                const sp = await store.config();
+                const siteUrl = sp.spConfig?.routeMaps?.siteUrl || sp.spConfig?.siteUrl;
+                if (!siteUrl) { alert('SharePoint URL not configured.'); return; }
+                const lib = sp.spConfig?.routeMaps?.libraryName || 'NetInventoryRouteMaps';
+                window.open(`${siteUrl}/${lib}`, '_blank');
+            } catch (e) {
+                // Fallback: derive from any known URL on the page
+                window.open('https://iristransport.sharepoint.com/sites/EngineeringPriorities/NetInventoryRouteMaps', '_blank');
+            }
+        }
+
         // ============ KMZ/KML: upload to SharePoint + generate KML from route data ============
         async function uploadRouteKmz(routeId) {
             const input = document.createElement('input');
@@ -11855,6 +11868,7 @@ ${entityActionButtons('nni', `${n.id}`, true)}
                             <div style="display: flex; gap: 1rem;">
                                 <button class="btn-secondary" onclick="uploadRouteKmz('${routeId}')">🗺️ ${route.routeMapURL ? 'Replace' : 'Upload'} KMZ/KML</button>
                                 <button class="btn-secondary" onclick="downloadRouteMap('${routeId}')">⬇️ Download Map</button>
+                                <button class="btn-secondary" onclick="openKmzFolder()" title="Open SharePoint folder for KMZ files (manage / clean up old files)">📂 Open KMZ Folder</button>
                                 <button class="btn-secondary" onclick="editDarkFiberRoute('${routeId}')">Edit Route</button>
                                 <button class="btn-danger" onclick="deleteDarkFiberRoute('${routeId}')">Delete Route</button>
                             </div>
