@@ -585,16 +585,40 @@
         .modal-header { flex-wrap: wrap; gap: 0.4rem; }
         .port-zoom-controls { flex-wrap: wrap; }
 
-        /* === Print: render only the active universal view modal (visible state only) === */
+        /* === Print: render only the active universal view modal === */
         @media print {
             @page { size: letter; margin: 0.5in; }
-            /* Hide siblings of the modal explicitly rather than recursive descendant hide */
-            body > *:not(.modal-overlay) { display: none !important; }
-            .modal-overlay { position: static !important; background: white !important; padding: 0 !important; }
-            .modal-overlay > .modal { box-shadow: none !important; max-height: none !important; height: auto !important; overflow: visible !important; width: 100% !important; max-width: 100% !important; border: none !important; }
-            .modal-footer, .modal-close, button { display: none !important; }
-            a { color: black !important; text-decoration: none !important; }
-            * { background: white !important; color: black !important; }
+            /* Hide everything by default */
+            body * { visibility: hidden !important; }
+            /* But un-hide the open universal view modal and its children */
+            #universalViewModal, #universalViewModal * { visibility: visible !important; }
+            /* Position the modal as static print content */
+            #universalViewModal {
+                position: absolute !important;
+                top: 0 !important; left: 0 !important;
+                width: 100% !important; height: auto !important;
+                background: white !important;
+                color: black !important;
+                padding: 0 !important;
+                overflow: visible !important;
+                display: block !important;
+            }
+            #universalViewModal .modal-content,
+            #universalViewModal > div {
+                box-shadow: none !important;
+                max-height: none !important;
+                height: auto !important;
+                overflow: visible !important;
+                width: 100% !important;
+                max-width: 100% !important;
+                border: none !important;
+                background: white !important;
+                color: black !important;
+            }
+            #universalViewModal .modal-footer,
+            #universalViewModal .close-btn,
+            #universalViewModal button { display: none !important; }
+            #universalViewModal a { color: black !important; text-decoration: none !important; }
         }
 
         /* Disconnected circuit rows: hidden by default, shown when body has show-disco class */
@@ -778,7 +802,7 @@
         // BUILD: 2024-05-19-23-00-TEMPLATE-LITERALS-FIXED
         // This timestamp forces browser to reload: 1747719600
         console.log('%c🔧 NetInventory Version: 2026-06-10-OTDR-PINPOINT', 'background: #8b5cf6; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;');
-        console.log('📂 KMZ folder shortcut + 🩹 Print DLR + Z-site fallback + all prior!');
+        console.log('🚀 Big update: Z-site create, CfaSourceText sync, CFA parser, per-VLAN, LMD field + all prior!');
         console.log('✅ Edit buttons ACTUALLY work now - template literals fixed!');
         console.log('🔢 Build timestamp: 1747719600');
         
@@ -817,7 +841,7 @@
                 racks: { id: 'Title', name: 'RackID', siteId: 'SiteID', location: 'RackLocation', rackUnits: 'RackUnits', hasAC: 'HasAC', purchasedPowerAC: 'PurchasedPowerAC', hasDC: 'HasDC', purchasedPowerDC: 'PurchasedPowerDC', notes: 'Notes', soNumber: 'SONumber' },
                 equipment: { id: 'Title', name: 'EquipmentID', siteId: 'SiteID', rackId: 'RackID', manufacturer: 'Manufacturer', model: 'Model', type: 'EquipmentType', serialNumber: 'SerialNumber', rackUnits: 'RackUnits', rackPosition: 'RackPosition', powerType: 'PowerType', powerDraw: 'PowerDraw', maxPowerDraw: 'MaxPowerDraw', voltage: 'Voltage', weight: 'Weight', portConfig: 'PortConfig', installDate: 'InstallDate', notes: 'Notes', linePorts: 'LinePorts', lineCapacity: 'LineCapacity', lineWavelength: 'LineWavelength', parentEquipmentID: 'ParentEquipmentID', slotNumber: 'SlotNumber', mgmtIp: 'MgmtIP', mgmtSubnet: 'MgmtSubnet', mgmtGateway: 'MgmtGateway', soNumber: 'SONumber' },
                 fdps: { id: 'Title', name: 'FdpID', siteId: 'SiteID', mountingType: 'MountingType', rackId: 'RackID', location: 'FdpLocation', portCount: 'PortCount', connectorType: 'ConnectorType', type: 'FdpType', rackUnits: 'RackUnits', rackPosition: 'RackPosition', notes: 'Notes', soNumber: 'SONumber' },
-                circuits: { id: 'Title', circuitId: 'CircuitID', previousCircuitId: 'PreviousCircuitID', type: 'CircuitType', direction: 'Direction', networkType: 'NetworkType', provider: 'Provider', customer: 'Customer', bandwidth: 'Bandwidth', status: 'Status', circuitVlans: 'CircuitVLANs', aLocationSiteId: 'ALocationSiteID', aConnectionType: 'AConnectionType', aFdp: 'AFdp', aPort: 'APort', aEquipment: 'AEquipment', aEquipmentPort: 'AEquipmentPort', aEquipmentFdp: 'AEquipmentFdp', aEquipmentFdpPorts: 'AEquipmentFdpPorts', aNni: 'ANni', aNniSubinterface: 'ANniSubinterface', zLocationSiteId: 'ZLocationSiteID', zConnectionType: 'ZConnectionType', zFdp: 'ZFdp', zPort: 'ZPort', zEquipment: 'ZEquipment', zEquipmentPort: 'ZEquipmentPort', zEquipmentFdp: 'ZEquipmentFdp', zEquipmentFdpPorts: 'ZEquipmentFdpPorts', zNni: 'ZNni', zNniSubinterface: 'ZNniSubinterface', hasCpe: 'HasCpe', cpeType: 'CpeType', cpeMgmtIp: 'CpeMgmtIp', cpeMgmtSubnet: 'CpeMgmtSubnet', cpeMgmtGateway: 'CpeMgmtGateway', cpeMgmtVlan: 'CpeMgmtVLAN', additionalLocations: 'AdditionalLocations', notes: 'Notes', tunable: 'Tunable', wavelength: 'Wavelength', soNumber: 'SONumber', cpeEquipmentId: 'CpeEquipmentID', salesforceId: 'SalesforceID', syncStatus: 'SyncStatus', syncSource: 'SyncSource', mtu: 'MTU', irisUni: 'IrisUNI', irisEvc1: 'IrisEVC1', irisEvc2: 'IrisEVC2', assignedEngineer: 'AssignedEngineer', dueDate: 'DueDate', cfaPaths: 'CfaPaths', dlrText: 'DLRText' },
+                circuits: { id: 'Title', circuitId: 'CircuitID', previousCircuitId: 'PreviousCircuitID', type: 'CircuitType', direction: 'Direction', networkType: 'NetworkType', provider: 'Provider', customer: 'Customer', bandwidth: 'Bandwidth', status: 'Status', circuitVlans: 'CircuitVLANs', aLocationSiteId: 'ALocationSiteID', aConnectionType: 'AConnectionType', aFdp: 'AFdp', aPort: 'APort', aEquipment: 'AEquipment', aEquipmentPort: 'AEquipmentPort', aEquipmentFdp: 'AEquipmentFdp', aEquipmentFdpPorts: 'AEquipmentFdpPorts', aNni: 'ANni', aNniSubinterface: 'ANniSubinterface', zLocationSiteId: 'ZLocationSiteID', zConnectionType: 'ZConnectionType', zFdp: 'ZFdp', zPort: 'ZPort', zEquipment: 'ZEquipment', zEquipmentPort: 'ZEquipmentPort', zEquipmentFdp: 'ZEquipmentFdp', zEquipmentFdpPorts: 'ZEquipmentFdpPorts', zNni: 'ZNni', zNniSubinterface: 'ZNniSubinterface', hasCpe: 'HasCpe', cpeType: 'CpeType', cpeMgmtIp: 'CpeMgmtIp', cpeMgmtSubnet: 'CpeMgmtSubnet', cpeMgmtGateway: 'CpeMgmtGateway', cpeMgmtVlan: 'CpeMgmtVLAN', additionalLocations: 'AdditionalLocations', notes: 'Notes', tunable: 'Tunable', wavelength: 'Wavelength', soNumber: 'SONumber', cpeEquipmentId: 'CpeEquipmentID', salesforceId: 'SalesforceID', syncStatus: 'SyncStatus', syncSource: 'SyncSource', mtu: 'MTU', irisUni: 'IrisUNI', irisEvc1: 'IrisEVC1', irisEvc2: 'IrisEVC2', assignedEngineer: 'AssignedEngineer', dueDate: 'DueDate', cfaPaths: 'CfaPaths', dlrText: 'DLRText', cfaSourceText: 'CfaSourceText', salesforceModifiedDate: 'SalesforceModifiedDate' },
                 nnis: { id: 'Title', name: 'NniID', siteId: 'SiteID', equipmentID: 'EquipmentID', equipmentPorts: 'EquipmentPorts', fdpId: 'FdpID', fdpPorts: 'FdpPorts', direction: 'Direction', contact: 'Contact', description: 'Description', notes: 'Notes', soNumber: 'SONumber', salesforceId: 'SalesforceID', syncStatus: 'SyncStatus', syncSource: 'SyncSource', provider: 'Provider', nniStatus: 'NniStatus', bandwidth: 'Bandwidth' },
                 templates: { id: 'Title', name: 'TemplateName', manufacturer: 'Manufacturer', model: 'Model', type: 'EquipmentType', rackUnits: 'RackUnits', powerType: 'PowerType', powerDraw: 'PowerDraw', maxPowerDraw: 'MaxPowerDraw', voltage: 'Voltage', weight: 'Weight', portConfig: 'PortConfig', notes: 'Notes', linePorts: 'LinePorts', lineCapacity: 'LineCapacity' },
                 darkfiberroutes: { id: 'Title', routeName: 'RouteName', aLocationSiteId: 'ALocationSiteID', zLocationSiteId: 'ZLocationSiteID', totalDistance: 'TotalDistance', purpose: 'Purpose', equipmentType: 'EquipmentType', aEndEquipment: 'AEndEquipment', zEndEquipment: 'ZEndEquipment', status: 'Status', routeMapURL: 'RouteMapURL', installDate: 'InstallDate', lastVerified: 'LastVerified', notes: 'Notes', soNumber: 'SONumber' },
@@ -5877,7 +5901,7 @@
                     <div style="border: 1px solid var(--border-color); border-radius: 0.5rem; padding: 1rem; margin: 1rem 0;">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
                             <strong>📋 CFA / DLR Paths</strong>
-                            <button type="button" class="btn-secondary" onclick="addCfaPathRow()" style="padding: 0.3rem 0.7rem; font-size: 0.85rem;">➕ Add VLAN Path</button>
+                            <button type="button" class="btn-secondary" onclick="parseAndPopulateCfa()" style="padding: 0.3rem 0.7rem; font-size: 0.85rem; margin-right: 0.4rem;" title="Parse CFA text from Salesforce into structured rows">🔍 Parse CFA Notes</button><button type="button" class="btn-secondary" onclick="addCfaPathRow()" style="padding: 0.3rem 0.7rem; font-size: 0.85rem;">➕ Add VLAN Path</button>
                         </div>
                         <div style="font-size: 0.78rem; color: var(--text-tertiary); margin-bottom: 0.75rem;">One row per VLAN. Interfaces default from selected equipment ports (Arista: ≥100G gets /1, breakouts /1-/4 — edit as needed). The DLR text is generated from these on save.</div>
                         <div id="cfaPathRows"></div>
@@ -7407,6 +7431,144 @@
                 return { vlan: get('vlan'), aDevice: get('aDevice'), aInterface: get('aInterface'), transport: get('transport') || 'VPWS', zDevice: get('zDevice'), zInterface: get('zInterface'), isMgmt: get('isMgmt') };
             }).filter(p => p.vlan || p.aDevice || p.zDevice);
         }
+        // ===== CFA / DLR parser =====
+        // Returns { paths: [...], unresolved: [...], cpe: {...} } 
+        // Subinterface (.N) is authoritative for VLAN assignment per Eli's rule.
+        async function parseCfaText(text) {
+            if (!text || !text.trim()) return { paths: [], unresolved: [], cpe: null };
+            const equipment = await store.getEquipment();
+            const equipByName = Object.fromEntries(equipment.map(e => [String(e.name).toUpperCase(), e]));
+            
+            const lines = text.split(/\r?\n/).map(l => l.trim());
+            const paths = [];
+            const unresolved = new Set();
+            let cpe = null;
+            
+            // State machine: walk lines, detect VLAN blocks, gather device lines per VLAN
+            let currentVlan = null;
+            let currentIsMgmt = false;
+            let blockDevices = []; // [{ name, intf, vlanFromSubint }]
+            let transport = 'VPWS';
+            
+            function flushBlock() {
+                if (blockDevices.length === 0) return;
+                // VLAN authority: subinterface > block header
+                const vlan = blockDevices.find(d => d.vlanFromSubint)?.vlanFromSubint || currentVlan;
+                if (!vlan) return;
+                // Group into A→Z pair (first = A, last = Z; intermediate hops become notes)
+                const a = blockDevices[0];
+                const z = blockDevices[blockDevices.length - 1];
+                const path = {
+                    vlan: String(vlan),
+                    aDevice: a.name,
+                    aInterface: a.intf,
+                    transport: transport,
+                    zDevice: z.name,
+                    zInterface: z.intf,
+                    isMgmt: currentIsMgmt,
+                    _confidence: {
+                        a: equipByName[String(a.name).toUpperCase()] ? 'found' : 'missing',
+                        z: equipByName[String(z.name).toUpperCase()] ? 'found' : 'missing'
+                    }
+                };
+                if (!equipByName[String(a.name).toUpperCase()]) unresolved.add(a.name);
+                if (!equipByName[String(z.name).toUpperCase()]) unresolved.add(z.name);
+                paths.push(path);
+                blockDevices = [];
+            }
+            
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                if (!line) {
+                    // Empty line = end of block
+                    flushBlock();
+                    continue;
+                }
+                
+                // Detect VLAN header
+                const mVlan = line.match(/^(Shared\s+MGMT\s+VLAN|VLAN)\s+(\d+)\s*$/i);
+                if (mVlan) {
+                    flushBlock();
+                    currentVlan = mVlan[2];
+                    currentIsMgmt = /MGMT/i.test(mVlan[1]);
+                    transport = 'VPWS';
+                    continue;
+                }
+                
+                // Detect transport line
+                if (/^(VPWS|VPLS|SONET|MPLS|EVPL|EPL)$/i.test(line)) {
+                    transport = line.toUpperCase();
+                    continue;
+                }
+                
+                // Detect device + interface line: WHCKTNVW7281 ET43/1.1063
+                const mDev = line.match(/^([A-Z]{4,}[A-Z0-9]+)\s+(ET\S+|XE\S+|GE\S+|\d+\/\d+\S*)(?:\.(\d+))?\s*$/i);
+                if (mDev) {
+                    blockDevices.push({
+                        name: mDev[1],
+                        intf: mDev[2] + (mDev[3] ? '.' + mDev[3] : ''),
+                        vlanFromSubint: mDev[3] || null
+                    });
+                    continue;
+                }
+                
+                // Detect CPE block: a line like "3924" or "Ciena 3924" introducing it
+                const mCpe = line.match(/^(?:Ciena\s+)?(\d{4})\s*$/);
+                if (mCpe && !cpe) {
+                    cpe = { model: mCpe[1], ports: [] };
+                    continue;
+                }
+                if (cpe) {
+                    const mPort = line.match(/^Port\s+(\d+)\s*[\-:]\s*(.+)$/i);
+                    if (mPort) { cpe.ports.push({ port: mPort[1], role: mPort[2].trim() }); continue; }
+                    const mIp = line.match(/^MGMT\s+(IP|GW|Subnet):\s*(.+)$/i);
+                    if (mIp) { cpe[mIp[1].toLowerCase() === 'ip' ? 'mgmtIp' : mIp[1].toLowerCase() === 'gw' ? 'mgmtGateway' : 'mgmtSubnet'] = mIp[2].trim(); continue; }
+                }
+            }
+            flushBlock();
+            
+            return { paths, unresolved: Array.from(unresolved), cpe };
+        }
+        
+        // Wire the Parse CFA button + the rendered confidence badges back into the CFA Paths grid
+        async function parseAndPopulateCfa() {
+            const form = document.getElementById('circuitForm');
+            if (!form) return;
+            const id = editingCircuitId;
+            const circuit = id ? (await store.getCircuits()).find(c => c.id === id) : null;
+            const text = circuit?.cfaSourceText || prompt('No CfaSourceText synced yet. Paste DLR text to parse:');
+            if (!text) return;
+            
+            const result = await parseCfaText(text);
+            if (result.paths.length === 0) {
+                alert('Could not extract any VLAN paths. Make sure the DLR text follows the standard format (VLAN n / device intf.n / VPWS / device intf.n).');
+                return;
+            }
+            
+            // Clear existing CFA path rows
+            const wrap = document.getElementById('cfaPathRows');
+            if (wrap) wrap.innerHTML = '';
+            // Add each parsed row + a confidence badge before the row
+            for (const p of result.paths) {
+                addCfaPathRow(p);
+                const lastRow = wrap.lastChild;
+                if (lastRow) {
+                    const badge = document.createElement('div');
+                    const aBad = p._confidence.a === 'found' ? '✅' : '⚠️';
+                    const zBad = p._confidence.z === 'found' ? '✅' : '⚠️';
+                    badge.style.cssText = 'grid-column: 1/-1; font-size: 0.75rem; color: var(--text-tertiary); padding: 0.2rem 0 0 0.4rem;';
+                    badge.innerHTML = `Parsed VLAN ${p.vlan}: A ${aBad} ${p.aDevice}, Z ${zBad} ${p.zDevice}`;
+                    lastRow.insertBefore(badge, lastRow.firstChild);
+                }
+            }
+            
+            // CPE info — show what was parsed but don't auto-overwrite
+            let summary = `📋 Parsed ${result.paths.length} path${result.paths.length !== 1 ? 's' : ''} from CFA text.`;
+            if (result.unresolved.length) summary += `\n\n⚠️ ${result.unresolved.length} device name${result.unresolved.length !== 1 ? 's' : ''} not in inventory:\n  ${result.unresolved.join(', ')}\n\nReview each path and save to apply. Missing devices stay as text — engineer can create equipment records separately.`;
+            if (result.cpe) summary += `\n\nCPE detected: model ${result.cpe.model}, ${result.cpe.ports.length} port roles, mgmt IP ${result.cpe.mgmtIp || '?'}`;
+            alert(summary);
+        }
+        
         function generateCfaText(paths, cpe, circuit) {
             const blocks = [];
             paths.forEach(p => {
@@ -9080,7 +9242,8 @@
                             { label: 'Install Date', value: circuit.installDate || '-' },
                             { label: 'Activation Date', value: circuit.activationDate || '-' },
                             { label: 'Monthly Cost', value: circuit.monthlyCost ? `$${circuit.monthlyCost}` : '-' },
-                            { label: 'Notes', value: stripHtmlWrap(circuit.notes) || '-' }
+                            { label: 'Notes', value: stripHtmlWrap(circuit.notes) || '-' },
+                            { label: 'CFA (Salesforce raw)', value: (circuit.cfaSourceText || '-').substring(0, 500) + ((circuit.cfaSourceText || '').length > 500 ? '…' : '') }
                         ]
                     },
                     {
