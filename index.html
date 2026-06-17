@@ -806,7 +806,7 @@
         // BUILD: 2024-05-19-23-00-TEMPLATE-LITERALS-FIXED
         // This timestamp forces browser to reload: 1747719600
         console.log('%c🔧 NetInventory Version: 2026-06-10-OTDR-PINPOINT', 'background: #8b5cf6; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;');
-        console.log('🛠 Form save fixes — type lowercase, networkType default, vlanCount inferred, required tags eased + all prior!');
+        console.log('🪄 Parse CFA now fills A/Z fields, spawns per-VLAN sections, auto-creates missing equipment + all prior!');
         console.log('✅ Edit buttons ACTUALLY work now - template literals fixed!');
         console.log('🔢 Build timestamp: 1747719600');
         
@@ -7570,27 +7570,160 @@
                 return;
             }
             
-            // Clear existing CFA path rows
-            const wrap = document.getElementById('cfaPathRows');
-            if (wrap) wrap.innerHTML = '';
-            // Add each parsed row + a confidence badge before the row
+            // Separate non-mgmt paths (real VLANs) from mgmt paths
+            const dataPaths = result.paths.filter(p => !p.isMgmt);
+            const mgmtPaths = result.paths.filter(p => p.isMgmt);
+            
+            // ===== Helpers =====
+            const allEquipment = await store.getEquipment();
+            const eqByName = Object.fromEntries(allEquipment.map(e => [String(e.name).toUpperCase(), e]));
+            
+            // Auto-create missing equipment records (write to review queue via Notes for now)
+            const createdEquip = [];
             for (const p of result.paths) {
-                addCfaPathRow(p);
-                const lastRow = wrap.lastChild;
-                if (lastRow) {
-                    const badge = document.createElement('div');
-                    const aBad = p._confidence.a === 'found' ? '✅' : '⚠️';
-                    const zBad = p._confidence.z === 'found' ? '✅' : '⚠️';
-                    badge.style.cssText = 'grid-column: 1/-1; font-size: 0.75rem; color: var(--text-tertiary); padding: 0.2rem 0 0 0.4rem;';
-                    badge.innerHTML = `Parsed VLAN ${p.vlan}: A ${aBad} ${p.aDevice}, Z ${zBad} ${p.zDevice}`;
-                    lastRow.insertBefore(badge, lastRow.firstChild);
+                for (const devName of [p.aDevice, p.zDevice]) {
+                    if (!devName) continue;
+                    const key = String(devName).toUpperCase();
+                    if (eqByName[key]) continue;
+                    // Try to infer site from CLLI prefix (first 6-8 chars typically match a site CLLI)
+                    let inferredSiteId = null;
+                    try {
+                        const sites = await store.getSites();
+                        const clliMatch = String(devName).match(/^([A-Z]{4,8})/);
+                        if (clliMatch) {
+                            const clli = clliMatch[1].toUpperCase();
+                            const matchSite = sites.find(s => 
+                                String(s.name || '').toUpperCase().startsWith(clli) ||
+                                String(s.id || '').toUpperCase() === clli ||
+                                String(s.cidCode || '').toUpperCase() === clli
+                            );
+                            if (matchSite) inferredSiteId = matchSite.id;
+                        }
+                    } catch (e) {}
+                    
+                    try {
+                        const newEq = await store.createEquipment({
+                            name: devName,
+                            siteId: inferredSiteId || '',
+                            type: 'router',  // best guess; engineer corrects
+                            manufacturer: '',
+                            model: '',
+                            notes: `Auto-created from CFA parse on ${new Date().toLocaleString()}. Review and confirm site/type/model. Source circuit: ${circuit?.circuitId || '?'}`
+                        });
+                        eqByName[String(devName).toUpperCase()] = newEq;
+                        createdEquip.push({ name: devName, site: inferredSiteId, id: newEq.id });
+                    } catch (e) {
+                        console.error('Auto-create equipment failed:', devName, e);
+                    }
                 }
             }
             
-            // CPE info — show what was parsed but don't auto-overwrite
-            let summary = `📋 Parsed ${result.paths.length} path${result.paths.length !== 1 ? 's' : ''} from CFA text.`;
-            if (result.unresolved.length) summary += `\n\n⚠️ ${result.unresolved.length} device name${result.unresolved.length !== 1 ? 's' : ''} not in inventory:\n  ${result.unresolved.join(', ')}\n\nReview each path and save to apply. Missing devices stay as text — engineer can create equipment records separately.`;
-            if (result.cpe) summary += `\n\nCPE detected: model ${result.cpe.model}, ${result.cpe.ports.length} port roles, mgmt IP ${result.cpe.mgmtIp || '?'}`;
+            // ===== Populate CFA path grid (existing behavior) =====
+            const wrap = document.getElementById('cfaPathRows');
+            if (wrap) wrap.innerHTML = '';
+            for (const p of result.paths) {
+                addCfaPathRow(p);
+            }
+            
+            // ===== NEW: Set Number of VLANs and spawn per-VLAN sections =====
+            const numDataVlans = Math.max(1, dataPaths.length);
+            const vlanCountSel = form.elements.vlanCount;
+            if (vlanCountSel) {
+                vlanCountSel.value = String(numDataVlans);
+                if (typeof updateVlanSections === 'function') await updateVlanSections();
+            }
+            
+            // ===== Populate per-VLAN A/Z device fields for each data path =====
+            // Primary VLAN (index 0) populates legacy A-End/Z-End (only if blank)
+            // Additional VLANs populate vlan2_, vlan3_, ... sections
+            for (let i = 0; i < dataPaths.length; i++) {
+                const p = dataPaths[i];
+                const aEq = eqByName[String(p.aDevice).toUpperCase()];
+                const zEq = eqByName[String(p.zDevice).toUpperCase()];
+                
+                if (i === 0) {
+                    // Primary → legacy A/Z fields, only if blank
+                    if (form.elements.aEquipment && !form.elements.aEquipment.value && aEq) {
+                        form.elements.aEquipment.value = aEq.id;
+                        // Set A site to equipment's site if blank
+                        if (form.elements.aLocationSiteId && !form.elements.aLocationSiteId.value && aEq.siteId) {
+                            form.elements.aLocationSiteId.value = aEq.siteId;
+                            await updateCircuitNniDropdowns('a');
+                            await updateCircuitFdpDropdowns('a');
+                            if (typeof updateCircuitEquipmentDropdown === 'function') await updateCircuitEquipmentDropdown('a');
+                            form.elements.aEquipment.value = aEq.id;
+                        }
+                        // Select equipment connection type
+                        const aEquipRadio = form.querySelector('input[name="aConnectionType"][value="equipment"]');
+                        if (aEquipRadio && !form.querySelector('input[name="aConnectionType"]:checked')) {
+                            aEquipRadio.checked = true;
+                            if (typeof toggleConnectionFields === 'function') toggleConnectionFields('a');
+                        }
+                    }
+                    if (form.elements.zEquipment && !form.elements.zEquipment.value && zEq) {
+                        form.elements.zEquipment.value = zEq.id;
+                        if (form.elements.zLocationSiteId && !form.elements.zLocationSiteId.value && zEq.siteId) {
+                            form.elements.zLocationSiteId.value = zEq.siteId;
+                            await updateCircuitNniDropdowns('z');
+                            await updateCircuitFdpDropdowns('z');
+                            if (typeof updateCircuitEquipmentDropdown === 'function') await updateCircuitEquipmentDropdown('z');
+                            form.elements.zEquipment.value = zEq.id;
+                        }
+                        const zEquipRadio = form.querySelector('input[name="zConnectionType"][value="equipment"]');
+                        if (zEquipRadio && !form.querySelector('input[name="zConnectionType"]:checked')) {
+                            zEquipRadio.checked = true;
+                            if (typeof toggleConnectionFields === 'function') toggleConnectionFields('z');
+                        }
+                    }
+                    // Subinterface from VLAN
+                    if (form.elements.aNniSubinterface && !form.elements.aNniSubinterface.value) form.elements.aNniSubinterface.value = p.vlan;
+                } else {
+                    // Additional VLAN sections (vlan2_, vlan3_, ...)
+                    const vlanN = i + 1;
+                    const aEquipField = form.elements[`vlan${vlanN}_aEquipment`];
+                    const zEquipField = form.elements[`vlan${vlanN}_zEquipment`];
+                    if (aEquipField && aEq) aEquipField.value = aEq.id;
+                    if (zEquipField && zEq) zEquipField.value = zEq.id;
+                    // Switch connection-type radios to 'equipment' if equipment found
+                    if (aEq) {
+                        const r = form.querySelector(`input[name="vlan${vlanN}_aConnectionType"][value="equipment"]`);
+                        if (r) r.checked = true;
+                    }
+                    if (zEq) {
+                        const r = form.querySelector(`input[name="vlan${vlanN}_zConnectionType"][value="equipment"]`);
+                        if (r) r.checked = true;
+                    }
+                }
+            }
+            
+            // ===== CPE info — populate if blank =====
+            if (result.cpe) {
+                if (form.elements.hasCpe) form.elements.hasCpe.value = 'yes';
+                if (form.elements.cpeType && !form.elements.cpeType.value) form.elements.cpeType.value = 'Ciena ' + result.cpe.model;
+                if (form.elements.cpeMgmtIp && !form.elements.cpeMgmtIp.value && result.cpe.mgmtIp) form.elements.cpeMgmtIp.value = result.cpe.mgmtIp;
+                if (form.elements.cpeMgmtGateway && !form.elements.cpeMgmtGateway.value && result.cpe.mgmtGateway) form.elements.cpeMgmtGateway.value = result.cpe.mgmtGateway;
+                if (form.elements.cpeMgmtSubnet && !form.elements.cpeMgmtSubnet.value && result.cpe.mgmtSubnet) form.elements.cpeMgmtSubnet.value = result.cpe.mgmtSubnet;
+            }
+            
+            // ===== Mgmt VLAN handling =====
+            // If there's a mgmt path and CpeMgmtVlan is blank, write it
+            if (mgmtPaths.length && form.elements.cpeMgmtVlan && !form.elements.cpeMgmtVlan.value) {
+                form.elements.cpeMgmtVlan.value = mgmtPaths[0].vlan;
+            }
+            
+            // ===== Summary alert =====
+            let summary = `📋 Parsed ${result.paths.length} path${result.paths.length !== 1 ? 's' : ''} (${dataPaths.length} data + ${mgmtPaths.length} mgmt).\n\n`;
+            if (numDataVlans > 1) summary += `🔢 Set Number of VLANs to ${numDataVlans} — additional VLAN sections expanded below.\n\n`;
+            summary += `Primary VLAN ${dataPaths[0]?.vlan}: A=${dataPaths[0]?.aDevice} Z=${dataPaths[0]?.zDevice}\n`;
+            for (let i = 1; i < dataPaths.length; i++) {
+                summary += `VLAN ${dataPaths[i].vlan} (section ${i+1}): A=${dataPaths[i].aDevice} Z=${dataPaths[i].zDevice}\n`;
+            }
+            if (mgmtPaths.length) summary += `\nMgmt VLAN ${mgmtPaths[0].vlan}: A=${mgmtPaths[0].aDevice} Z=${mgmtPaths[0].zDevice}\n`;
+            if (createdEquip.length) {
+                summary += `\n🆕 Auto-created ${createdEquip.length} equipment record${createdEquip.length !== 1 ? 's' : ''} for review:\n  ${createdEquip.map(e => e.name + (e.site ? ' (sited)' : ' (unsited)')).join(', ')}\n\nReview these on the Equipment page and confirm type/model/site.`;
+            }
+            if (result.unresolved.length && !createdEquip.length) summary += `\n⚠️ Some devices remain unresolved: ${result.unresolved.join(', ')}\n`;
+            if (result.cpe) summary += `\n📦 CPE info populated from DLR.`;
             alert(summary);
         }
         
