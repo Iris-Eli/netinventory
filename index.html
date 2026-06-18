@@ -806,7 +806,7 @@
         // BUILD: 2024-05-19-23-00-TEMPLATE-LITERALS-FIXED
         // This timestamp forces browser to reload: 1747719600
         console.log('%c🔧 NetInventory Version: 2026-06-10-OTDR-PINPOINT', 'background: #8b5cf6; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;');
-        console.log('🪄 Parse CFA now fills A/Z fields, spawns per-VLAN sections, auto-creates missing equipment + all prior!');
+        console.log('🪄 CPE-as-A/Z radio, Intermediate Locations moved after Z + all prior!');
         console.log('✅ Edit buttons ACTUALLY work now - template literals fixed!');
         console.log('🔢 Build timestamp: 1747719600');
         
@@ -5637,6 +5637,10 @@
                                 <input type="radio" name="aConnectionType" value="nni" onchange="toggleConnectionFields('a')" >
                                 <span>NNI</span>
                             </label>
+                            <label>
+                                <input type="radio" name="aConnectionType" value="cpe" onchange="toggleConnectionFields('a')" >
+                                <span>CPE</span>
+                            </label>
                         </div>
                     </div>
                     
@@ -5708,15 +5712,6 @@
                         </div>
                     </div>
                     
-                    <div id="additionalVlansContainer"></div>
-                    
-                    <div id="additionalLocationsSection" style="display: none;">
-                        <hr style="border: none; border-top: 1px solid var(--border-color); margin: 2rem 0;">
-                        <h3 style="color: var(--accent-primary); margin-bottom: 1rem;">Additional Locations</h3>
-                        <div id="additionalLocationsContainer"></div>
-                        <button type="button" class="btn-secondary" onclick="addAdditionalLocation()" style="margin-top: 1rem;">+ Add Location</button>
-                    </div>
-                    
                     <hr style="border: none; border-top: 1px solid var(--border-color); margin: 2rem 0;">
                     <h3 style="color: var(--accent-primary); margin-bottom: 1rem;">VLAN 1 - Z-Location (Destination)</h3>
                     
@@ -5741,6 +5736,10 @@
                             <label>
                                 <input type="radio" name="zConnectionType" value="nni" onchange="toggleConnectionFields('z')" >
                                 <span>NNI</span>
+                            </label>
+                            <label>
+                                <input type="radio" name="zConnectionType" value="cpe" onchange="toggleConnectionFields('z')" >
+                                <span>CPE</span>
                             </label>
                         </div>
                     </div>
@@ -5811,6 +5810,14 @@
                                 ⚠️ This subinterface is already in use on this NNI!
                             </div>
                         </div>
+                    </div>
+                    
+                    <div id="additionalLocationsSection" style="display: none;">
+                        <hr style="border: none; border-top: 1px solid var(--border-color); margin: 2rem 0;">
+                        <h3 style="color: var(--accent-primary); margin-bottom: 1rem;">Intermediate Locations (B, C, etc.)</h3>
+                        <div style="font-size: 0.85rem; color: var(--text-tertiary); margin-bottom: 0.75rem;">Waypoints between A and Z — for Type II handoffs and multi-segment paths.</div>
+                        <div id="additionalLocationsContainer"></div>
+                        <button type="button" class="btn-secondary" onclick="addAdditionalLocation()" style="margin-top: 1rem;">+ Add Location</button>
                     </div>
                     
                     <hr style="border: none; border-top: 1px solid var(--border-color); margin: 2rem 0;">
@@ -5905,7 +5912,7 @@
                     <div style="border: 1px solid var(--border-color); border-radius: 0.5rem; padding: 1rem; margin: 1rem 0;">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
                             <strong>📋 CFA / DLR Paths</strong>
-                            <button type="button" class="btn-secondary" onclick="parseAndPopulateCfa()" style="padding: 0.3rem 0.7rem; font-size: 0.85rem; margin-right: 0.4rem;" title="Parse CFA text from Salesforce into structured rows">🔍 Parse CFA Notes</button><button type="button" class="btn-secondary" onclick="addCfaPathRow()" style="padding: 0.3rem 0.7rem; font-size: 0.85rem;">➕ Add VLAN Path</button>
+                            <button type="button" class="btn-secondary" onclick="addCfaPathRow()" style="padding: 0.3rem 0.7rem; font-size: 0.85rem;">➕ Add VLAN Path</button>
                         </div>
                         <div style="font-size: 0.78rem; color: var(--text-tertiary); margin-bottom: 0.75rem;">One row per VLAN. Interfaces default from selected equipment ports (Arista: ≥100G gets /1, breakouts /1-/4 — edit as needed). The DLR text is generated from these on save.</div>
                         <div id="cfaPathRows"></div>
@@ -5948,11 +5955,32 @@
             const fdpFields = document.getElementById(`${location}FdpFields`);
             const equipmentFields = document.getElementById(`${location}EquipmentFields`);
             const nniFields = document.getElementById(`${location}NniFields`);
+            let cpeBanner = document.getElementById(`${location}CpeBanner`);
             
             if (fdpFields && equipmentFields && nniFields) {
                 fdpFields.style.display = connectionType === 'fdp' ? 'block' : 'none';
                 equipmentFields.style.display = connectionType === 'equipment' ? 'block' : 'none';
                 nniFields.style.display = connectionType === 'nni' ? 'block' : 'none';
+            }
+            
+            // CPE option: show an info banner and auto-select hasCpe = 'yes'
+            if (connectionType === 'cpe') {
+                if (!cpeBanner) {
+                    cpeBanner = document.createElement('div');
+                    cpeBanner.id = `${location}CpeBanner`;
+                    cpeBanner.style.cssText = 'background: #e3f2fd; border-left: 4px solid #2196F3; padding: 0.75rem 1rem; margin: 0.75rem 0; border-radius: 4px; font-size: 0.9rem;';
+                    cpeBanner.innerHTML = '📱 <strong>CPE selected:</strong> Configure the device in the Customer Premises Equipment section below — it will be used as the ' + location.toUpperCase() + '-end equipment.';
+                    if (nniFields && nniFields.parentNode) nniFields.parentNode.insertBefore(cpeBanner, nniFields.nextSibling);
+                }
+                cpeBanner.style.display = 'block';
+                // Auto-select hasCpe = yes if not already set
+                const cpeYesRadio = document.querySelector('input[name="hasCpe"][value="yes"]');
+                if (cpeYesRadio && !document.querySelector('input[name="hasCpe"]:checked')?.value || document.querySelector('input[name="hasCpe"]:checked')?.value === 'no') {
+                    cpeYesRadio.checked = true;
+                    if (typeof toggleCpeFields === 'function') toggleCpeFields();
+                }
+            } else if (cpeBanner) {
+                cpeBanner.style.display = 'none';
             }
         }
         
@@ -7002,6 +7030,8 @@
         async function openAddCircuitModal() {
             editingCircuitId = null;
             additionalLocationCounter = 0;
+            const _addForm = document.getElementById('circuitForm');
+            if (_addForm) delete _addForm.dataset.editingCircuitId;
             document.getElementById('circuitModalTitle').textContent = 'Add Circuit';
             document.getElementById('circuitForm').reset();
             
@@ -7069,6 +7099,7 @@
             additionalLocationCounter = 0;
             document.getElementById('circuitModalTitle').textContent = 'Edit Circuit';
             const form = document.getElementById('circuitForm');
+            form.dataset.editingCircuitId = circuit.id;  // survives global var resets
             
             const sites = await store.getSites();
             const siteOptions = '<option value="">Select Site...</option>' + sites.map(site => `<option value="${site.id}">${(site.name || site.location || '(unnamed)') + (site.address ? ' — ' + site.address.split(',')[0] : '') + (site.name && site.cidCode ? ' [' + site.cidCode + ']' : '')}</option>`).join('');
@@ -7140,7 +7171,11 @@
             
             // A-Location
             form.elements.aLocationSiteId.value = circuit.aLocationSiteId || '';
-            if (circuit.aConnectionType) form.querySelector(`input[name="aConnectionType"][value="${circuit.aConnectionType}"]`).checked = true;
+            if (circuit.aConnectionType) {
+                const r = form.querySelector(`input[name="aConnectionType"][value="${circuit.aConnectionType}"]`);
+                if (r) r.checked = true;
+                toggleConnectionFields('a');
+            }
             
             // Update dropdowns based on selected site
             if (circuit.aLocationSiteId) {
@@ -7157,7 +7192,11 @@
             
             // Z-Location
             form.elements.zLocationSiteId.value = circuit.zLocationSiteId || '';
-            if (circuit.zConnectionType) form.querySelector(`input[name="zConnectionType"][value="${circuit.zConnectionType}"]`).checked = true;
+            if (circuit.zConnectionType) {
+                const r = form.querySelector(`input[name="zConnectionType"][value="${circuit.zConnectionType}"]`);
+                if (r) r.checked = true;
+                toggleConnectionFields('z');
+            }
             
             // Update dropdowns based on selected site
             if (circuit.zLocationSiteId) {
@@ -7399,6 +7438,8 @@
             document.getElementById('circuitModal').classList.remove('active');
             editingCircuitId = null;
             additionalLocationCounter = 0;
+            const _form = document.getElementById('circuitForm');
+            if (_form) delete _form.dataset.editingCircuitId;
         }
         
         // ===== CFA/DLR path grid =====
@@ -7806,6 +7847,9 @@
                 
                 // CPE
                 hasCpe: formData.get('hasCpe'),
+                // CPE-as-Z: if Z connection type is CPE, treat the linked CPE as Z equipment
+                ...(formData.get('zConnectionType') === 'cpe' && formData.get('cpeEquipment') ? { zEquipment: formData.get('cpeEquipment') } : {}),
+                ...(formData.get('aConnectionType') === 'cpe' && formData.get('cpeEquipment') ? { aEquipment: formData.get('cpeEquipment') } : {}),
                 cpeType: formData.get('cpeType') || '',
                 cpeMgmtIp: formData.get('cpeMgmtIp') || '',
                 cpeMgmtSubnet: formData.get('cpeMgmtSubnet') || '',
@@ -7969,8 +8013,20 @@
             } catch (gateErr) { console.error('DLR/gate error', gateErr); }
 
                 
-                if (editingCircuitId) {
-                    await store.updateCircuit(editingCircuitId, circuit);
+                // Resolve editing ID from form dataset OR global — form is authoritative
+                const formEditId = document.getElementById('circuitForm').dataset.editingCircuitId || editingCircuitId;
+                if (formEditId) {
+                    // Preserve fields that the form has no inputs for (synced/computed values must survive an edit)
+                    const prev = (await store.getCircuits()).find(c => c.id === formEditId) || {};
+                    const FIELDS_THE_FORM_DOES_NOT_OWN = ['mtu', 'customer', 'cfaSourceText', 'salesforceModifiedDate', 'salesforceId', 'syncStatus', 'syncSource', 'irisUni', 'irisEvc1', 'irisEvc2', 'assignedEngineer', 'dueDate', 'soNumber'];
+                    FIELDS_THE_FORM_DOES_NOT_OWN.forEach(field => {
+                        // Only preserve from prev if the form didn't explicitly populate this field
+                        // (form returns '' or undefined when there's no input element for that name)
+                        if ((circuit[field] === '' || circuit[field] === undefined || circuit[field] === null) && prev[field]) {
+                            circuit[field] = prev[field];
+                        }
+                    });
+                    await store.updateCircuit(formEditId, circuit);
                     alert('Circuit updated successfully!');
                 } else {
                     await store.addCircuit(circuit);
@@ -8744,6 +8800,10 @@
                             let v = d.value;
                             if (v === null || v === undefined) v = '';
                             if (typeof v === 'object') v = JSON.stringify(v);
+                            // decode HTML entities so JSON exports render cleanly in Excel
+                            if (typeof v === 'string' && v.includes('&quot;')) {
+                                v = v.replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&').replace(/&#123;/g, '{').replace(/&#125;/g, '}').replace(/&#58;/g, ':').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+                            }
                             o[d.label || '(field)'] = v;
                         });
                         rows = [o];
