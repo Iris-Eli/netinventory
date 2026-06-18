@@ -806,7 +806,7 @@
         // BUILD: 2024-05-19-23-00-TEMPLATE-LITERALS-FIXED
         // This timestamp forces browser to reload: 1747719600
         console.log('%c🔧 NetInventory Version: 2026-06-10-OTDR-PINPOINT', 'background: #8b5cf6; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;');
-        console.log('🩹 Restored VLAN 2 spawn, Intermediate Locations back between A/Z, CPE banner dark-theme + all prior!');
+        console.log('📐 Form order fixed (A→Z→VLANs→Inter→CPE), 🖨 Print Form button + all prior!');
         console.log('✅ Edit buttons ACTUALLY work now - template literals fixed!');
         console.log('🔢 Build timestamp: 1747719600');
         
@@ -5514,7 +5514,7 @@
         <div class="modal" id="circuitModal">
             <div class="modal-content" style="max-width: 900px; max-height: 90vh; overflow-y: auto;">
                 <div class="modal-header">
-                    <h2 id="circuitModalTitle">Add Circuit</h2>
+                    <h2 id="circuitModalTitle">Add Circuit</h2><button type="button" onclick="printDlrModal()" class="btn-secondary" style="margin-left: 1rem; padding: 0.3rem 0.7rem; font-size: 0.85rem;" title="Print or save this form as PDF">🖨 Print Form</button>
                     <button class="close-btn" onclick="closeCircuitModal()">&times;</button>
                 </div>
                 <form id="circuitForm" onsubmit="saveCircuit(event)">
@@ -5712,16 +5712,6 @@
                         </div>
                     </div>
                     
-                    <div id="additionalVlansContainer"></div>
-                    
-                    <div id="additionalLocationsSection" style="display: none;">
-                        <hr style="border: none; border-top: 1px solid var(--border-color); margin: 2rem 0;">
-                        <h3 style="color: var(--accent-primary); margin-bottom: 1rem;">Intermediate Locations (B, C, etc.)</h3>
-                        <div style="font-size: 0.85rem; color: var(--text-tertiary); margin-bottom: 0.75rem;">Waypoints between A and Z — for Type II handoffs and multi-segment paths.</div>
-                        <div id="additionalLocationsContainer"></div>
-                        <button type="button" class="btn-secondary" onclick="addAdditionalLocation()" style="margin-top: 1rem;">+ Add Location</button>
-                    </div>
-                    
                     <hr style="border: none; border-top: 1px solid var(--border-color); margin: 2rem 0;">
                     <h3 style="color: var(--accent-primary); margin-bottom: 1rem;">VLAN 1 - Z-Location (Destination)</h3>
                     
@@ -5820,6 +5810,16 @@
                                 ⚠️ This subinterface is already in use on this NNI!
                             </div>
                         </div>
+                    </div>
+                    
+                    <div id="additionalVlansContainer"></div>
+                    
+                    <div id="additionalLocationsSection" style="display: none;">
+                        <hr style="border: none; border-top: 1px solid var(--border-color); margin: 2rem 0;">
+                        <h3 style="color: var(--accent-primary); margin-bottom: 1rem;">Intermediate Locations (B, C, etc.)</h3>
+                        <div style="font-size: 0.85rem; color: var(--text-tertiary); margin-bottom: 0.75rem;">Waypoints between A and Z — for Type II handoffs and multi-segment paths.</div>
+                        <div id="additionalLocationsContainer"></div>
+                        <button type="button" class="btn-secondary" onclick="addAdditionalLocation()" style="margin-top: 1rem;">+ Add Location</button>
                     </div>
                     
                     <hr style="border: none; border-top: 1px solid var(--border-color); margin: 2rem 0;">
