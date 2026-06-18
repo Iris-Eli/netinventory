@@ -806,7 +806,7 @@
         // BUILD: 2024-05-19-23-00-TEMPLATE-LITERALS-FIXED
         // This timestamp forces browser to reload: 1747719600
         console.log('%c🔧 NetInventory Version: 2026-06-10-OTDR-PINPOINT', 'background: #8b5cf6; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;');
-        console.log('🪄 CPE-as-A/Z radio, Intermediate Locations moved after Z + all prior!');
+        console.log('🩹 Restored VLAN 2 spawn, Intermediate Locations back between A/Z, CPE banner dark-theme + all prior!');
         console.log('✅ Edit buttons ACTUALLY work now - template literals fixed!');
         console.log('🔢 Build timestamp: 1747719600');
         
@@ -5712,6 +5712,16 @@
                         </div>
                     </div>
                     
+                    <div id="additionalVlansContainer"></div>
+                    
+                    <div id="additionalLocationsSection" style="display: none;">
+                        <hr style="border: none; border-top: 1px solid var(--border-color); margin: 2rem 0;">
+                        <h3 style="color: var(--accent-primary); margin-bottom: 1rem;">Intermediate Locations (B, C, etc.)</h3>
+                        <div style="font-size: 0.85rem; color: var(--text-tertiary); margin-bottom: 0.75rem;">Waypoints between A and Z — for Type II handoffs and multi-segment paths.</div>
+                        <div id="additionalLocationsContainer"></div>
+                        <button type="button" class="btn-secondary" onclick="addAdditionalLocation()" style="margin-top: 1rem;">+ Add Location</button>
+                    </div>
+                    
                     <hr style="border: none; border-top: 1px solid var(--border-color); margin: 2rem 0;">
                     <h3 style="color: var(--accent-primary); margin-bottom: 1rem;">VLAN 1 - Z-Location (Destination)</h3>
                     
@@ -5812,17 +5822,9 @@
                         </div>
                     </div>
                     
-                    <div id="additionalLocationsSection" style="display: none;">
-                        <hr style="border: none; border-top: 1px solid var(--border-color); margin: 2rem 0;">
-                        <h3 style="color: var(--accent-primary); margin-bottom: 1rem;">Intermediate Locations (B, C, etc.)</h3>
-                        <div style="font-size: 0.85rem; color: var(--text-tertiary); margin-bottom: 0.75rem;">Waypoints between A and Z — for Type II handoffs and multi-segment paths.</div>
-                        <div id="additionalLocationsContainer"></div>
-                        <button type="button" class="btn-secondary" onclick="addAdditionalLocation()" style="margin-top: 1rem;">+ Add Location</button>
-                    </div>
-                    
                     <hr style="border: none; border-top: 1px solid var(--border-color); margin: 2rem 0;">
                     <h3 style="color: var(--accent-primary); margin-bottom: 1rem;">Customer Premises Equipment (CPE)</h3>
-                    <div style="background: #e3f2fd; border-left: 4px solid #2196F3; padding: 1rem; margin-bottom: 1rem; border-radius: 4px;">
+                    <div style="background: var(--bg-secondary); border-left: 4px solid var(--accent-primary); padding: 1rem; margin-bottom: 1rem; border-radius: 4px; color: var(--text-primary);">
                         <strong>🤖 Auto-Creation Enabled:</strong> When you select "Yes - CPE device", an equipment record will be automatically created at the Z location and linked to this circuit.
                     </div>
                     
@@ -5968,7 +5970,7 @@
                 if (!cpeBanner) {
                     cpeBanner = document.createElement('div');
                     cpeBanner.id = `${location}CpeBanner`;
-                    cpeBanner.style.cssText = 'background: #e3f2fd; border-left: 4px solid #2196F3; padding: 0.75rem 1rem; margin: 0.75rem 0; border-radius: 4px; font-size: 0.9rem;';
+                    cpeBanner.style.cssText = 'background: var(--bg-secondary); border-left: 4px solid var(--accent-primary); padding: 0.75rem 1rem; margin: 0.75rem 0; border-radius: 4px; font-size: 0.9rem; color: var(--text-primary);';
                     cpeBanner.innerHTML = '📱 <strong>CPE selected:</strong> Configure the device in the Customer Premises Equipment section below — it will be used as the ' + location.toUpperCase() + '-end equipment.';
                     if (nniFields && nniFields.parentNode) nniFields.parentNode.insertBefore(cpeBanner, nniFields.nextSibling);
                 }
