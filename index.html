@@ -5514,7 +5514,7 @@
         <div class="modal" id="circuitModal">
             <div class="modal-content" style="max-width: 900px; max-height: 90vh; overflow-y: auto;">
                 <div class="modal-header">
-                    <h2 id="circuitModalTitle">Add Circuit</h2><button type="button" onclick="printDlrModal()" class="btn-secondary" style="margin-left: 1rem; padding: 0.3rem 0.7rem; font-size: 0.85rem;" title="Print or save this form as PDF">🖨 Print Form</button>
+                    <h2 id="circuitModalTitle">Add Circuit</h2><span id="circuitBuildStamp" style="font-size: 0.7rem; color: var(--text-tertiary); margin-left: 0.5rem; font-weight: 400;">📐 v6.18-form-order</span><button type="button" onclick="printDlrModal()" class="btn-secondary" style="margin-left: 1rem; padding: 0.3rem 0.7rem; font-size: 0.85rem;" title="Print or save this form as PDF">🖨 Print Form</button>
                     <button class="close-btn" onclick="closeCircuitModal()">&times;</button>
                 </div>
                 <form id="circuitForm" onsubmit="saveCircuit(event)">
@@ -8976,12 +8976,23 @@
                     pre { white-space: pre-wrap; word-wrap: break-word; font-family: 'Courier New', monospace; font-size: 0.85em; background: #f5f5f5; padding: 0.5em; border: 1px solid #ddd; }
                     .modal-header { border-bottom: 2px solid black; padding-bottom: 0.5em; margin-bottom: 1em; }
                     div { color: black !important; background: white !important; }
+                    /* Page break friendliness */
+                    h1, h2, h3, h4 { page-break-after: avoid; }
+                    .form-group, label, fieldset { page-break-inside: avoid; }
+                    hr { page-break-after: avoid; margin: 1em 0; }
+                    /* Make sure no fixed/absolute positioning hides content */
+                    * { position: static !important; max-height: none !important; height: auto !important; overflow: visible !important; }
                 </style>
             </head><body></body></html>`);
             w.document.body.appendChild(clone);
             w.document.close();
-            // Give layout a tick then print
-            setTimeout(() => { w.focus(); w.print(); }, 250);
+            // Wait for deferred renders (dropdowns, conditionally-shown sections) before printing
+            setTimeout(() => { 
+                w.focus(); 
+                // Ensure body has finished layout before triggering print
+                w.document.body.offsetHeight; 
+                w.print(); 
+            }, 800);
         }
 
         function closeViewModal() {
