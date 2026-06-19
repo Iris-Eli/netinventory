@@ -806,7 +806,7 @@
         // BUILD: 2024-05-19-23-00-TEMPLATE-LITERALS-FIXED
         // This timestamp forces browser to reload: 1747719600
         console.log('%c🔧 NetInventory Version: 2026-06-10-OTDR-PINPOINT', 'background: #8b5cf6; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;');
-        console.log('📐 Form order fixed (A→Z→VLANs→Inter→CPE), 🖨 Print Form button + all prior!');
+        console.log('🏛 Customer/MTU as real inputs, VlanCount flat column, JSON now redundant for count + all prior!');
         console.log('✅ Edit buttons ACTUALLY work now - template literals fixed!');
         console.log('🔢 Build timestamp: 1747719600');
         
@@ -845,7 +845,7 @@
                 racks: { id: 'Title', name: 'RackID', siteId: 'SiteID', location: 'RackLocation', rackUnits: 'RackUnits', hasAC: 'HasAC', purchasedPowerAC: 'PurchasedPowerAC', hasDC: 'HasDC', purchasedPowerDC: 'PurchasedPowerDC', notes: 'Notes', soNumber: 'SONumber' },
                 equipment: { id: 'Title', name: 'EquipmentID', siteId: 'SiteID', rackId: 'RackID', manufacturer: 'Manufacturer', model: 'Model', type: 'EquipmentType', serialNumber: 'SerialNumber', rackUnits: 'RackUnits', rackPosition: 'RackPosition', powerType: 'PowerType', powerDraw: 'PowerDraw', maxPowerDraw: 'MaxPowerDraw', voltage: 'Voltage', weight: 'Weight', portConfig: 'PortConfig', installDate: 'InstallDate', notes: 'Notes', linePorts: 'LinePorts', lineCapacity: 'LineCapacity', lineWavelength: 'LineWavelength', parentEquipmentID: 'ParentEquipmentID', slotNumber: 'SlotNumber', mgmtIp: 'MgmtIP', mgmtSubnet: 'MgmtSubnet', mgmtGateway: 'MgmtGateway', soNumber: 'SONumber' },
                 fdps: { id: 'Title', name: 'FdpID', siteId: 'SiteID', mountingType: 'MountingType', rackId: 'RackID', location: 'FdpLocation', portCount: 'PortCount', connectorType: 'ConnectorType', type: 'FdpType', rackUnits: 'RackUnits', rackPosition: 'RackPosition', notes: 'Notes', soNumber: 'SONumber' },
-                circuits: { id: 'Title', circuitId: 'CircuitID', previousCircuitId: 'PreviousCircuitID', type: 'CircuitType', direction: 'Direction', networkType: 'NetworkType', provider: 'Provider', customer: 'Customer', bandwidth: 'Bandwidth', status: 'Status', circuitVlans: 'CircuitVLANs', aLocationSiteId: 'ALocationSiteID', aConnectionType: 'AConnectionType', aFdp: 'AFdp', aPort: 'APort', aEquipment: 'AEquipment', aEquipmentPort: 'AEquipmentPort', aEquipmentFdp: 'AEquipmentFdp', aEquipmentFdpPorts: 'AEquipmentFdpPorts', aNni: 'ANni', aNniSubinterface: 'ANniSubinterface', zLocationSiteId: 'ZLocationSiteID', zConnectionType: 'ZConnectionType', zFdp: 'ZFdp', zPort: 'ZPort', zEquipment: 'ZEquipment', zEquipmentPort: 'ZEquipmentPort', zEquipmentFdp: 'ZEquipmentFdp', zEquipmentFdpPorts: 'ZEquipmentFdpPorts', zNni: 'ZNni', zNniSubinterface: 'ZNniSubinterface', hasCpe: 'HasCpe', cpeType: 'CpeType', cpeMgmtIp: 'CpeMgmtIp', cpeMgmtSubnet: 'CpeMgmtSubnet', cpeMgmtGateway: 'CpeMgmtGateway', cpeMgmtVlan: 'CpeMgmtVLAN', additionalLocations: 'AdditionalLocations', notes: 'Notes', tunable: 'Tunable', wavelength: 'Wavelength', soNumber: 'SONumber', cpeEquipmentId: 'CpeEquipmentID', salesforceId: 'SalesforceID', syncStatus: 'SyncStatus', syncSource: 'SyncSource', mtu: 'MTU', irisUni: 'IrisUNI', irisEvc1: 'IrisEVC1', irisEvc2: 'IrisEVC2', assignedEngineer: 'AssignedEngineer', dueDate: 'DueDate', cfaPaths: 'CfaPaths', dlrText: 'DLRText', cfaSourceText: 'CfaSourceText', salesforceModifiedDate: 'SalesforceModifiedDate' },
+                circuits: { id: 'Title', circuitId: 'CircuitID', previousCircuitId: 'PreviousCircuitID', type: 'CircuitType', direction: 'Direction', networkType: 'NetworkType', provider: 'Provider', customer: 'Customer', bandwidth: 'Bandwidth', status: 'Status', circuitVlans: 'CircuitVLANs', aLocationSiteId: 'ALocationSiteID', aConnectionType: 'AConnectionType', aFdp: 'AFdp', aPort: 'APort', aEquipment: 'AEquipment', aEquipmentPort: 'AEquipmentPort', aEquipmentFdp: 'AEquipmentFdp', aEquipmentFdpPorts: 'AEquipmentFdpPorts', aNni: 'ANni', aNniSubinterface: 'ANniSubinterface', zLocationSiteId: 'ZLocationSiteID', zConnectionType: 'ZConnectionType', zFdp: 'ZFdp', zPort: 'ZPort', zEquipment: 'ZEquipment', zEquipmentPort: 'ZEquipmentPort', zEquipmentFdp: 'ZEquipmentFdp', zEquipmentFdpPorts: 'ZEquipmentFdpPorts', zNni: 'ZNni', zNniSubinterface: 'ZNniSubinterface', hasCpe: 'HasCpe', cpeType: 'CpeType', cpeMgmtIp: 'CpeMgmtIp', cpeMgmtSubnet: 'CpeMgmtSubnet', cpeMgmtGateway: 'CpeMgmtGateway', cpeMgmtVlan: 'CpeMgmtVLAN', additionalLocations: 'AdditionalLocations', notes: 'Notes', tunable: 'Tunable', wavelength: 'Wavelength', soNumber: 'SONumber', cpeEquipmentId: 'CpeEquipmentID', salesforceId: 'SalesforceID', syncStatus: 'SyncStatus', syncSource: 'SyncSource', mtu: 'MTU', vlanCount: 'VlanCount', irisUni: 'IrisUNI', irisEvc1: 'IrisEVC1', irisEvc2: 'IrisEVC2', assignedEngineer: 'AssignedEngineer', dueDate: 'DueDate', cfaPaths: 'CfaPaths', dlrText: 'DLRText', cfaSourceText: 'CfaSourceText', salesforceModifiedDate: 'SalesforceModifiedDate' },
                 nnis: { id: 'Title', name: 'NniID', siteId: 'SiteID', equipmentID: 'EquipmentID', equipmentPorts: 'EquipmentPorts', fdpId: 'FdpID', fdpPorts: 'FdpPorts', direction: 'Direction', contact: 'Contact', description: 'Description', notes: 'Notes', soNumber: 'SONumber', salesforceId: 'SalesforceID', syncStatus: 'SyncStatus', syncSource: 'SyncSource', provider: 'Provider', nniStatus: 'NniStatus', bandwidth: 'Bandwidth' },
                 templates: { id: 'Title', name: 'TemplateName', manufacturer: 'Manufacturer', model: 'Model', type: 'EquipmentType', rackUnits: 'RackUnits', powerType: 'PowerType', powerDraw: 'PowerDraw', maxPowerDraw: 'MaxPowerDraw', voltage: 'Voltage', weight: 'Weight', portConfig: 'PortConfig', notes: 'Notes', linePorts: 'LinePorts', lineCapacity: 'LineCapacity' },
                 darkfiberroutes: { id: 'Title', routeName: 'RouteName', aLocationSiteId: 'ALocationSiteID', zLocationSiteId: 'ZLocationSiteID', totalDistance: 'TotalDistance', purpose: 'Purpose', equipmentType: 'EquipmentType', aEndEquipment: 'AEndEquipment', zEndEquipment: 'ZEndEquipment', status: 'Status', routeMapURL: 'RouteMapURL', installDate: 'InstallDate', lastVerified: 'LastVerified', notes: 'Notes', soNumber: 'SONumber' },
@@ -5887,6 +5887,17 @@
                     
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
                         <div class="form-group">
+                            <label>Customer</label>
+                            <input type="text" name="customer" placeholder="e.g., Verizon Wireless, T-Mobile" title="The end customer this circuit serves (separate from Provider if a Type II circuit)">
+                        </div>
+                        <div class="form-group">
+                            <label>MTU</label>
+                            <input type="text" name="mtu" placeholder="e.g., 1500, 9000">
+                        </div>
+                    </div>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                        <div class="form-group">
                             <label>Bandwidth *</label>
                             <input type="text" name="bandwidth" required placeholder="e.g., 10G, 100M">
                         </div>
@@ -6183,6 +6194,11 @@
                                    onchange="toggleVlanConnectionFields(${vlanNum}, 'a')">
                             <span>NNI</span>
                         </label>
+                        <label>
+                            <input type="radio" name="vlan${vlanNum}_aConnectionType" value="cpe" 
+                                   onchange="toggleVlanConnectionFields(${vlanNum}, 'a')">
+                            <span>CPE</span>
+                        </label>
                     </div>
                 </div>
                 
@@ -6265,6 +6281,11 @@
                             <input type="radio" name="vlan${vlanNum}_zConnectionType" value="nni" 
                                    onchange="toggleVlanConnectionFields(${vlanNum}, 'z')">
                             <span>NNI</span>
+                        </label>
+                        <label>
+                            <input type="radio" name="vlan${vlanNum}_zConnectionType" value="cpe" 
+                                   onchange="toggleVlanConnectionFields(${vlanNum}, 'z')">
+                            <span>CPE</span>
                         </label>
                     </div>
                 </div>
@@ -6371,16 +6392,35 @@
         }
         
         // Toggle connection type fields for VLAN sections
-        function toggleVlanConnectionFields(vlanNum, end) {
-            const connectionType = document.querySelector(`input[name="vlan${vlanNum}_${end}ConnectionType"]:checked`)?.value;
-            const fdpFields = document.getElementById(`vlan${vlanNum}_${end === 'a' ? 'A' : 'Z'}FdpFields`);
-            const equipmentFields = document.getElementById(`vlan${vlanNum}_${end === 'a' ? 'A' : 'Z'}EquipmentFields`);
-            const nniFields = document.getElementById(`vlan${vlanNum}_${end === 'a' ? 'A' : 'Z'}NniFields`);
+        function toggleVlanConnectionFields(vlanNum, side) {
+            const connType = document.querySelector(`input[name="vlan${vlanNum}_${side}ConnectionType"]:checked`)?.value;
+            const fdpFields = document.getElementById(`vlan${vlanNum}_${side.toUpperCase()}FdpFields`);
+            const equipmentFields = document.getElementById(`vlan${vlanNum}_${side.toUpperCase()}EquipmentFields`);
+            const nniFields = document.getElementById(`vlan${vlanNum}_${side.toUpperCase()}NniFields`);
             
-            if (fdpFields && equipmentFields && nniFields) {
-                fdpFields.style.display = connectionType === 'fdp' ? 'block' : 'none';
-                equipmentFields.style.display = connectionType === 'equipment' ? 'block' : 'none';
-                nniFields.style.display = connectionType === 'nni' ? 'block' : 'none';
+            if (fdpFields) fdpFields.style.display = connType === 'fdp' ? 'block' : 'none';
+            if (equipmentFields) equipmentFields.style.display = connType === 'equipment' ? 'block' : 'none';
+            if (nniFields) nniFields.style.display = connType === 'nni' ? 'block' : 'none';
+            
+            // CPE: no sub-block, info banner only
+            let banner = document.getElementById(`vlan${vlanNum}_${side}_CpeBanner`);
+            if (connType === 'cpe') {
+                if (!banner) {
+                    banner = document.createElement('div');
+                    banner.id = `vlan${vlanNum}_${side}_CpeBanner`;
+                    banner.style.cssText = 'background: var(--bg-secondary); border-left: 4px solid var(--accent-primary); padding: 0.75rem 1rem; margin: 0.75rem 0; border-radius: 4px; font-size: 0.9rem; color: var(--text-primary);';
+                    banner.innerHTML = '📱 <strong>CPE selected for VLAN ' + vlanNum + ' ' + side.toUpperCase() + ':</strong> The CPE configured in the Customer Premises Equipment section will be used as this end\'s equipment.';
+                    if (nniFields && nniFields.parentNode) nniFields.parentNode.insertBefore(banner, nniFields.nextSibling);
+                }
+                banner.style.display = 'block';
+                // Auto-flip hasCpe
+                const cpeYes = document.querySelector('input[name="hasCpe"][value="yes"]');
+                if (cpeYes && !document.querySelector('input[name="hasCpe"]:checked')?.value || document.querySelector('input[name="hasCpe"]:checked')?.value === 'no') {
+                    cpeYes.checked = true;
+                    if (typeof toggleCpeFields === 'function') toggleCpeFields();
+                }
+            } else if (banner) {
+                banner.style.display = 'none';
             }
         }
         
@@ -7160,12 +7200,9 @@
                 if (fallback) fallback.checked = true;
             }
             
-            // vlanCount: infer from circuitVlans field
-            if (form.elements.vlanCount) {
-                const vlans = String(circuit.circuitVlans || '').split(',').filter(v => v.trim() && !/mgmt/i.test(v)).length;
-                form.elements.vlanCount.value = Math.max(1, vlans) + '';
-                if (typeof updateVlanSections === 'function') updateVlanSections();
-            }
+            // vlanCount: handled by the proper JSON-aware loader below.
+            // (Defensive default of 1 only if JSON parsing fails — the proper loader will overwrite.)
+            if (form.elements.vlanCount) form.elements.vlanCount.value = '1';
             form.elements.provider.value = circuit.provider || '';
             if (form.elements.tunable) { form.elements.tunable.checked = circuit.tunable === 'yes'; toggleWavelengthField(); }
             if (form.elements.cpeEquipment) form.elements.cpeEquipment.value = circuit.cpeEquipmentId || '';
@@ -7221,6 +7258,8 @@
             form.elements.cpeMgmtGateway.value = circuit.cpeMgmtGateway || '';
             form.elements.cpeMgmtVlan.value = circuit.cpeMgmtVlan || '';
             
+            if (form.elements.customer) form.elements.customer.value = circuit.customer || '';
+            if (form.elements.mtu) form.elements.mtu.value = circuit.mtu || '';
             form.elements.bandwidth.value = circuit.bandwidth || '';
             form.elements.status.value = circuit.status || 'active';
             if (form.elements.soNumber) form.elements.soNumber.value = circuit.soNumber || '';
@@ -7311,8 +7350,12 @@
                 try {
                     const vlans = JSON.parse(circuit.circuitVlans);
                     const vlanCountSelect = document.getElementById('vlanCountSelect');
-                    if (vlanCountSelect && vlans.length > 0) {
-                        vlanCountSelect.value = vlans.length.toString();
+                    // Prefer the explicit vlanCount column (flat, queryable, no JSON-parse-fail risk)
+                    const authoritativeCount = circuit.vlanCount && parseInt(circuit.vlanCount) > 0 
+                        ? parseInt(circuit.vlanCount) 
+                        : (vlans.length || 1);
+                    if (vlanCountSelect && authoritativeCount > 0) {
+                        vlanCountSelect.value = authoritativeCount.toString();
                         await updateVlanSections();
                         
                         // Populate VLAN 1 VLAN ID
@@ -7848,6 +7891,9 @@
                 zNniSubinterface: formData.get('zNniSubinterface') || '',
                 
                 // CPE
+                customer: formData.get('customer') || '',
+                mtu: formData.get('mtu') || '',
+                vlanCount: parseInt(formData.get('vlanCount')) || 1,
                 hasCpe: formData.get('hasCpe'),
                 // CPE-as-Z: if Z connection type is CPE, treat the linked CPE as Z equipment
                 ...(formData.get('zConnectionType') === 'cpe' && formData.get('cpeEquipment') ? { zEquipment: formData.get('cpeEquipment') } : {}),
@@ -7922,6 +7968,35 @@
                     zNniSubinterface: formData.get(`vlan${i}_zNniSubinterface`) || ''
                 };
                 vlans.push(vlan);
+            }
+            
+            // Preserve unrendered VLANs from the previous saved record (defensive against vlanCount-not-loaded bugs)
+            try {
+                if (editingCircuitId) {
+                    const prevCircuit = (await store.getCircuits()).find(c => c.id === editingCircuitId);
+                    if (prevCircuit && prevCircuit.circuitVlans) {
+                        let prevVlans = [];
+                        try { prevVlans = JSON.parse(prevCircuit.circuitVlans); } catch {}
+                        if (Array.isArray(prevVlans) && prevVlans.length > vlans.length) {
+                            const dropped = prevVlans.length - vlans.length;
+                            const confirmDrop = confirm(
+                                `⚠️ This circuit currently has ${prevVlans.length} VLAN(s) but the form shows only ${vlans.length}.\n\n` +
+                                `${dropped} VLAN(s) would be REMOVED:\n` +
+                                prevVlans.slice(vlans.length).map((v, i) => `  • VLAN ${vlans.length + i + 1}: ID ${v.vlanId || '(blank)'}`).join('\n') +
+                                `\n\nClick OK to actually remove them, or Cancel to keep them in place.`
+                            );
+                            if (!confirmDrop) {
+                                // Preserve the dropped VLANs at their original indices
+                                for (let i = vlans.length; i < prevVlans.length; i++) {
+                                    vlans.push(prevVlans[i]);
+                                }
+                                console.log('Preserved', prevVlans.length - vlans.length + dropped, 'VLAN(s) from prior save');
+                            }
+                        }
+                    }
+                }
+            } catch (preserveErr) {
+                console.warn('VLAN preserve check failed (non-fatal):', preserveErr);
             }
             
             // Store VLANs as JSON
@@ -8020,7 +8095,7 @@
                 if (formEditId) {
                     // Preserve fields that the form has no inputs for (synced/computed values must survive an edit)
                     const prev = (await store.getCircuits()).find(c => c.id === formEditId) || {};
-                    const FIELDS_THE_FORM_DOES_NOT_OWN = ['mtu', 'customer', 'cfaSourceText', 'salesforceModifiedDate', 'salesforceId', 'syncStatus', 'syncSource', 'irisUni', 'irisEvc1', 'irisEvc2', 'assignedEngineer', 'dueDate', 'soNumber'];
+                    const FIELDS_THE_FORM_DOES_NOT_OWN = ['cfaSourceText', 'salesforceModifiedDate', 'salesforceId', 'syncStatus', 'syncSource', 'irisUni', 'irisEvc1', 'irisEvc2', 'assignedEngineer', 'dueDate'];
                     FIELDS_THE_FORM_DOES_NOT_OWN.forEach(field => {
                         // Only preserve from prev if the form didn't explicitly populate this field
                         // (form returns '' or undefined when there's no input element for that name)
