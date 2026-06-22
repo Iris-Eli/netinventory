@@ -806,7 +806,7 @@
         // BUILD: 2024-05-19-23-00-TEMPLATE-LITERALS-FIXED
         // This timestamp forces browser to reload: 1747719600
         console.log('%c🔧 NetInventory Version: 2026-06-10-OTDR-PINPOINT', 'background: #8b5cf6; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;');
-        console.log('🔎 Site combobox (single-input filter+select) + all prior!');
+        console.log('🛣 Per-VLAN waypoints between A and Z + tunable upstream/downstream + all prior!');
         console.log('✅ Edit buttons ACTUALLY work now - template literals fixed!');
         console.log('🔢 Build timestamp: 1747719600');
         
@@ -5712,6 +5712,23 @@
                         </div>
                     </div>
                     
+                    <!-- Tunable optics for VLAN 1 A-end -->
+                    <div class="form-group" style="background: var(--bg-secondary); padding: 0.75rem; border-radius: 6px; margin-top: 0.75rem;">
+                        <label style="font-weight: 600; margin-bottom: 0.5rem; display: block;">🌈 Tunable Optics at A</label>
+                        <div style="display: grid; grid-template-columns: auto 1fr auto 1fr; gap: 0.5rem 1rem; align-items: center; font-size: 0.9em;">
+                            <label><input type="checkbox" name="vlan1_aTunableUpstream"> Upstream</label>
+                            <input type="text" name="vlan1_aWavelengthUpstream" placeholder="Wavelength (nm)" style="padding: 0.3rem 0.5rem;">
+                            <label><input type="checkbox" name="vlan1_aTunableDownstream"> Downstream</label>
+                            <input type="text" name="vlan1_aWavelengthDownstream" placeholder="Wavelength (nm)" style="padding: 0.3rem 0.5rem;">
+                        </div>
+                    </div>
+                    
+                    <!-- VLAN 1 Intermediate Locations (between A and Z, this VLAN only) -->
+                    <div style="margin: 1rem 0;">
+                        <div id="vlan1_intermediateContainer"></div>
+                        <button type="button" class="btn-secondary" onclick="addVlanIntermediateLocation(1)" style="margin-top: 0.5rem; padding: 0.4rem 0.8rem; font-size: 0.9em;">+ Add Intermediate Location to VLAN 1</button>
+                    </div>
+                    
                     <hr style="border: none; border-top: 1px solid var(--border-color); margin: 2rem 0;">
                     <h3 style="color: var(--accent-primary); margin-bottom: 1rem;">VLAN 1 - Z-Location (Destination)</h3>
                     
@@ -5814,12 +5831,15 @@
                     
                     <div id="additionalVlansContainer"></div>
                     
-                    <div id="additionalLocationsSection" style="display: none;">
-                        <hr style="border: none; border-top: 1px solid var(--border-color); margin: 2rem 0;">
-                        <h3 style="color: var(--accent-primary); margin-bottom: 1rem;">Intermediate Locations (B, C, etc.)</h3>
-                        <div style="font-size: 0.85rem; color: var(--text-tertiary); margin-bottom: 0.75rem;">Waypoints between A and Z — for Type II handoffs and multi-segment paths.</div>
-                        <div id="additionalLocationsContainer"></div>
-                        <button type="button" class="btn-secondary" onclick="addAdditionalLocation()" style="margin-top: 1rem;">+ Add Location</button>
+                    <!-- Tunable optics for VLAN 1 Z-end -->
+                    <div class="form-group" style="background: var(--bg-secondary); padding: 0.75rem; border-radius: 6px; margin-top: 0.75rem;">
+                        <label style="font-weight: 600; margin-bottom: 0.5rem; display: block;">🌈 Tunable Optics at Z</label>
+                        <div style="display: grid; grid-template-columns: auto 1fr auto 1fr; gap: 0.5rem 1rem; align-items: center; font-size: 0.9em;">
+                            <label><input type="checkbox" name="vlan1_zTunableUpstream"> Upstream</label>
+                            <input type="text" name="vlan1_zWavelengthUpstream" placeholder="Wavelength (nm)" style="padding: 0.3rem 0.5rem;">
+                            <label><input type="checkbox" name="vlan1_zTunableDownstream"> Downstream</label>
+                            <input type="text" name="vlan1_zWavelengthDownstream" placeholder="Wavelength (nm)" style="padding: 0.3rem 0.5rem;">
+                        </div>
                     </div>
                     
                     <hr style="border: none; border-top: 1px solid var(--border-color); margin: 2rem 0;">
@@ -6019,6 +6039,169 @@
         }
         
         let additionalLocationCounter = 0;
+        // Per-VLAN intermediate location helpers (Phase 1: JSON storage in AdditionalLocations)
+        const vlanIntermediateCounter = {}; // {vlanNum: counterValue}
+        
+        function addVlanIntermediateLocation(vlanNum, prefill) {
+            const container = document.getElementById(`vlan${vlanNum}_intermediateContainer`);
+            if (!container) { console.warn(`Container for VLAN ${vlanNum} intermediates not found`); return; }
+            vlanIntermediateCounter[vlanNum] = (vlanIntermediateCounter[vlanNum] || 0) + 1;
+            const idx = vlanIntermediateCounter[vlanNum];
+            const letter = String.fromCharCode(65 + idx); // B, C, D, E ...
+            
+            const card = document.createElement('div');
+            card.id = `vlan${vlanNum}_intermediate_${idx}`;
+            card.className = 'vlan-intermediate-card';
+            card.dataset.vlanNum = vlanNum;
+            card.dataset.locIdx = idx;
+            card.style.cssText = 'border: 1px dashed var(--accent-secondary); padding: 1rem; border-radius: 8px; margin: 0.75rem 0; position: relative; background: rgba(139, 92, 246, 0.04);';
+            card.innerHTML = `
+                <button type="button" onclick="document.getElementById('vlan${vlanNum}_intermediate_${idx}').remove()" 
+                        style="position: absolute; top: 0.5rem; right: 0.5rem; background: var(--danger); color: white; border: none; border-radius: 4px; padding: 0.2rem 0.5rem; font-size: 0.85em; cursor: pointer;">Remove</button>
+                <h5 style="margin: 0 0 0.75rem 0; color: var(--accent-secondary); font-size: 1em;">VLAN ${vlanNum} → ${letter}-Location (intermediate)</h5>
+                
+                <div class="form-group">
+                    <label style="font-size: 0.9em;">Site</label>
+                    <select id="vlan${vlanNum}_int${idx}_siteSelect" data-int-site="1">
+                        <option value="">Select Site...</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label style="font-size: 0.9em; font-weight: 600;">Connection Type</label>
+                    <div style="display: flex; gap: 1.5rem; font-size: 0.9em;">
+                        <label><input type="radio" name="vlan${vlanNum}_int${idx}_connectionType" value="fdp"> FDP</label>
+                        <label><input type="radio" name="vlan${vlanNum}_int${idx}_connectionType" value="nni"> NNI</label>
+                    </div>
+                </div>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+                    <div class="form-group">
+                        <label style="font-size: 0.9em;">NNI / FDP ID</label>
+                        <input type="text" name="vlan${vlanNum}_int${idx}_nniOrFdp" placeholder="ID...">
+                    </div>
+                    <div class="form-group">
+                        <label style="font-size: 0.9em;">Subinterface / Port</label>
+                        <input type="text" name="vlan${vlanNum}_int${idx}_subOrPort" placeholder="${vlanNum > 1 ? vlanNum : ''}">
+                    </div>
+                </div>
+                
+                <div class="form-group" style="background: var(--bg-primary); padding: 0.5rem 0.75rem; border-radius: 6px; margin-top: 0.5rem;">
+                    <label style="font-weight: 600; margin-bottom: 0.4rem; display: block; font-size: 0.85em;">🌈 Tunable Optics at ${letter}</label>
+                    <div style="display: grid; grid-template-columns: auto 1fr auto 1fr; gap: 0.4rem 0.75rem; align-items: center; font-size: 0.85em;">
+                        <label><input type="checkbox" name="vlan${vlanNum}_int${idx}_tunableUpstream"> Up</label>
+                        <input type="text" name="vlan${vlanNum}_int${idx}_wavelengthUpstream" placeholder="nm" style="padding: 0.25rem 0.4rem;">
+                        <label><input type="checkbox" name="vlan${vlanNum}_int${idx}_tunableDownstream"> Down</label>
+                        <input type="text" name="vlan${vlanNum}_int${idx}_wavelengthDownstream" placeholder="nm" style="padding: 0.25rem 0.4rem;">
+                    </div>
+                </div>
+            `;
+            container.appendChild(card);
+            
+            // Populate site dropdown
+            const sites = window._sitesCache || [];
+            const siteSel = document.getElementById(`vlan${vlanNum}_int${idx}_siteSelect`);
+            if (siteSel && sites.length) {
+                const opts = sites.map(s => `<option value="${s.id}">${(s.name || s.location || '(unnamed)') + (s.address ? ' — ' + s.address.split(',')[0] : '')}</option>`).join('');
+                siteSel.innerHTML = '<option value="">Select Site...</option>' + opts;
+            }
+            // Attach combobox
+            if (siteSel) attachSiteCombobox(siteSel.id);
+            
+            // Apply prefill
+            if (prefill) {
+                if (siteSel && prefill.siteId) { siteSel.value = prefill.siteId; syncSiteComboInput(siteSel.id); }
+                if (prefill.connectionType) {
+                    const r = card.querySelector(`input[name="vlan${vlanNum}_int${idx}_connectionType"][value="${prefill.connectionType}"]`);
+                    if (r) r.checked = true;
+                }
+                ['nniOrFdp', 'subOrPort', 'wavelengthUpstream', 'wavelengthDownstream'].forEach(f => {
+                    const el = card.querySelector(`[name="vlan${vlanNum}_int${idx}_${f}"]`);
+                    if (el && prefill[f] != null) el.value = prefill[f];
+                });
+                ['tunableUpstream', 'tunableDownstream'].forEach(f => {
+                    const el = card.querySelector(`[name="vlan${vlanNum}_int${idx}_${f}"]`);
+                    if (el && prefill[f]) el.checked = !!prefill[f];
+                });
+            }
+        }
+        
+        // Serialize all per-VLAN intermediates + per-end tunable to an object suitable for JSON storage
+        function serializePerVlanWaypoints(form) {
+            const data = { waypoints: {}, tunable: {} };
+            // Per-VLAN waypoints
+            document.querySelectorAll('.vlan-intermediate-card').forEach(card => {
+                const vNum = card.dataset.vlanNum;
+                const idx = card.dataset.locIdx;
+                const get = field => { const el = card.querySelector(`[name="vlan${vNum}_int${idx}_${field}"]`); return el ? (el.type === 'checkbox' ? el.checked : el.value) : ''; };
+                const siteEl = document.getElementById(`vlan${vNum}_int${idx}_siteSelect`);
+                const entry = {
+                    siteId: siteEl ? siteEl.value : '',
+                    connectionType: get('connectionType'),
+                    nniOrFdp: get('nniOrFdp'),
+                    subOrPort: get('subOrPort'),
+                    tunableUpstream: get('tunableUpstream'),
+                    wavelengthUpstream: get('wavelengthUpstream'),
+                    tunableDownstream: get('tunableDownstream'),
+                    wavelengthDownstream: get('wavelengthDownstream'),
+                };
+                if (!data.waypoints[vNum]) data.waypoints[vNum] = [];
+                data.waypoints[vNum].push(entry);
+            });
+            // Per-end tunable for every VLAN — collect from form inputs vlanN_aTunable*, vlanN_zTunable*
+            const fd = new FormData(form);
+            const vlanCount = parseInt(fd.get('vlanCount')) || 1;
+            for (let v = 1; v <= vlanCount; v++) {
+                data.tunable[v] = {
+                    aUpstream: fd.get(`vlan${v}_aTunableUpstream`) === 'on',
+                    aWavelengthUpstream: fd.get(`vlan${v}_aWavelengthUpstream`) || '',
+                    aDownstream: fd.get(`vlan${v}_aTunableDownstream`) === 'on',
+                    aWavelengthDownstream: fd.get(`vlan${v}_aWavelengthDownstream`) || '',
+                    zUpstream: fd.get(`vlan${v}_zTunableUpstream`) === 'on',
+                    zWavelengthUpstream: fd.get(`vlan${v}_zWavelengthUpstream`) || '',
+                    zDownstream: fd.get(`vlan${v}_zTunableDownstream`) === 'on',
+                    zWavelengthDownstream: fd.get(`vlan${v}_zWavelengthDownstream`) || '',
+                };
+            }
+            return data;
+        }
+        
+        // Load waypoints + tunable back into the form
+        function loadPerVlanWaypoints(rawJson) {
+            if (!rawJson) return;
+            let data;
+            try { data = typeof rawJson === 'object' ? rawJson : safeParseJson(rawJson, null); } catch { return; }
+            if (!data) return;
+            // Tunable on per-end fields
+            if (data.tunable) {
+                Object.entries(data.tunable).forEach(([vNum, t]) => {
+                    const form = document.getElementById('circuitForm');
+                    if (!form) return;
+                    const set = (name, val, isCheckbox) => {
+                        const el = form.elements[name];
+                        if (!el) return;
+                        if (isCheckbox) el.checked = !!val;
+                        else el.value = val || '';
+                    };
+                    set(`vlan${vNum}_aTunableUpstream`, t.aUpstream, true);
+                    set(`vlan${vNum}_aWavelengthUpstream`, t.aWavelengthUpstream);
+                    set(`vlan${vNum}_aTunableDownstream`, t.aDownstream, true);
+                    set(`vlan${vNum}_aWavelengthDownstream`, t.aWavelengthDownstream);
+                    set(`vlan${vNum}_zTunableUpstream`, t.zUpstream, true);
+                    set(`vlan${vNum}_zWavelengthUpstream`, t.zWavelengthUpstream);
+                    set(`vlan${vNum}_zTunableDownstream`, t.zDownstream, true);
+                    set(`vlan${vNum}_zWavelengthDownstream`, t.zWavelengthDownstream);
+                });
+            }
+            // Waypoints
+            if (data.waypoints) {
+                Object.entries(data.waypoints).forEach(([vNum, list]) => {
+                    list.forEach(entry => addVlanIntermediateLocation(parseInt(vNum), entry));
+                });
+            }
+        }
+        
+        // Legacy single-section function (kept for back-compat — used by historic data)
         function addAdditionalLocation() {
             const container = document.getElementById('additionalLocationsContainer');
             const locationId = ++additionalLocationCounter;
@@ -6247,6 +6430,23 @@
                     </div>
                 </div>
                 
+                <!-- Tunable optics for VLAN ${vlanNum} A-end -->
+                <div class="form-group" style="background: var(--bg-secondary); padding: 0.75rem; border-radius: 6px; margin: 0.75rem 0;">
+                    <label style="font-weight: 600; margin-bottom: 0.5rem; display: block;">🌈 Tunable Optics at A (VLAN ${vlanNum})</label>
+                    <div style="display: grid; grid-template-columns: auto 1fr auto 1fr; gap: 0.5rem 1rem; align-items: center; font-size: 0.9em;">
+                        <label><input type="checkbox" name="vlan${vlanNum}_aTunableUpstream"> Upstream</label>
+                        <input type="text" name="vlan${vlanNum}_aWavelengthUpstream" placeholder="Wavelength (nm)" style="padding: 0.3rem 0.5rem;">
+                        <label><input type="checkbox" name="vlan${vlanNum}_aTunableDownstream"> Downstream</label>
+                        <input type="text" name="vlan${vlanNum}_aWavelengthDownstream" placeholder="Wavelength (nm)" style="padding: 0.3rem 0.5rem;">
+                    </div>
+                </div>
+                
+                <!-- VLAN ${vlanNum} Intermediate Locations -->
+                <div style="margin: 1rem 0;">
+                    <div id="vlan${vlanNum}_intermediateContainer"></div>
+                    <button type="button" class="btn-secondary" onclick="addVlanIntermediateLocation(${vlanNum})" style="margin-top: 0.5rem; padding: 0.4rem 0.8rem; font-size: 0.9em;">+ Add Intermediate Location to VLAN ${vlanNum}</button>
+                </div>
+                
                 <h4 style="color: var(--text-primary); margin: 1.5rem 0 1rem 0; font-size: 1.1rem;">VLAN ${vlanNum} - Z-Location (Destination)</h4>
                 
                 <div class="form-group">
@@ -6334,6 +6534,17 @@
                         </div>
                     </div>
                 </div>
+                
+                <!-- Tunable optics for VLAN ${vlanNum} Z-end -->
+                <div class="form-group" style="background: var(--bg-secondary); padding: 0.75rem; border-radius: 6px; margin: 0.75rem 0;">
+                    <label style="font-weight: 600; margin-bottom: 0.5rem; display: block;">🌈 Tunable Optics at Z (VLAN ${vlanNum})</label>
+                    <div style="display: grid; grid-template-columns: auto 1fr auto 1fr; gap: 0.5rem 1rem; align-items: center; font-size: 0.9em;">
+                        <label><input type="checkbox" name="vlan${vlanNum}_zTunableUpstream"> Upstream</label>
+                        <input type="text" name="vlan${vlanNum}_zWavelengthUpstream" placeholder="Wavelength (nm)" style="padding: 0.3rem 0.5rem;">
+                        <label><input type="checkbox" name="vlan${vlanNum}_zTunableDownstream"> Downstream</label>
+                        <input type="text" name="vlan${vlanNum}_zWavelengthDownstream" placeholder="Wavelength (nm)" style="padding: 0.3rem 0.5rem;">
+                    </div>
+                </div>
             `;
         }
         
@@ -6360,6 +6571,16 @@
             for (let i = 2; i <= vlanCount; i++) {
                 await populateVlanDropdowns(i);
             }
+        
+            // Attach comboboxes to every per-VLAN site select (idempotent — skips already-attached)
+            document.querySelectorAll('select[id^="vlan"][id$="SiteSelect"]').forEach(sel => {
+                attachSiteCombobox(sel.id);
+            });
+            // Sync any preloaded values
+            document.querySelectorAll('select[id^="vlan"][id$="SiteSelect"]').forEach(sel => {
+                syncSiteComboInput(sel.id);
+            });
+        
         }
         
         // Populate dropdowns for a VLAN section after it's created
@@ -7073,6 +7294,7 @@
             document.getElementById('circuitForm').reset();
             
             const sites = await store.getSites();
+            window._sitesCache = sites;  // for intermediate cards
             const siteOptions = '<option value="">Select Site...</option>' + sites.map(site => `<option value="${site.id}">${(site.name || site.location || '(unnamed)') + (site.address ? ' — ' + site.address.split(',')[0] : '') + (site.name && site.cidCode ? ' [' + site.cidCode + ']' : '')}</option>`).join('');
             document.getElementById('circuitASiteSelect').innerHTML = siteOptions;
             document.getElementById('circuitZSiteSelect').innerHTML = siteOptions;
@@ -7123,6 +7345,11 @@
             toggleConnectionFields('a');
             toggleConnectionFields('z');
             toggleCpeFields();
+            // Phase 1: Load per-VLAN waypoints + tunable from additionalLocations JSON
+            if (circuit.additionalLocations) {
+                const parsed = safeParseJson(circuit.additionalLocations, null);
+                if (parsed && (parsed.waypoints || parsed.tunable)) loadPerVlanWaypoints(parsed);
+            }
             
             document.getElementById('circuitModal').classList.add('active');
         }
@@ -7142,6 +7369,7 @@
             form.dataset.editingCircuitId = circuit.id;  // survives global var resets
             
             const sites = await store.getSites();
+            window._sitesCache = sites;  // for intermediate cards
             const siteOptions = '<option value="">Select Site...</option>' + sites.map(site => `<option value="${site.id}">${(site.name || site.location || '(unnamed)') + (site.address ? ' — ' + site.address.split(',')[0] : '') + (site.name && site.cidCode ? ' [' + site.cidCode + ']' : '')}</option>`).join('');
             document.getElementById('circuitASiteSelect').innerHTML = siteOptions;
             document.getElementById('circuitZSiteSelect').innerHTML = siteOptions;
@@ -7209,7 +7437,7 @@
             if (form.elements.wavelength) form.elements.wavelength.value = circuit.wavelength || '';
             
             // A-Location
-            form.elements.aLocationSiteId.value = circuit.aLocationSiteId || '';
+            form.elements.aLocationSiteId.value = circuit.aLocationSiteId || ''; syncSiteComboInput('circuitASiteSelect');
             if (circuit.aConnectionType) {
                 const r = form.querySelector(`input[name="aConnectionType"][value="${circuit.aConnectionType}"]`);
                 if (r) r.checked = true;
@@ -7230,7 +7458,7 @@
             form.elements.aNniSubinterface.value = circuit.aNniSubinterface || '';
             
             // Z-Location
-            form.elements.zLocationSiteId.value = circuit.zLocationSiteId || '';
+            form.elements.zLocationSiteId.value = circuit.zLocationSiteId || ''; syncSiteComboInput('circuitZSiteSelect');
             if (circuit.zConnectionType) {
                 const r = form.querySelector(`input[name="zConnectionType"][value="${circuit.zConnectionType}"]`);
                 if (r) r.checked = true;
@@ -7375,6 +7603,7 @@
                             const aSiteSelect = document.getElementById(`vlan${i}_ASiteSelect`);
                             if (aSiteSelect) {
                                 aSiteSelect.value = vlan.aLocationSiteId || '';
+                                syncSiteComboInput(`vlan${i}_ASiteSelect`);
                                 await updateVlanDropdowns(i, 'a');
                             }
                             
@@ -7423,7 +7652,7 @@
                             
                             const zSiteSelect = document.getElementById(`vlan${i}_ZSiteSelect`);
                             if (zSiteSelect) {
-                                zSiteSelect.value = vlan.zLocationSiteId || '';
+                                zSiteSelect.value = vlan.zLocationSiteId || ''; syncSiteComboInput(`vlan${i}_ZSiteSelect`);
                                 await updateVlanDropdowns(i, 'z');
                             }
                             
@@ -7960,7 +8189,7 @@
                 cpeMgmtVlan: formData.get('cpeMgmtVlan') || '',
                 
                 soNumber: formData.get('soNumber') || '', notes: formData.get('notes') || '',
-                additionalLocations: ''
+                additionalLocations: JSON.stringify(serializePerVlanWaypoints(event.target))
             };
             
             // COLLECT MULTI-VLAN DATA
@@ -9796,9 +10025,20 @@
                 input.value = opt ? opt.text : '';
             });
             
+            // Expose input for external sync
+            select._comboInput = input;
+            
             // Initial sync
             const initialOpt = Array.from(select.options).find(o => o.value === select.value);
-            if (initialOpt) input.value = initialOpt.text;
+            input.value = initialOpt ? initialOpt.text : '';
+        }
+        
+        // Call after any programmatic select.value = '...' to keep the visible input in sync
+        function syncSiteComboInput(selectId) {
+            const select = document.getElementById(selectId);
+            if (!select || !select._comboInput) return;
+            const opt = Array.from(select.options).find(o => o.value === select.value);
+            select._comboInput.value = opt ? opt.text : '';
         }
         
         // Legacy filterSiteSelect shim (kept for any leftover callers)
