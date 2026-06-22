@@ -806,7 +806,7 @@
         // BUILD: 2024-05-19-23-00-TEMPLATE-LITERALS-FIXED
         // This timestamp forces browser to reload: 1747719600
         console.log('%c🔧 NetInventory Version: 2026-06-10-OTDR-PINPOINT', 'background: #8b5cf6; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;');
-        console.log('🔧 Intermediate equipment+lookups, global combobox, DLR per-VLAN paths + all prior!');
+        console.log('📡 CPE uplink/downlink port selectors + model-aware (3924/3922) + all prior!');
         console.log('✅ Edit buttons ACTUALLY work now - template literals fixed!');
         console.log('🔢 Build timestamp: 1747719600');
         
@@ -845,7 +845,7 @@
                 racks: { id: 'Title', name: 'RackID', siteId: 'SiteID', location: 'RackLocation', rackUnits: 'RackUnits', hasAC: 'HasAC', purchasedPowerAC: 'PurchasedPowerAC', hasDC: 'HasDC', purchasedPowerDC: 'PurchasedPowerDC', notes: 'Notes', soNumber: 'SONumber' },
                 equipment: { id: 'Title', name: 'EquipmentID', siteId: 'SiteID', rackId: 'RackID', manufacturer: 'Manufacturer', model: 'Model', type: 'EquipmentType', serialNumber: 'SerialNumber', rackUnits: 'RackUnits', rackPosition: 'RackPosition', powerType: 'PowerType', powerDraw: 'PowerDraw', maxPowerDraw: 'MaxPowerDraw', voltage: 'Voltage', weight: 'Weight', portConfig: 'PortConfig', installDate: 'InstallDate', notes: 'Notes', linePorts: 'LinePorts', lineCapacity: 'LineCapacity', lineWavelength: 'LineWavelength', parentEquipmentID: 'ParentEquipmentID', slotNumber: 'SlotNumber', mgmtIp: 'MgmtIP', mgmtSubnet: 'MgmtSubnet', mgmtGateway: 'MgmtGateway', soNumber: 'SONumber' },
                 fdps: { id: 'Title', name: 'FdpID', siteId: 'SiteID', mountingType: 'MountingType', rackId: 'RackID', location: 'FdpLocation', portCount: 'PortCount', connectorType: 'ConnectorType', type: 'FdpType', rackUnits: 'RackUnits', rackPosition: 'RackPosition', notes: 'Notes', soNumber: 'SONumber' },
-                circuits: { id: 'Title', circuitId: 'CircuitID', previousCircuitId: 'PreviousCircuitID', type: 'CircuitType', direction: 'Direction', networkType: 'NetworkType', provider: 'Provider', customer: 'Customer', bandwidth: 'Bandwidth', status: 'Status', circuitVlans: 'CircuitVLANs', aLocationSiteId: 'ALocationSiteID', aConnectionType: 'AConnectionType', aFdp: 'AFdp', aPort: 'APort', aEquipment: 'AEquipment', aEquipmentPort: 'AEquipmentPort', aEquipmentFdp: 'AEquipmentFdp', aEquipmentFdpPorts: 'AEquipmentFdpPorts', aNni: 'ANni', aNniSubinterface: 'ANniSubinterface', zLocationSiteId: 'ZLocationSiteID', zConnectionType: 'ZConnectionType', zFdp: 'ZFdp', zPort: 'ZPort', zEquipment: 'ZEquipment', zEquipmentPort: 'ZEquipmentPort', zEquipmentFdp: 'ZEquipmentFdp', zEquipmentFdpPorts: 'ZEquipmentFdpPorts', zNni: 'ZNni', zNniSubinterface: 'ZNniSubinterface', hasCpe: 'HasCpe', cpeType: 'CpeType', cpeMgmtIp: 'CpeMgmtIp', cpeMgmtSubnet: 'CpeMgmtSubnet', cpeMgmtGateway: 'CpeMgmtGateway', cpeMgmtVlan: 'CpeMgmtVLAN', additionalLocations: 'AdditionalLocations', notes: 'Notes', tunable: 'Tunable', wavelength: 'Wavelength', soNumber: 'SONumber', cpeEquipmentId: 'CpeEquipmentID', salesforceId: 'SalesforceID', syncStatus: 'SyncStatus', syncSource: 'SyncSource', mtu: 'MTU', vlanCount: 'VlanCount', irisUni: 'IrisUNI', irisEvc1: 'IrisEVC1', irisEvc2: 'IrisEVC2', assignedEngineer: 'AssignedEngineer', dueDate: 'DueDate', cfaPaths: 'CfaPaths', dlrText: 'DLRText', cfaSourceText: 'CfaSourceText', salesforceModifiedDate: 'SalesforceModifiedDate' },
+                circuits: { id: 'Title', circuitId: 'CircuitID', previousCircuitId: 'PreviousCircuitID', type: 'CircuitType', direction: 'Direction', networkType: 'NetworkType', provider: 'Provider', customer: 'Customer', bandwidth: 'Bandwidth', status: 'Status', circuitVlans: 'CircuitVLANs', aLocationSiteId: 'ALocationSiteID', aConnectionType: 'AConnectionType', aFdp: 'AFdp', aPort: 'APort', aEquipment: 'AEquipment', aEquipmentPort: 'AEquipmentPort', aEquipmentFdp: 'AEquipmentFdp', aEquipmentFdpPorts: 'AEquipmentFdpPorts', aNni: 'ANni', aNniSubinterface: 'ANniSubinterface', bLocationSiteId: 'BLocationSiteID', bConnectionType: 'BConnectionType', bFdp: 'BFdp', bPort: 'BPort', bEquipment: 'BEquipment', bEquipmentPort: 'BEquipmentPort', bEquipmentFdp: 'BEquipmentFdp', bEquipmentFdpPorts: 'BEquipmentFdpPorts', bNni: 'BNni', cLocationSiteId: 'CLocationSiteID', cConnectionType: 'CConnectionType', cFdp: 'CFdp', cPort: 'CPort', cEquipment: 'CEquipment', cEquipmentPort: 'CEquipmentPort', cEquipmentFdp: 'CEquipmentFdp', cEquipmentFdpPorts: 'CEquipmentFdpPorts', cNni: 'CNni', dLocationSiteId: 'DLocationSiteID', dConnectionType: 'DConnectionType', dFdp: 'DFdp', dPort: 'DPort', dEquipment: 'DEquipment', dEquipmentPort: 'DEquipmentPort', dEquipmentFdp: 'DEquipmentFdp', dEquipmentFdpPorts: 'DEquipmentFdpPorts', dNni: 'DNni', eLocationSiteId: 'ELocationSiteID', eConnectionType: 'EConnectionType', eFdp: 'EFdp', ePort: 'EPort', eEquipment: 'EEquipment', eEquipmentPort: 'EEquipmentPort', eEquipmentFdp: 'EEquipmentFdp', eEquipmentFdpPorts: 'EEquipmentFdpPorts', eNni: 'ENni', fLocationSiteId: 'FLocationSiteID', fConnectionType: 'FConnectionType', fFdp: 'FFdp', fPort: 'FPort', fEquipment: 'FEquipment', fEquipmentPort: 'FEquipmentPort', fEquipmentFdp: 'FEquipmentFdp', fEquipmentFdpPorts: 'FEquipmentFdpPorts', fNni: 'FNni', gLocationSiteId: 'GLocationSiteID', gConnectionType: 'GConnectionType', gFdp: 'GFdp', gPort: 'GPort', gEquipment: 'GEquipment', gEquipmentPort: 'GEquipmentPort', gEquipmentFdp: 'GEquipmentFdp', gEquipmentFdpPorts: 'GEquipmentFdpPorts', gNni: 'GNni', hLocationSiteId: 'HLocationSiteID', hConnectionType: 'HConnectionType', hFdp: 'HFdp', hPort: 'HPort', hEquipment: 'HEquipment', hEquipmentPort: 'HEquipmentPort', hEquipmentFdp: 'HEquipmentFdp', hEquipmentFdpPorts: 'HEquipmentFdpPorts', hNni: 'HNni', iLocationSiteId: 'ILocationSiteID', iConnectionType: 'IConnectionType', iFdp: 'IFdp', iPort: 'IPort', iEquipment: 'IEquipment', iEquipmentPort: 'IEquipmentPort', iEquipmentFdp: 'IEquipmentFdp', iEquipmentFdpPorts: 'IEquipmentFdpPorts', iNni: 'INni', jLocationSiteId: 'JLocationSiteID', jConnectionType: 'JConnectionType', jFdp: 'JFdp', jPort: 'JPort', jEquipment: 'JEquipment', jEquipmentPort: 'JEquipmentPort', jEquipmentFdp: 'JEquipmentFdp', jEquipmentFdpPorts: 'JEquipmentFdpPorts', jNni: 'JNni', kLocationSiteId: 'KLocationSiteID', kConnectionType: 'KConnectionType', kFdp: 'KFdp', kPort: 'KPort', kEquipment: 'KEquipment', kEquipmentPort: 'KEquipmentPort', kEquipmentFdp: 'KEquipmentFdp', kEquipmentFdpPorts: 'KEquipmentFdpPorts', kNni: 'KNni', lLocationSiteId: 'LLocationSiteID', lConnectionType: 'LConnectionType', lFdp: 'LFdp', lPort: 'LPort', lEquipment: 'LEquipment', lEquipmentPort: 'LEquipmentPort', lEquipmentFdp: 'LEquipmentFdp', lEquipmentFdpPorts: 'LEquipmentFdpPorts', lNni: 'LNni', mLocationSiteId: 'MLocationSiteID', mConnectionType: 'MConnectionType', mFdp: 'MFdp', mPort: 'MPort', mEquipment: 'MEquipment', mEquipmentPort: 'MEquipmentPort', mEquipmentFdp: 'MEquipmentFdp', mEquipmentFdpPorts: 'MEquipmentFdpPorts', mNni: 'MNni', nLocationSiteId: 'NLocationSiteID', nConnectionType: 'NConnectionType', nFdp: 'NFdp', nPort: 'NPort', nEquipment: 'NEquipment', nEquipmentPort: 'NEquipmentPort', nEquipmentFdp: 'NEquipmentFdp', nEquipmentFdpPorts: 'NEquipmentFdpPorts', nNni: 'NNni', zLocationSiteId: 'ZLocationSiteID', zConnectionType: 'ZConnectionType', zFdp: 'ZFdp', zPort: 'ZPort', zEquipment: 'ZEquipment', zEquipmentPort: 'ZEquipmentPort', zEquipmentFdp: 'ZEquipmentFdp', zEquipmentFdpPorts: 'ZEquipmentFdpPorts', zNni: 'ZNni', zNniSubinterface: 'ZNniSubinterface', hasCpe: 'HasCpe', cpeType: 'CpeType', cpeMgmtIp: 'CpeMgmtIp', cpeMgmtSubnet: 'CpeMgmtSubnet', cpeMgmtGateway: 'CpeMgmtGateway', cpeMgmtVlan: 'CpeMgmtVLAN', additionalLocations: 'AdditionalLocations', notes: 'Notes', tunable: 'Tunable', wavelength: 'Wavelength', soNumber: 'SONumber', cpeEquipmentId: 'CpeEquipmentID', cpeUplinkPorts: 'CpeUplinkPorts', cpeDownlinkPorts: 'CpeDownlinkPorts', salesforceId: 'SalesforceID', syncStatus: 'SyncStatus', syncSource: 'SyncSource', mtu: 'MTU', vlanCount: 'VlanCount', irisUni: 'IrisUNI', irisEvc1: 'IrisEVC1', irisEvc2: 'IrisEVC2', assignedEngineer: 'AssignedEngineer', dueDate: 'DueDate', cfaPaths: 'CfaPaths', dlrText: 'DLRText', cfaSourceText: 'CfaSourceText', salesforceModifiedDate: 'SalesforceModifiedDate' },
                 nnis: { id: 'Title', name: 'NniID', siteId: 'SiteID', equipmentID: 'EquipmentID', equipmentPorts: 'EquipmentPorts', fdpId: 'FdpID', fdpPorts: 'FdpPorts', direction: 'Direction', contact: 'Contact', description: 'Description', notes: 'Notes', soNumber: 'SONumber', salesforceId: 'SalesforceID', syncStatus: 'SyncStatus', syncSource: 'SyncSource', provider: 'Provider', nniStatus: 'NniStatus', bandwidth: 'Bandwidth' },
                 templates: { id: 'Title', name: 'TemplateName', manufacturer: 'Manufacturer', model: 'Model', type: 'EquipmentType', rackUnits: 'RackUnits', powerType: 'PowerType', powerDraw: 'PowerDraw', maxPowerDraw: 'MaxPowerDraw', voltage: 'Voltage', weight: 'Weight', portConfig: 'PortConfig', notes: 'Notes', linePorts: 'LinePorts', lineCapacity: 'LineCapacity' },
                 darkfiberroutes: { id: 'Title', routeName: 'RouteName', aLocationSiteId: 'ALocationSiteID', zLocationSiteId: 'ZLocationSiteID', totalDistance: 'TotalDistance', purpose: 'Purpose', equipmentType: 'EquipmentType', aEndEquipment: 'AEndEquipment', zEndEquipment: 'ZEndEquipment', status: 'Status', routeMapURL: 'RouteMapURL', installDate: 'InstallDate', lastVerified: 'LastVerified', notes: 'Notes', soNumber: 'SONumber' },
@@ -5879,11 +5879,11 @@
                         </div>
                         <div class="form-group">
                             <label>CPE Equipment Type</label>
-                            <select name="cpeType">
+                            <select name="cpeType" onchange="updateCpePortOptions()">
                                 <option value="">Select Type...</option>
                                 <option value="accedian">Accedian</option>
-                                <option value="3924">3924</option>
-                                <option value="3922">3922</option>
+                                <option value="3924">Ciena 3924 (8-port: 1-4×1G, 5-8×10G)</option>
+                                <option value="3922">Ciena 3922 (6-port: 1-4×1G, 5-6×10G)</option>
                                 <option value="other">Other</option>
                             </select>
                         </div>
@@ -5905,6 +5905,22 @@
                             <div class="form-group">
                                 <label>Management VLAN</label>
                                 <input type="text" name="cpeMgmtVlan" placeholder="e.g., 100">
+                            </div>
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 0.75rem;">
+                            <div class="form-group">
+                                <label>🔼 Uplink Port(s) — toward network</label>
+                                <select name="cpeUplinkPorts" id="cpeUplinkPortsSelect" multiple size="4" style="min-height: 5rem;">
+                                    <option value="" disabled>Select CPE Type above first...</option>
+                                </select>
+                                <small style="color: var(--text-tertiary); font-size: 0.78rem;">Hold Ctrl/Cmd to select multiple. Speed shown for each port.</small>
+                            </div>
+                            <div class="form-group">
+                                <label>🔽 Downlink Port(s) — toward customer</label>
+                                <select name="cpeDownlinkPorts" id="cpeDownlinkPortsSelect" multiple size="4" style="min-height: 5rem;">
+                                    <option value="" disabled>Select CPE Type above first...</option>
+                                </select>
+                                <small style="color: var(--text-tertiary); font-size: 0.78rem;">Hold Ctrl/Cmd to select multiple. Speed shown for each port.</small>
                             </div>
                         </div>
                     </div>
@@ -6032,6 +6048,60 @@
             if (cpeDetails) {
                 cpeDetails.style.display = hasCpe === 'yes' ? 'block' : 'none';
             }
+        }
+        
+        // CPE model port configurations — port number, speed, optional RJ45 marker
+        const CPE_PORT_MAPS = {
+            '3924': [
+                {port: 1, speed: '1G'},
+                {port: 2, speed: '1G'},
+                {port: 3, speed: '1G'},
+                {port: 4, speed: '1G'},
+                {port: 5, speed: '10G'},
+                {port: 6, speed: '10G'},
+                {port: 7, speed: '10G'},
+                {port: 8, speed: '10G'},
+            ],
+            '3922': [
+                {port: 1, speed: '1G', tag: 'RJ45'},
+                {port: 2, speed: '1G', tag: 'RJ45'},
+                {port: 3, speed: '1G'},
+                {port: 4, speed: '1G'},
+                {port: 5, speed: '10G'},
+                {port: 6, speed: '10G'},
+            ],
+            'accedian': [],   // unknown port count; user can type free-text — leave empty
+            'other': [],
+        };
+        
+        function updateCpePortOptions() {
+            const cpeType = document.querySelector('select[name="cpeType"]')?.value || '';
+            const config = CPE_PORT_MAPS[cpeType] || [];
+            const upSel = document.getElementById('cpeUplinkPortsSelect');
+            const dnSel = document.getElementById('cpeDownlinkPortsSelect');
+            if (!upSel || !dnSel) return;
+            
+            // Preserve current selections to re-apply after rebuild
+            const upSelected = Array.from(upSel.selectedOptions).map(o => o.value);
+            const dnSelected = Array.from(dnSel.selectedOptions).map(o => o.value);
+            
+            if (config.length === 0) {
+                const msg = cpeType ? `Port mapping not defined for "${cpeType}" — enter manually or skip.` : 'Select CPE Type above first...';
+                upSel.innerHTML = `<option value="" disabled>${msg}</option>`;
+                dnSel.innerHTML = `<option value="" disabled>${msg}</option>`;
+                return;
+            }
+            
+            const optsHtml = config.map(p => {
+                const label = `Port ${p.port} — ${p.speed}${p.tag ? ' (' + p.tag + ')' : ''}`;
+                return `<option value="${p.port}">${label}</option>`;
+            }).join('');
+            upSel.innerHTML = optsHtml;
+            dnSel.innerHTML = optsHtml;
+            
+            // Re-apply selections
+            Array.from(upSel.options).forEach(o => { if (upSelected.includes(o.value)) o.selected = true; });
+            Array.from(dnSel.options).forEach(o => { if (dnSelected.includes(o.value)) o.selected = true; });
         }
         
         let additionalLocationCounter = 0;
@@ -6201,6 +6271,213 @@
                 const prev = nniSel.value;
                 nniSel.innerHTML = '<option value="">Select NNI...</option>' + matches.map(n => `<option value="${n.id}">${n.name || n.id}</option>`).join('');
                 if (prev && matches.find(n => n.id === prev)) nniSel.value = prev;
+            }
+        }
+        
+        // ===== PHASE 2: Delimited per-VLAN encoding in existing B-N columns =====
+        // Format: single value applies to all VLANs. Per-VLAN values use "v1=foo|v2=bar".
+        // VLANs not present in the map have no waypoint at that hop position.
+        function encodeDelimitedPerVlan(perVlanMap, defaultIfAllSame) {
+            if (!perVlanMap || Object.keys(perVlanMap).length === 0) return '';
+            const values = Object.values(perVlanMap).filter(v => v != null && v !== '');
+            if (values.length === 0) return '';
+            // If all VLANs share the same value, emit the single value
+            const uniq = [...new Set(values)];
+            if (uniq.length === 1 && Object.keys(perVlanMap).length === values.length) {
+                return uniq[0];
+            }
+            // Otherwise emit v1=val|v2=val for each VLAN that has a value
+            return Object.entries(perVlanMap).filter(([_, v]) => v != null && v !== '').map(([k, v]) => `v${k}=${v}`).join('|');
+        }
+        
+        function parseDelimitedPerVlan(rawValue, vlanCount) {
+            const parsed = {};
+            if (!rawValue) return parsed;
+            const s = String(rawValue).trim();
+            if (!s) return parsed;
+            // Per-VLAN format
+            if (/^v\d+=/.test(s) || s.includes('|v')) {
+                s.split('|').forEach(seg => {
+                    const m = seg.match(/^v(\d+)=(.*)$/);
+                    if (m) parsed[parseInt(m[1])] = m[2];
+                });
+            } else {
+                // Single value applies to all VLANs
+                for (let v = 1; v <= (vlanCount || 1); v++) parsed[v] = s;
+            }
+            return parsed;
+        }
+        
+        // Build the column-name → value map for B-N waypoint data from the form
+        // Returns object like {bLocationSiteId: 'siteAbc', bConnectionType: 'nni|v1=...|v2=...', cLocationSiteId: '', ...}
+        function serializeWaypointsToColumns() {
+            const LETTERS = ['B','C','D','E','F','G','H','I','J','K','L','M','N'];
+            // First, build a structure: positionIdx -> {vlanNum: waypointObj}
+            const positions = {}; // positions[0] = waypoint position B, positions[1] = C, etc.
+            document.querySelectorAll('.vlan-intermediate-card').forEach(card => {
+                const vNum = parseInt(card.dataset.vlanNum);
+                const idx = parseInt(card.dataset.locIdx);
+                // idx 1 = B, idx 2 = C, ... (0-based array idx = idx-1)
+                const posIdx = idx - 1;
+                if (posIdx < 0 || posIdx >= LETTERS.length) return;
+                if (!positions[posIdx]) positions[posIdx] = {};
+                const get = field => { const el = card.querySelector(`[name="vlan${vNum}_int${idx}_${field}"]`); return el ? (el.type === 'checkbox' ? el.checked : el.value) : ''; };
+                const siteEl = document.getElementById(`vlan${vNum}_int${idx}_siteSelect`);
+                positions[posIdx][vNum] = {
+                    siteId: siteEl ? siteEl.value : '',
+                    connectionType: get('connectionType'),
+                    fdp: get('fdp'), fdpPort: get('fdpPort'),
+                    equipment: get('equipment'), equipmentPort: get('equipmentPort'),
+                    nni: get('nni'), subinterface: get('subinterface'),
+                };
+            });
+            
+            // Map each position to its letter and emit columns
+            const out = {};
+            // Initialize all letters to empty strings — so removed waypoints clear the column
+            LETTERS.forEach(L => {
+                const lo = L.toLowerCase();
+                out[`${lo}LocationSiteId`] = '';
+                out[`${lo}ConnectionType`] = '';
+                out[`${lo}Fdp`] = ''; out[`${lo}Port`] = '';
+                out[`${lo}Equipment`] = ''; out[`${lo}EquipmentPort`] = '';
+                out[`${lo}Nni`] = '';
+                // (b)EquipmentFdp + (b)EquipmentFdpPorts are advanced — leave to manual edit
+            });
+            
+            Object.entries(positions).forEach(([posIdx, vlanMap]) => {
+                const L = LETTERS[parseInt(posIdx)];
+                if (!L) return;
+                const lo = L.toLowerCase();
+                // Build per-field per-VLAN maps
+                const fieldMaps = { siteId: {}, connectionType: {}, fdp: {}, fdpPort: {}, equipment: {}, equipmentPort: {}, nni: {}, subinterface: {} };
+                Object.entries(vlanMap).forEach(([v, wp]) => {
+                    Object.entries(fieldMaps).forEach(([f]) => {
+                        if (wp[f]) fieldMaps[f][v] = wp[f];
+                    });
+                });
+                out[`${lo}LocationSiteId`] = encodeDelimitedPerVlan(fieldMaps.siteId);
+                out[`${lo}ConnectionType`] = encodeDelimitedPerVlan(fieldMaps.connectionType);
+                out[`${lo}Fdp`] = encodeDelimitedPerVlan(fieldMaps.fdp);
+                out[`${lo}Port`] = encodeDelimitedPerVlan(fieldMaps.fdpPort);
+                out[`${lo}Equipment`] = encodeDelimitedPerVlan(fieldMaps.equipment);
+                out[`${lo}EquipmentPort`] = encodeDelimitedPerVlan(fieldMaps.equipmentPort);
+                // For NNI, encode subinterface together with NNI id as "nniId:subint" when subinterface present
+                const nniWithSub = {};
+                Object.entries(fieldMaps.nni).forEach(([v, nniId]) => {
+                    const sub = fieldMaps.subinterface[v];
+                    nniWithSub[v] = sub ? `${nniId}:${sub}` : nniId;
+                });
+                out[`${lo}Nni`] = encodeDelimitedPerVlan(nniWithSub);
+            });
+            
+            return out;
+        }
+        
+        // Tunable column: A.up.v1=Y@1550.92|A.down.v1=N|B.up.v1=Y@1490|Z.up.v1=Y@1550
+        function serializeTunableToColumn(form, vlanCount) {
+            const fd = new FormData(form);
+            const parts = [];
+            for (let v = 1; v <= (vlanCount || 1); v++) {
+                const ends = [
+                    ['A', `vlan${v}_aTunableUpstream`, `vlan${v}_aWavelengthUpstream`, `vlan${v}_aTunableDownstream`, `vlan${v}_aWavelengthDownstream`],
+                    ['Z', `vlan${v}_zTunableUpstream`, `vlan${v}_zWavelengthUpstream`, `vlan${v}_zTunableDownstream`, `vlan${v}_zWavelengthDownstream`],
+                ];
+                ends.forEach(([letter, upK, upW, dnK, dnW]) => {
+                    const up = fd.get(upK) === 'on';
+                    const upWv = fd.get(upW) || '';
+                    const dn = fd.get(dnK) === 'on';
+                    const dnWv = fd.get(dnW) || '';
+                    if (up || upWv) parts.push(`${letter}.up.v${v}=${up ? 'Y' : 'N'}${upWv ? '@' + upWv : ''}`);
+                    if (dn || dnWv) parts.push(`${letter}.dn.v${v}=${dn ? 'Y' : 'N'}${dnWv ? '@' + dnWv : ''}`);
+                });
+            }
+            // Intermediate locations
+            document.querySelectorAll('.vlan-intermediate-card').forEach(card => {
+                const vNum = card.dataset.vlanNum;
+                const idx = parseInt(card.dataset.locIdx);
+                const letter = String.fromCharCode(65 + idx);  // B, C, D...
+                const get = f => { const el = card.querySelector(`[name="vlan${vNum}_int${idx}_${f}"]`); return el ? (el.type === 'checkbox' ? el.checked : el.value) : ''; };
+                const up = get('tunableUpstream');
+                const upWv = get('wavelengthUpstream');
+                const dn = get('tunableDownstream');
+                const dnWv = get('wavelengthDownstream');
+                if (up || upWv) parts.push(`${letter}.up.v${vNum}=${up ? 'Y' : 'N'}${upWv ? '@' + upWv : ''}`);
+                if (dn || dnWv) parts.push(`${letter}.dn.v${vNum}=${dn ? 'Y' : 'N'}${dnWv ? '@' + dnWv : ''}`);
+            });
+            return parts.join('|');
+        }
+        
+        // Parse Tunable column back into form fields
+        function loadTunableFromColumn(rawValue) {
+            if (!rawValue) return;
+            const s = String(rawValue).trim();
+            if (!s) return;
+            // Skip legacy single-value tunable (no dots)
+            if (!s.includes('.up.') && !s.includes('.dn.')) return;
+            s.split('|').forEach(seg => {
+                const m = seg.match(/^([A-Z])\.(up|dn)\.v(\d+)=([YN])(?:@(.+))?$/);
+                if (!m) return;
+                const [_, letter, dir, vNum, yn, wave] = m;
+                const isA = letter === 'A', isZ = letter === 'Z';
+                const dirSuffix = dir === 'up' ? 'Upstream' : 'Downstream';
+                const wavSuffix = dir === 'up' ? 'WavelengthUpstream' : 'WavelengthDownstream';
+                if (isA || isZ) {
+                    const form = document.getElementById('circuitForm');
+                    if (!form) return;
+                    const tCb = form.elements[`vlan${vNum}_${letter.toLowerCase()}Tunable${dirSuffix}`];
+                    const wIn = form.elements[`vlan${vNum}_${letter.toLowerCase()}${wavSuffix}`];
+                    if (tCb) tCb.checked = yn === 'Y';
+                    if (wIn && wave) wIn.value = wave;
+                } else {
+                    // Intermediate — find card by VLAN and letter
+                    const idx = letter.charCodeAt(0) - 65; // B=1, C=2, ...
+                    const card = document.getElementById(`vlan${vNum}_intermediate_${idx}`);
+                    if (!card) return;
+                    const tCb = card.querySelector(`[name="vlan${vNum}_int${idx}_tunable${dirSuffix}"]`);
+                    const wIn = card.querySelector(`[name="vlan${vNum}_int${idx}_wavelength${dirSuffix}"]`);
+                    if (tCb) tCb.checked = yn === 'Y';
+                    if (wIn && wave) wIn.value = wave;
+                }
+            });
+        }
+        
+        // Load B-N waypoints from circuit columns and re-render cards
+        async function loadWaypointsFromColumns(circuit, vlanCount) {
+            const LETTERS = ['B','C','D','E','F','G','H','I','J','K','L','M','N'];
+            for (let posIdx = 0; posIdx < LETTERS.length; posIdx++) {
+                const L = LETTERS[posIdx];
+                const lo = L.toLowerCase();
+                const siteRaw = circuit[`${lo}LocationSiteId`];
+                if (!siteRaw) continue;  // no waypoint at this position
+                
+                const siteMap = parseDelimitedPerVlan(siteRaw, vlanCount);
+                const ctMap = parseDelimitedPerVlan(circuit[`${lo}ConnectionType`], vlanCount);
+                const fdpMap = parseDelimitedPerVlan(circuit[`${lo}Fdp`], vlanCount);
+                const portMap = parseDelimitedPerVlan(circuit[`${lo}Port`], vlanCount);
+                const eqMap = parseDelimitedPerVlan(circuit[`${lo}Equipment`], vlanCount);
+                const eqPortMap = parseDelimitedPerVlan(circuit[`${lo}EquipmentPort`], vlanCount);
+                const nniRawMap = parseDelimitedPerVlan(circuit[`${lo}Nni`], vlanCount);
+                
+                // For each VLAN that has data at this position, create a waypoint card
+                Object.entries(siteMap).forEach(([vNum, siteId]) => {
+                    if (!siteId) return;
+                    const v = parseInt(vNum);
+                    // Decode NNI:subinterface
+                    const nniRaw = nniRawMap[vNum] || '';
+                    const nniParts = nniRaw.split(':');
+                    const prefill = {
+                        siteId,
+                        connectionType: ctMap[vNum] || '',
+                        fdp: fdpMap[vNum] || '',
+                        fdpPort: portMap[vNum] || '',
+                        equipment: eqMap[vNum] || '',
+                        equipmentPort: eqPortMap[vNum] || '',
+                        nni: nniParts[0] || '',
+                        subinterface: nniParts[1] || '',
+                    };
+                    addVlanIntermediateLocation(v, prefill);
+                });
             }
         }
         
@@ -7427,10 +7704,47 @@
             toggleConnectionFields('a');
             toggleConnectionFields('z');
             toggleCpeFields();
-            // Phase 1: Load per-VLAN waypoints + tunable from additionalLocations JSON
-            if (circuit.additionalLocations) {
+            // Load per-VLAN waypoints + tunable
+            // Phase 2 preferred: delimited columns (B-N). Fallback: JSON in AdditionalLocations.
+            const vlanCountForLoad = parseInt(circuit.vlanCount) || (circuit.circuitVlans ? (safeParseJson(circuit.circuitVlans, []).length || 1) : 1);
+            const hasDelimitedWaypoints = circuit.bLocationSiteId || circuit.cLocationSiteId || circuit.dLocationSiteId;
+            const tunableValue = circuit.tunable || '';
+            const hasDelimitedTunable = tunableValue && (tunableValue.includes('.up.') || tunableValue.includes('.dn.'));
+            
+            if (hasDelimitedWaypoints) {
+                await loadWaypointsFromColumns(circuit, vlanCountForLoad);
+            } else if (circuit.additionalLocations) {
+                // Legacy JSON fallback
                 const parsed = safeParseJson(circuit.additionalLocations, null);
-                if (parsed && (parsed.waypoints || parsed.tunable)) loadPerVlanWaypoints(parsed);
+                if (parsed && parsed.waypoints) {
+                    Object.entries(parsed.waypoints).forEach(([vNum, list]) => {
+                        list.forEach(entry => addVlanIntermediateLocation(parseInt(vNum), entry));
+                    });
+                }
+            }
+            
+            if (hasDelimitedTunable) {
+                loadTunableFromColumn(tunableValue);
+            } else if (circuit.additionalLocations) {
+                const parsed = safeParseJson(circuit.additionalLocations, null);
+                if (parsed && parsed.tunable) {
+                    Object.entries(parsed.tunable).forEach(([vNum, t]) => {
+                        const form = document.getElementById('circuitForm');
+                        if (!form) return;
+                        const set = (name, val, isCheckbox) => {
+                            const el = form.elements[name]; if (!el) return;
+                            if (isCheckbox) el.checked = !!val; else el.value = val || '';
+                        };
+                        set(`vlan${vNum}_aTunableUpstream`, t.aUpstream, true);
+                        set(`vlan${vNum}_aWavelengthUpstream`, t.aWavelengthUpstream);
+                        set(`vlan${vNum}_aTunableDownstream`, t.aDownstream, true);
+                        set(`vlan${vNum}_aWavelengthDownstream`, t.aWavelengthDownstream);
+                        set(`vlan${vNum}_zTunableUpstream`, t.zUpstream, true);
+                        set(`vlan${vNum}_zWavelengthUpstream`, t.zWavelengthUpstream);
+                        set(`vlan${vNum}_zTunableDownstream`, t.zDownstream, true);
+                        set(`vlan${vNum}_zWavelengthDownstream`, t.zWavelengthDownstream);
+                    });
+                }
             }
             
             document.getElementById('circuitModal').classList.add('active');
@@ -7567,6 +7881,18 @@
             form.elements.cpeMgmtSubnet.value = circuit.cpeMgmtSubnet || '';
             form.elements.cpeMgmtGateway.value = circuit.cpeMgmtGateway || '';
             form.elements.cpeMgmtVlan.value = circuit.cpeMgmtVlan || '';
+            // CPE port pickers: rebuild options based on cpeType, then select saved ports
+            if (typeof updateCpePortOptions === 'function') updateCpePortOptions();
+            if (circuit.cpeUplinkPorts) {
+                const ports = String(circuit.cpeUplinkPorts).split(',').map(s => s.trim()).filter(Boolean);
+                const upSel = document.getElementById('cpeUplinkPortsSelect');
+                if (upSel) Array.from(upSel.options).forEach(o => { o.selected = ports.includes(o.value); });
+            }
+            if (circuit.cpeDownlinkPorts) {
+                const ports = String(circuit.cpeDownlinkPorts).split(',').map(s => s.trim()).filter(Boolean);
+                const dnSel = document.getElementById('cpeDownlinkPortsSelect');
+                if (dnSel) Array.from(dnSel.options).forEach(o => { o.selected = ports.includes(o.value); });
+            }
             
             if (form.elements.customer) form.elements.customer.value = circuit.customer || '';
             if (form.elements.mtu) form.elements.mtu.value = circuit.mtu || '';
@@ -8261,6 +8587,8 @@
                 mtu: formData.get('mtu') || '',
                 vlanCount: parseInt(formData.get('vlanCount')) || 1,
                 hasCpe: formData.get('hasCpe'),
+                cpeUplinkPorts: Array.from(document.querySelectorAll('#cpeUplinkPortsSelect option:checked')).map(o => o.value).filter(v => v).join(','),
+                cpeDownlinkPorts: Array.from(document.querySelectorAll('#cpeDownlinkPortsSelect option:checked')).map(o => o.value).filter(v => v).join(','),
                 // CPE-as-Z: if Z connection type is CPE, treat the linked CPE as Z equipment
                 ...(formData.get('zConnectionType') === 'cpe' && formData.get('cpeEquipment') ? { zEquipment: formData.get('cpeEquipment') } : {}),
                 ...(formData.get('aConnectionType') === 'cpe' && formData.get('cpeEquipment') ? { aEquipment: formData.get('cpeEquipment') } : {}),
@@ -8271,7 +8599,9 @@
                 cpeMgmtVlan: formData.get('cpeMgmtVlan') || '',
                 
                 soNumber: formData.get('soNumber') || '', notes: formData.get('notes') || '',
-                additionalLocations: JSON.stringify(serializePerVlanWaypoints(event.target))
+                additionalLocations: JSON.stringify(serializePerVlanWaypoints(event.target)),
+                ...serializeWaypointsToColumns(),
+                tunable: serializeTunableToColumn(event.target, parseInt(formData.get('vlanCount')) || 1)
             };
             
             // COLLECT MULTI-VLAN DATA
