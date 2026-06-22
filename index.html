@@ -806,7 +806,7 @@
         // BUILD: 2024-05-19-23-00-TEMPLATE-LITERALS-FIXED
         // This timestamp forces browser to reload: 1747719600
         console.log('%c🔧 NetInventory Version: 2026-06-10-OTDR-PINPOINT', 'background: #8b5cf6; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;');
-        console.log('🏛 Customer/MTU as real inputs, VlanCount flat column, JSON now redundant for count + all prior!');
+        console.log('🛡 Resilient save (retry without VlanCount if column missing, verify-on-write) + all prior!');
         console.log('✅ Edit buttons ACTUALLY work now - template literals fixed!');
         console.log('🔢 Build timestamp: 1747719600');
         
@@ -8103,11 +8103,41 @@
                             circuit[field] = prev[field];
                         }
                     });
-                    await store.updateCircuit(formEditId, circuit);
-                    alert('Circuit updated successfully!');
+                    try {
+                        await store.updateCircuit(formEditId, circuit);
+                        // Verify: read back, confirm circuitVlans + vlanCount actually persisted
+                        const verify = (await store.getCircuits()).find(c => c.id === formEditId);
+                        const expectedCount = parseInt(formData.get('vlanCount')) || 1;
+                        const actualCount = verify?.vlanCount ? parseInt(verify.vlanCount) : null;
+                        const vlansLanded = verify?.circuitVlans && verify.circuitVlans.startsWith('[');
+                        if (expectedCount > 1 && !vlansLanded) {
+                            alert('⚠️ Circuit saved BUT VLAN data may not have persisted.\n\nExpected: ' + expectedCount + ' VLANs (JSON)\nActual: ' + (verify?.circuitVlans?.slice(0,80) || '(empty)') + '\n\nThis usually means a SharePoint column was rejected. Check console (F12) for details.');
+                            console.error('Save mismatch on circuit', formEditId, '— expected JSON, got:', verify?.circuitVlans);
+                        } else if (expectedCount > 1 && actualCount !== expectedCount) {
+                            console.warn('vlanCount column may not exist yet. Expected', expectedCount, 'got', actualCount, '— save proceeded via JSON only.');
+                            alert('Circuit updated. (Note: vlanCount column is missing in SharePoint — JSON fallback is in use. Run the PowerShell ensure-netinventory-columns.ps1 to add it cleanly.)');
+                        } else {
+                            alert('Circuit updated successfully!');
+                        }
+                    } catch (saveErr) {
+                        if (String(saveErr.message || saveErr).includes('VlanCount') || String(saveErr).includes('extra')) {
+                            console.warn('VlanCount column missing — retrying save without it');
+                            delete circuit.vlanCount;
+                            await store.updateCircuit(formEditId, circuit);
+                            alert('Circuit updated. (vlanCount column missing — running without it. Run ensure-netinventory-columns.ps1 to enable.)');
+                        } else { throw saveErr; }
+                    }
                 } else {
-                    await store.addCircuit(circuit);
-                    alert('Circuit added successfully!');
+                    try {
+                        await store.addCircuit(circuit);
+                        alert('Circuit added successfully!');
+                    } catch (e) {
+                        if (String(e.message || e).includes('VlanCount')) {
+                            delete circuit.vlanCount;
+                            await store.addCircuit(circuit);
+                            alert('Circuit added. (vlanCount column missing — running without it.)');
+                        } else { throw e; }
+                    }
                 }
                 closeCircuitModal();
                 await renderCircuitsPage();
