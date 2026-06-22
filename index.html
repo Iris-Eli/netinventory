@@ -806,7 +806,7 @@
         // BUILD: 2024-05-19-23-00-TEMPLATE-LITERALS-FIXED
         // This timestamp forces browser to reload: 1747719600
         console.log('%c🔧 NetInventory Version: 2026-06-10-OTDR-PINPOINT', 'background: #8b5cf6; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;');
-        console.log('🎨 Colored print, 🔗 CPE auto-link to Z, 🔍 Site search filter + all prior!');
+        console.log('🎯 Search contains+no-autoselect, CFA grid hidden+auto-derived + all prior!');
         console.log('✅ Edit buttons ACTUALLY work now - template literals fixed!');
         console.log('🔢 Build timestamp: 1747719600');
         
@@ -5924,14 +5924,8 @@
                                 <option value="disconnected">Disconnected (historical)</option>
                             </select>
                         </div>
-                    <div style="border: 1px solid var(--border-color); border-radius: 0.5rem; padding: 1rem; margin: 1rem 0;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-                            <strong>📋 CFA / DLR Paths</strong>
-                            <button type="button" class="btn-secondary" onclick="addCfaPathRow()" style="padding: 0.3rem 0.7rem; font-size: 0.85rem;">➕ Add VLAN Path</button>
-                        </div>
-                        <div style="font-size: 0.78rem; color: var(--text-tertiary); margin-bottom: 0.75rem;">One row per VLAN. Interfaces default from selected equipment ports (Arista: ≥100G gets /1, breakouts /1-/4 — edit as needed). The DLR text is generated from these on save.</div>
-                        <div id="cfaPathRows"></div>
-                    </div>
+                    <!-- CFA/DLR paths now auto-derived from per-VLAN data on save (hidden container for compatibility) -->
+                    <div id="cfaPathRows" style="display: none;"></div>
 
                     </div>
                     
@@ -7072,6 +7066,7 @@
         }
         
         async function openAddCircuitModal() {
+            window._equipmentCache = await store.getEquipment();
             editingCircuitId = null;
             additionalLocationCounter = 0;
             const _addForm = document.getElementById('circuitForm');
@@ -7133,6 +7128,7 @@
         }
         
         async function editCircuit(circuit) {
+            window._equipmentCache = await store.getEquipment();
             // Safety check - ensure modal exists
             if (!document.getElementById('circuitModal')) {
                 console.log('Circuit modal not found, initializing...');
@@ -7538,11 +7534,66 @@
                 });
             });
         }
+        // Auto-derive CFA paths from per-VLAN form data (engineer never edits these directly anymore)
         function collectCfaPaths() {
-            return Array.from(document.querySelectorAll('#cfaPathRows .cfa-path-row')).map(row => {
-                const get = k => { const el = row.querySelector(`[data-cfa="${k}"]`); return el.type === 'checkbox' ? el.checked : el.value.trim(); };
-                return { vlan: get('vlan'), aDevice: get('aDevice'), aInterface: get('aInterface'), transport: get('transport') || 'VPWS', zDevice: get('zDevice'), zInterface: get('zInterface'), isMgmt: get('isMgmt') };
-            }).filter(p => p.vlan || p.aDevice || p.zDevice);
+            const form = document.getElementById('circuitForm');
+            if (!form) return [];
+            const equipment = window._equipmentCache || [];
+            const eqById = Object.fromEntries(equipment.map(e => [e.id, e]));
+            const nameOf = id => eqById[id]?.name || '';
+            
+            const paths = [];
+            const formData = new FormData(form);
+            const vlanCount = parseInt(formData.get('vlanCount')) || 1;
+            
+            // VLAN 1 (legacy A/Z fields)
+            const v1id = formData.get('vlan1_vlanId') || '';
+            const v1aEq = nameOf(formData.get('aEquipment'));
+            const v1aPort = formData.get('aEquipmentPort') || formData.get('aPort') || '';
+            const v1zEq = nameOf(formData.get('zEquipment'));
+            const v1zPort = formData.get('zEquipmentPort') || formData.get('zPort') || '';
+            if (v1id || v1aEq || v1zEq) {
+                paths.push({
+                    vlan: v1id, aDevice: v1aEq, 
+                    aInterface: v1aPort + (v1id ? '.' + v1id : ''),
+                    transport: 'VPWS',
+                    zDevice: v1zEq, 
+                    zInterface: v1zPort + (v1id ? '.' + v1id : ''),
+                    isMgmt: false
+                });
+            }
+            
+            // VLAN 2+ (from per-VLAN sections)
+            for (let i = 2; i <= vlanCount; i++) {
+                const vid = formData.get(`vlan${i}_vlanId`) || '';
+                const aEq = nameOf(formData.get(`vlan${i}_aEquipment`));
+                const aPort = formData.get(`vlan${i}_aEquipmentPort`) || formData.get(`vlan${i}_aPort`) || '';
+                const zEq = nameOf(formData.get(`vlan${i}_zEquipment`));
+                const zPort = formData.get(`vlan${i}_zEquipmentPort`) || formData.get(`vlan${i}_zPort`) || '';
+                if (vid || aEq || zEq) {
+                    paths.push({
+                        vlan: vid, aDevice: aEq,
+                        aInterface: aPort + (vid ? '.' + vid : ''),
+                        transport: 'VPWS',
+                        zDevice: zEq,
+                        zInterface: zPort + (vid ? '.' + vid : ''),
+                        isMgmt: false
+                    });
+                }
+            }
+            
+            // Mgmt VLAN (from CPE management VLAN field, if present)
+            const mgmtVlan = formData.get('cpeMgmtVlan');
+            if (mgmtVlan && paths.length > 0) {
+                // Mgmt rides the primary path
+                paths.push({
+                    vlan: mgmtVlan, aDevice: paths[0].aDevice, aInterface: (paths[0].aInterface.split('.')[0]) + '.' + mgmtVlan,
+                    transport: 'VPWS', zDevice: paths[0].zDevice, zInterface: (paths[0].zInterface.split('.')[0]) + '.' + mgmtVlan,
+                    isMgmt: true
+                });
+            }
+            
+            return paths;
         }
         // ===== CFA / DLR parser =====
         // Returns { paths: [...], unresolved: [...], cpe: {...} } 
@@ -9672,18 +9723,12 @@
             const select = document.getElementById(selectId);
             if (!select) return;
             const q = (query || '').toLowerCase().trim();
-            let visible = 0;
+            // Pure filter: 'contains' match on visible option text. Never auto-select; user picks explicitly.
+            // Backspace just narrows query → more options reappear naturally.
             Array.from(select.options).forEach(opt => {
                 if (!opt.value) { opt.style.display = ''; return; } // keep "Select Site..." placeholder
-                const match = !q || opt.text.toLowerCase().includes(q);
-                opt.style.display = match ? '' : 'none';
-                if (match) visible++;
+                opt.style.display = (!q || opt.text.toLowerCase().includes(q)) ? '' : 'none';
             });
-            // If only one match, auto-select it
-            if (visible === 1 && q) {
-                const onlyMatch = Array.from(select.options).find(o => o.value && o.style.display !== 'none');
-                if (onlyMatch) select.value = onlyMatch.value;
-            }
         }
 
         async function viewCircuitDetails(circuitId) {
