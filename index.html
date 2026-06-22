@@ -806,7 +806,7 @@
         // BUILD: 2024-05-19-23-00-TEMPLATE-LITERALS-FIXED
         // This timestamp forces browser to reload: 1747719600
         console.log('%c🔧 NetInventory Version: 2026-06-10-OTDR-PINPOINT', 'background: #8b5cf6; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;');
-        console.log('📡 CPE uplink/downlink port selectors + model-aware (3924/3922) + all prior!');
+        console.log('🗑 Strict empty-address-only site cleanup + reference safety check + all prior!');
         console.log('✅ Edit buttons ACTUALLY work now - template literals fixed!');
         console.log('🔢 Build timestamp: 1747719600');
         
@@ -2513,33 +2513,90 @@
             btn.textContent = '🔄 Finding Sites...';
             
             try {
-                const sites = await store.getSites();
-                const sitesWithNoAddress = sites.filter(s => {
-                    return !isReasonableAddress(s.address, s.city, s.state);
-                });
+                // STRICT empty-address only — must have nothing at all in address field
+                const [sites, equipment, fdps, racks, circuits] = await Promise.all([
+                    store.getSites(), store.getEquipment(), store.getFdps(), store.getRacks(), store.getCircuits()
+                ]);
+                const sitesWithNoAddress = sites.filter(s => !s.address || !String(s.address).trim());
                 
                 if (sitesWithNoAddress.length === 0) {
-                    alert('✅ All sites have valid addresses!');
+                    alert('✅ No sites with completely empty addresses!');
                     btn.disabled = false;
                     btn.textContent = '🗑️ Remove No Address Sites';
                     return;
                 }
                 
-                // Show what will be removed
-                const sampleSites = sitesWithNoAddress.slice(0, 10);
-                const sampleList = sampleSites.map(s => 
-                    `  • ${s.name || s.location}: "${s.address || '(blank)'}"`
-                ).join('\n');
+                // Build reference index: which sites are referenced by what?
+                const refs = {};  // siteId -> {equipment: [name], fdps: [name], racks: [name], circuits: [name]}
+                const noteRef = (siteId, kind, label) => {
+                    if (!siteId) return;
+                    if (!refs[siteId]) refs[siteId] = { equipment: [], fdps: [], racks: [], circuits: [] };
+                    refs[siteId][kind].push(label);
+                };
+                equipment.forEach(e => noteRef(e.siteId, 'equipment', e.name || e.id));
+                fdps.forEach(f => noteRef(f.siteId, 'fdps', f.name || f.id));
+                racks.forEach(r => noteRef(r.siteId, 'racks', r.name || r.id));
+                circuits.forEach(c => {
+                    if (c.aLocationSiteId) noteRef(c.aLocationSiteId, 'circuits', (c.circuitId || c.id) + ' (A)');
+                    if (c.zLocationSiteId) noteRef(c.zLocationSiteId, 'circuits', (c.circuitId || c.id) + ' (Z)');
+                    // Also B-N
+                    ['b','c','d','e','f','g','h','i','j','k','l','m','n'].forEach(letter => {
+                        const sid = c[letter + 'LocationSiteId'];
+                        if (sid) noteRef(sid, 'circuits', (c.circuitId || c.id) + ' (' + letter.toUpperCase() + ')');
+                    });
+                });
                 
-                const moreText = sitesWithNoAddress.length > 10 
-                    ? `\n  ... and ${sitesWithNoAddress.length - 10} more\n` 
-                    : '';
+                // Split into safe-to-delete vs referenced
+                const safeToDelete = [];
+                const referenced = [];
+                sitesWithNoAddress.forEach(s => {
+                    const r = refs[s.id];
+                    if (!r || (r.equipment.length === 0 && r.fdps.length === 0 && r.racks.length === 0 && r.circuits.length === 0)) {
+                        safeToDelete.push(s);
+                    } else {
+                        referenced.push({ site: s, refs: r });
+                    }
+                });
                 
-                if (!confirm(`Found ${sitesWithNoAddress.length} sites with no/invalid address:\n\n${sampleList}${moreText}\nRemove all these sites?`)) {
+                // Build the confirmation message
+                let msg = `Found ${sitesWithNoAddress.length} sites with empty address.\n\n`;
+                msg += `✅ Safe to delete (no references): ${safeToDelete.length}\n`;
+                if (safeToDelete.length > 0) {
+                    msg += safeToDelete.slice(0, 8).map(s => `  • ${s.name || s.location || '(unnamed)'}`).join('\n');
+                    if (safeToDelete.length > 8) msg += `\n  ... and ${safeToDelete.length - 8} more`;
+                    msg += '\n\n';
+                }
+                
+                if (referenced.length > 0) {
+                    msg += `⚠️ Referenced by other records (WILL BE SKIPPED): ${referenced.length}\n`;
+                    referenced.slice(0, 6).forEach(({ site, refs }) => {
+                        const counts = [];
+                        if (refs.equipment.length) counts.push(`${refs.equipment.length} equipment`);
+                        if (refs.fdps.length) counts.push(`${refs.fdps.length} FDP`);
+                        if (refs.racks.length) counts.push(`${refs.racks.length} rack`);
+                        if (refs.circuits.length) counts.push(`${refs.circuits.length} circuit`);
+                        msg += `  • ${site.name || site.location || '(unnamed)'} — ${counts.join(', ')}\n`;
+                    });
+                    if (referenced.length > 6) msg += `  ... and ${referenced.length - 6} more\n`;
+                    msg += '\n';
+                }
+                
+                if (safeToDelete.length === 0) {
+                    alert(msg + 'Nothing safe to delete. Review referenced sites manually if needed.');
                     btn.disabled = false;
                     btn.textContent = '🗑️ Remove No Address Sites';
                     return;
                 }
+                
+                msg += `Proceed deleting the ${safeToDelete.length} safe site(s)?`;
+                if (!confirm(msg)) {
+                    btn.disabled = false;
+                    btn.textContent = '🗑️ Remove No Address Sites';
+                    return;
+                }
+                
+                // Only operate on safe ones
+                const sitesToDelete = safeToDelete;
                 
                 // Create progress modal
                 const progressModal = document.createElement('div');
@@ -2567,10 +2624,10 @@
                 
                 let removed = 0;
                 let failed = 0;
-                const total = sitesWithNoAddress.length;
+                const total = sitesToDelete.length;
                 
-                for (let i = 0; i < sitesWithNoAddress.length; i++) {
-                    const site = sitesWithNoAddress[i];
+                for (let i = 0; i < sitesToDelete.length; i++) {
+                    const site = sitesToDelete[i];
                     try {
                         await store.deleteSite(site.id);
                         removed++;
@@ -5882,8 +5939,8 @@
                             <select name="cpeType" onchange="updateCpePortOptions()">
                                 <option value="">Select Type...</option>
                                 <option value="accedian">Accedian</option>
-                                <option value="3924">Ciena 3924 (8-port: 1-4×1G, 5-8×10G)</option>
-                                <option value="3922">Ciena 3922 (6-port: 1-4×1G, 5-6×10G)</option>
+                                <option value="3924">Ciena 3924 DC (8-port: 1-4×1G, 5-8×10G) — standard</option>
+                                <option value="3922">Ciena 3922 AC (6-port: 1-4×1G, 5-6×10G)</option>
                                 <option value="other">Other</option>
                             </select>
                         </div>
@@ -8477,7 +8534,11 @@
             // ===== CPE info — populate if blank =====
             if (result.cpe) {
                 if (form.elements.hasCpe) form.elements.hasCpe.value = 'yes';
-                if (form.elements.cpeType && !form.elements.cpeType.value) form.elements.cpeType.value = 'Ciena ' + result.cpe.model;
+                if (form.elements.cpeType && !form.elements.cpeType.value) {
+                    // Store just the model number so it matches the dropdown <option value="3924"> etc.
+                    const m = String(result.cpe.model || '').match(/(\d{4})/);
+                    form.elements.cpeType.value = m ? m[1] : (result.cpe.model || '');
+                }
                 if (form.elements.cpeMgmtIp && !form.elements.cpeMgmtIp.value && result.cpe.mgmtIp) form.elements.cpeMgmtIp.value = result.cpe.mgmtIp;
                 if (form.elements.cpeMgmtGateway && !form.elements.cpeMgmtGateway.value && result.cpe.mgmtGateway) form.elements.cpeMgmtGateway.value = result.cpe.mgmtGateway;
                 if (form.elements.cpeMgmtSubnet && !form.elements.cpeMgmtSubnet.value && result.cpe.mgmtSubnet) form.elements.cpeMgmtSubnet.value = result.cpe.mgmtSubnet;
@@ -8718,17 +8779,34 @@
                     const zSite = sites.find(s => s.id === circuit.zLocationSiteId);
                     
                     if (zSite) {
-                        // Build CPE equipment data
+                        // Build CPE equipment data — Ciena models default to DC variant (the standard for our deployments)
+                        const cpeManufacturer = circuit.cpeType === 'accedian' ? 'Accedian' : 'Ciena';
+                        const cpeModel = circuit.cpeType === 'accedian' ? 'Accedian' :
+                                         circuit.cpeType === '3924' ? 'Ciena 3924 DC' :   // DC is standard for 3924
+                                         circuit.cpeType === '3922' ? 'Ciena 3922 AC' :   // 3922s ship AC
+                                         circuit.cpeType || 'Unknown';
+                        // Try to find a matching template (by name match like "Ciena 3924 DC") and link it
+                        let cpeTemplateId = '';
+                        try {
+                            const tmpls = await store.getEquipmentTemplates();
+                            // Prefer exact match on the model name, then partial match on "3924 DC", then "3924"
+                            const match = tmpls.find(t => String(t.name||'').toLowerCase() === cpeModel.toLowerCase())
+                                       || tmpls.find(t => String(t.model||'').toLowerCase() === cpeModel.toLowerCase())
+                                       || tmpls.find(t => String(t.name||'').toLowerCase().includes(`${circuit.cpeType} dc`.toLowerCase()) && circuit.cpeType)
+                                       || tmpls.find(t => String(t.name||'').toLowerCase().includes(circuit.cpeType?.toLowerCase()||'__none__') && !String(t.name||'').toLowerCase().includes('isr') && !String(t.name||'').toLowerCase().includes('cisco'));
+                            if (match) { cpeTemplateId = match.id; console.log('Matched CPE template:', match.name, '→', match.id); }
+                            else { console.warn('No CPE template found for', cpeModel, '— equipment created without template link.'); }
+                        } catch (e) { console.warn('Template lookup failed:', e); }
+                        
                         const cpeEquipment = {
                             name: `CPE-${circuit.circuitId || 'AUTO'}`,
                             type: circuit.cpeType,
                             siteId: circuit.zLocationSiteId,
                             rackId: '',
                             rackUnit: '',
-                            manufacturer: circuit.cpeType === 'accedian' ? 'Accedian' : 'Cisco',
-                            model: circuit.cpeType === 'accedian' ? 'Accedian' : 
-                                   circuit.cpeType === '3924' ? 'ISR 3924' :
-                                   circuit.cpeType === '3922' ? 'ISR 3922' : 'Unknown',
+                            manufacturer: cpeManufacturer,
+                            model: cpeModel,
+                            templateId: cpeTemplateId,
                             serialNumber: '',
                             ipAddress: circuit.cpeMgmtIp || '',
                             notes: `CPE for circuit ${circuit.circuitId || 'pending'}. Management: ${circuit.cpeMgmtIp || 'N/A'}/${circuit.cpeMgmtSubnet || 'N/A'} GW: ${circuit.cpeMgmtGateway || 'N/A'} VLAN: ${circuit.cpeMgmtVlan || 'N/A'}`,
