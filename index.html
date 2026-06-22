@@ -806,7 +806,7 @@
         // BUILD: 2024-05-19-23-00-TEMPLATE-LITERALS-FIXED
         // This timestamp forces browser to reload: 1747719600
         console.log('%c🔧 NetInventory Version: 2026-06-10-OTDR-PINPOINT', 'background: #8b5cf6; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;');
-        console.log('🎯 Search contains+no-autoselect, CFA grid hidden+auto-derived + all prior!');
+        console.log('🔎 Site combobox (single-input filter+select) + all prior!');
         console.log('✅ Edit buttons ACTUALLY work now - template literals fixed!');
         console.log('🔢 Build timestamp: 1747719600');
         
@@ -5617,7 +5617,6 @@
                     
                     <div class="form-group">
                         <label>Site *</label>
-                        <input type="text" placeholder="🔍 Type to filter sites by name, address, or CLLI..." oninput="filterSiteSelect('circuitASiteSelect', this.value)" style="width: 100%; padding: 0.4rem 0.7rem; margin-bottom: 0.3rem; border: 1px solid var(--border-color); border-radius: 4px; font-size: 0.9em;" />
                         <select name="aLocationSiteId" required id="circuitASiteSelect" onchange="updateCircuitNniDropdowns('a'); updateCircuitFdpDropdowns('a'); updateCircuitEquipmentDropdown('a')">
                             <option value="">Select Site...</option>
                         </select>
@@ -5718,7 +5717,6 @@
                     
                     <div class="form-group">
                         <label>Site *</label>
-                        <input type="text" placeholder="🔍 Type to filter sites by name, address, or CLLI..." oninput="filterSiteSelect('circuitZSiteSelect', this.value)" style="width: 100%; padding: 0.4rem 0.7rem; margin-bottom: 0.3rem; border: 1px solid var(--border-color); border-radius: 4px; font-size: 0.9em;" />
                         <select name="zLocationSiteId" id="circuitZSiteSelect" onchange="updateCircuitNniDropdowns('z'); updateCircuitFdpDropdowns('z'); updateCircuitEquipmentDropdown('z')">
                             <option value="">Select Site...</option>
                         </select>
@@ -7078,6 +7076,8 @@
             const siteOptions = '<option value="">Select Site...</option>' + sites.map(site => `<option value="${site.id}">${(site.name || site.location || '(unnamed)') + (site.address ? ' — ' + site.address.split(',')[0] : '') + (site.name && site.cidCode ? ' [' + site.cidCode + ']' : '')}</option>`).join('');
             document.getElementById('circuitASiteSelect').innerHTML = siteOptions;
             document.getElementById('circuitZSiteSelect').innerHTML = siteOptions;
+            attachSiteCombobox('circuitASiteSelect');
+            attachSiteCombobox('circuitZSiteSelect');
             
             const fdps = await store.getFdps();
             const fdpOptions = '<option value="">Select FDP...</option>' + fdps.map(fdp => `<option value="${fdp.id}">${fdp.name}</option>`).join('');
@@ -7145,6 +7145,8 @@
             const siteOptions = '<option value="">Select Site...</option>' + sites.map(site => `<option value="${site.id}">${(site.name || site.location || '(unnamed)') + (site.address ? ' — ' + site.address.split(',')[0] : '') + (site.name && site.cidCode ? ' [' + site.cidCode + ']' : '')}</option>`).join('');
             document.getElementById('circuitASiteSelect').innerHTML = siteOptions;
             document.getElementById('circuitZSiteSelect').innerHTML = siteOptions;
+            attachSiteCombobox('circuitASiteSelect');
+            attachSiteCombobox('circuitZSiteSelect');
             
             const fdps = await store.getFdps();
             const fdpOptions = '<option value="">Select FDP...</option>' + fdps.map(fdp => `<option value="${fdp.id}">${fdp.name}</option>`).join('');
@@ -9719,17 +9721,88 @@
         }
         
         // Filter site-select options by typed text — matches name, address, CLLI/CID
-        function filterSiteSelect(selectId, query) {
+        // Convert a <select> into a searchable combobox: single input that filters and selects in one motion
+        function attachSiteCombobox(selectId) {
             const select = document.getElementById(selectId);
-            if (!select) return;
-            const q = (query || '').toLowerCase().trim();
-            // Pure filter: 'contains' match on visible option text. Never auto-select; user picks explicitly.
-            // Backspace just narrows query → more options reappear naturally.
-            Array.from(select.options).forEach(opt => {
-                if (!opt.value) { opt.style.display = ''; return; } // keep "Select Site..." placeholder
-                opt.style.display = (!q || opt.text.toLowerCase().includes(q)) ? '' : 'none';
+            if (!select || select.dataset.comboAttached === '1') return;
+            select.dataset.comboAttached = '1';
+            
+            // Hide the original select (still gets form-submitted, still holds the value)
+            select.style.display = 'none';
+            
+            // Build wrapper: input + dropdown panel
+            const wrap = document.createElement('div');
+            wrap.className = 'site-combo-wrap';
+            wrap.style.cssText = 'position: relative; width: 100%;';
+            
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.setAttribute('autocomplete', 'off');
+            input.placeholder = '🔍 Type to search sites by name, address, or CLLI...';
+            input.style.cssText = 'width: 100%; padding: 0.5rem 0.75rem; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-primary); color: var(--text-primary); font-size: 0.95em;';
+            
+            const panel = document.createElement('div');
+            panel.style.cssText = 'position: absolute; top: 100%; left: 0; right: 0; z-index: 1100; max-height: 280px; overflow-y: auto; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.25); display: none; margin-top: 2px;';
+            
+            select.parentNode.insertBefore(wrap, select);
+            wrap.appendChild(input);
+            wrap.appendChild(panel);
+            wrap.appendChild(select);
+            
+            function render(query) {
+                const q = (query || '').toLowerCase().trim();
+                const opts = Array.from(select.options).filter(o => o.value);
+                const matches = q ? opts.filter(o => o.text.toLowerCase().includes(q)) : opts;
+                if (matches.length === 0) {
+                    panel.innerHTML = '<div style="padding: 0.6rem 0.75rem; color: var(--text-tertiary); font-style: italic;">No matching sites</div>';
+                } else {
+                    const cap = 100;
+                    panel.innerHTML = matches.slice(0, cap).map(o => 
+                        `<div data-value="${o.value}" class="combo-item" style="padding: 0.5rem 0.75rem; cursor: pointer; border-bottom: 1px solid var(--border-color); color: var(--text-primary); font-size: 0.9em;" onmouseover="this.style.background='var(--bg-secondary)'" onmouseout="this.style.background=''">${o.text}</div>`
+                    ).join('');
+                    if (matches.length > cap) {
+                        panel.innerHTML += `<div style="padding: 0.5rem 0.75rem; color: var(--text-tertiary); font-style: italic; font-size: 0.85em;">Showing first ${cap} of ${matches.length} — keep typing to narrow</div>`;
+                    }
+                }
+                panel.style.display = 'block';
+            }
+            
+            input.addEventListener('focus', () => render(input.value));
+            input.addEventListener('input', () => render(input.value));
+            input.addEventListener('keydown', e => {
+                if (e.key === 'Escape') { panel.style.display = 'none'; input.blur(); }
             });
+            
+            panel.addEventListener('click', e => {
+                const item = e.target.closest('.combo-item');
+                if (!item) return;
+                const val = item.dataset.value;
+                const opt = Array.from(select.options).find(o => o.value === val);
+                select.value = val;
+                input.value = opt ? opt.text : '';
+                panel.style.display = 'none';
+                select.dispatchEvent(new Event('change'));
+            });
+            
+            // Hide panel on outside click
+            document.addEventListener('click', e => {
+                if (!wrap.contains(e.target)) panel.style.display = 'none';
+            });
+            
+            // Sync visible input when select.value changes programmatically
+            select.addEventListener('change', () => {
+                if (document.activeElement === input) return; // user is editing
+                const opt = Array.from(select.options).find(o => o.value === select.value);
+                input.value = opt ? opt.text : '';
+            });
+            
+            // Initial sync
+            const initialOpt = Array.from(select.options).find(o => o.value === select.value);
+            if (initialOpt) input.value = initialOpt.text;
         }
+        
+        // Legacy filterSiteSelect shim (kept for any leftover callers)
+        function filterSiteSelect() { /* no-op — combobox handles filtering */ }
 
         async function viewCircuitDetails(circuitId) {
             const circuit = (await store.getCircuits()).find(c => c.id === circuitId);
