@@ -806,7 +806,7 @@
         // BUILD: 2024-05-19-23-00-TEMPLATE-LITERALS-FIXED
         // This timestamp forces browser to reload: 1747719600
         console.log('%c🔧 NetInventory Version: 2026-06-10-OTDR-PINPOINT', 'background: #8b5cf6; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;');
-        console.log('🛡 Resilient save (retry without VlanCount if column missing, verify-on-write) + all prior!');
+        console.log('🩹 safeParseJson handles SharePoint rich-text wrap + all prior!');
         console.log('✅ Edit buttons ACTUALLY work now - template literals fixed!');
         console.log('🔢 Build timestamp: 1747719600');
         
@@ -7175,7 +7175,7 @@
                 if (cfaWrap) {
                     cfaWrap.innerHTML = '';
                     let paths = [];
-                    try { paths = JSON.parse(circuit.cfaPaths || '[]'); } catch (e2) {}
+                    try { paths = safeParseJson(circuit.cfaPaths, []); } catch (e2) {}
                     paths.forEach(p => addCfaPathRow(p));
                 }
             } catch (e) { console.error('CFA path load failed', e); }
@@ -7348,7 +7348,7 @@
             // LOAD MULTI-VLAN DATA
             if (circuit.circuitVlans) {
                 try {
-                    const vlans = JSON.parse(circuit.circuitVlans);
+                    const vlans = safeParseJson(circuit.circuitVlans, []);
                     const vlanCountSelect = document.getElementById('vlanCountSelect');
                     // Prefer the explicit vlanCount column (flat, queryable, no JSON-parse-fail risk)
                     const authoritativeCount = circuit.vlanCount && parseInt(circuit.vlanCount) > 0 
@@ -8070,7 +8070,7 @@
             try {
                 const cpeId = circuit.cpeEquipmentId;
                 const cpeEq = cpeId ? (await store.getEquipment()).find(e => e.id === cpeId) : null;
-                const paths = JSON.parse(circuit.cfaPaths || '[]');
+                const paths = safeParseJson(circuit.cfaPaths, []);
                 if (paths.length > 0 || cpeEq) circuit.dlrText = generateCfaText(paths, cpeEq, circuit);
                 // Gate: Salesforce-linked circuits must have CFA paths + bandwidth to go Active
                 let sfLinked = circuit.salesforceId;
@@ -8109,7 +8109,9 @@
                         const verify = (await store.getCircuits()).find(c => c.id === formEditId);
                         const expectedCount = parseInt(formData.get('vlanCount')) || 1;
                         const actualCount = verify?.vlanCount ? parseInt(verify.vlanCount) : null;
-                        const vlansLanded = verify?.circuitVlans && verify.circuitVlans.startsWith('[');
+                        // SharePoint may wrap Note-column JSON in HTML; clean and validate
+                        const cleanedVlans = verify?.circuitVlans ? decodeHtmlEntities(stripHtmlWrap(verify.circuitVlans)) : '';
+                        const vlansLanded = cleanedVlans && cleanedVlans.startsWith('[');
                         if (expectedCount > 1 && !vlansLanded) {
                             alert('⚠️ Circuit saved BUT VLAN data may not have persisted.\n\nExpected: ' + expectedCount + ' VLANs (JSON)\nActual: ' + (verify?.circuitVlans?.slice(0,80) || '(empty)') + '\n\nThis usually means a SharePoint column was rejected. Check console (F12) for details.');
                             console.error('Save mismatch on circuit', formEditId, '— expected JSON, got:', verify?.circuitVlans);
@@ -9580,6 +9582,44 @@
                 .replace(/<[^>]+>/g, '')
                 .trim();
         }
+        
+        // Decode HTML entities so JSON wrapped by SharePoint rich-text can be parsed
+        function decodeHtmlEntities(s) {
+            if (!s) return s;
+            return String(s)
+                .replace(/&quot;/g, '"')
+                .replace(/&#34;/g, '"')
+                .replace(/&#39;/g, "'")
+                .replace(/&apos;/g, "'")
+                .replace(/&amp;/g, '&')
+                .replace(/&#123;/g, '{')
+                .replace(/&#125;/g, '}')
+                .replace(/&#91;/g, '[')
+                .replace(/&#93;/g, ']')
+                .replace(/&#58;/g, ':')
+                .replace(/&#44;/g, ',')
+                .replace(/&lt;/g, '<')
+                .replace(/&gt;/g, '>')
+                .replace(/&nbsp;/g, ' ');
+        }
+        
+        // Parse JSON that may be wrapped by SharePoint rich-text (Note columns return HTML)
+        function safeParseJson(raw, fallback) {
+            if (!raw) return fallback;
+            try {
+                // Try raw parse first (in case it's already clean)
+                return JSON.parse(raw);
+            } catch (e) {
+                // Strip HTML wrapper + decode entities + retry
+                const cleaned = decodeHtmlEntities(stripHtmlWrap(raw));
+                try {
+                    return JSON.parse(cleaned);
+                } catch (e2) {
+                    console.warn('safeParseJson failed even after cleanup. Raw:', raw.slice(0,120), 'Cleaned:', cleaned.slice(0,120));
+                    return fallback;
+                }
+            }
+        }
 
         async function viewCircuitDetails(circuitId) {
             const circuit = (await store.getCircuits()).find(c => c.id === circuitId);
@@ -9749,7 +9789,7 @@
             let vlans = [];
             if (circuit.circuitVlans) {
                 try {
-                    vlans = JSON.parse(circuit.circuitVlans);
+                    vlans = safeParseJson(circuit.circuitVlans, []);
                 } catch (error) {
                     console.error('Error parsing VLAN data:', error);
                     // Fall back to legacy structure
