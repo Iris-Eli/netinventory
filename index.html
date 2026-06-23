@@ -806,7 +806,7 @@
         // BUILD: 2024-05-19-23-00-TEMPLATE-LITERALS-FIXED
         // This timestamp forces browser to reload: 1747719600
         console.log('%c🔧 NetInventory Version: 2026-06-10-OTDR-PINPOINT', 'background: #8b5cf6; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;');
-        console.log('🔧 Waypoint loader moved from openAddCircuitModal → editCircuit (after VLAN spawn) + all prior!');
+        console.log('📋 DLR view reads B-N columns + NNI name lookup, legacy path block suppressed + all prior!');
         console.log('✅ Edit buttons ACTUALLY work now - template literals fixed!');
         console.log('🔢 Build timestamp: 1747719600');
         
@@ -10751,11 +10751,12 @@
                 }];
             }
             
-            // Generate path HTML for each VLAN
+            // Legacy per-VLAN path HTML — suppressed because the new Per-VLAN Path Detail section above covers this
             let pathsHTML = '';
-            for (let i = 0; i < vlans.length; i++) {
-                pathsHTML += await generateVlanPathHTML(vlans[i], i + 1, allSites, allFdps, allNnis, allEquipment, allRacks);
-            }
+            // (Uncomment to re-enable legacy view:)
+            // for (let i = 0; i < vlans.length; i++) {
+            //     pathsHTML += await generateVlanPathHTML(vlans[i], i + 1, allSites, allFdps, allNnis, allEquipment, allRacks);
+            // }
             
             const generatedDate = new Date().toLocaleString();
             const directionLabel = circuit.direction === 'provider' ? 'Purchasing' : circuit.direction === 'customer' ? 'Providing' : 'Internal';
@@ -10763,6 +10764,8 @@
             // Expose caches for the per-VLAN path renderer in dlrHTML
             window._sitesCache = allSites;
             window._equipmentCache = allEquipment;
+            window._nnisCache = allNnis;
+            window._fdpsCache = allFdps;
             
             const dlrHTML = `
                 <div class="modal active" id="dlrModal" onclick="if(event.target === this) closeDLRModal()">
@@ -10826,41 +10829,113 @@
                                 </div>
                             </div>
 
-                            <!-- Per-VLAN Paths (from waypoints JSON) -->
+                            <!-- Per-VLAN Path Detail — reads B-N columns first, falls back to legacy JSON -->
                             ${(() => {
-                                const parsed = circuit.additionalLocations ? safeParseJson(circuit.additionalLocations, null) : null;
-                                const waypoints = parsed?.waypoints || {};
-                                const tunable = parsed?.tunable || {};
-                                const vlanNums = Array.from(new Set([...Object.keys(waypoints), ...Object.keys(tunable)])).map(Number).filter(n=>!isNaN(n)).sort((a,b)=>a-b);
-                                if (vlanNums.length === 0) return '';
                                 const sitesById = Object.fromEntries((window._sitesCache||[]).map(s => [s.id, s]));
                                 const eqById = Object.fromEntries((window._equipmentCache||[]).map(e => [e.id, e]));
+                                const nnisById = Object.fromEntries((window._nnisCache||[]).map(n => [n.id, n]));
+                                const fdpsById = Object.fromEntries((window._fdpsCache||[]).map(f => [f.id, f]));
+                                
+                                // Try B-N columns first
+                                const vlanCount = parseInt(circuit.vlanCount) || 1;
+                                const LETTERS = ['B','C','D','E','F','G','H','I','J','K','L','M','N'];
+                                const hopsByVlan = {};  // {vlanNum: [{letter, siteId, connectionType, ...}, ...]}
+                                
+                                LETTERS.forEach((L, posIdx) => {
+                                    const lo = L.toLowerCase();
+                                    const siteRaw = circuit[`${lo}LocationSiteId`];
+                                    if (!siteRaw) return;
+                                    const siteMap = parseDelimitedPerVlan(siteRaw, vlanCount);
+                                    const ctMap = parseDelimitedPerVlan(circuit[`${lo}ConnectionType`], vlanCount);
+                                    const eqMap = parseDelimitedPerVlan(circuit[`${lo}Equipment`], vlanCount);
+                                    const eqPortMap = parseDelimitedPerVlan(circuit[`${lo}EquipmentPort`], vlanCount);
+                                    const fdpMap = parseDelimitedPerVlan(circuit[`${lo}Fdp`], vlanCount);
+                                    const portMap = parseDelimitedPerVlan(circuit[`${lo}Port`], vlanCount);
+                                    const nniRawMap = parseDelimitedPerVlan(circuit[`${lo}Nni`], vlanCount);
+                                    Object.entries(siteMap).forEach(([vNum, siteId]) => {
+                                        if (!siteId) return;
+                                        if (!hopsByVlan[vNum]) hopsByVlan[vNum] = [];
+                                        const nniRaw = nniRawMap[vNum] || '';
+                                        const nniParts = nniRaw.split(':');
+                                        hopsByVlan[vNum].push({
+                                            letter: L,
+                                            siteId,
+                                            connectionType: ctMap[vNum] || '',
+                                            equipment: eqMap[vNum] || '',
+                                            equipmentPort: eqPortMap[vNum] || '',
+                                            fdp: fdpMap[vNum] || '',
+                                            fdpPort: portMap[vNum] || '',
+                                            nni: nniParts[0] || '',
+                                            subinterface: nniParts[1] || '',
+                                        });
+                                    });
+                                });
+                                
+                                // Parse tunable column
+                                const tunableByVlan = {};
+                                const tunableValue = circuit.tunable || '';
+                                if (tunableValue && (tunableValue.includes('.up.') || tunableValue.includes('.dn.'))) {
+                                    String(tunableValue).split('|').forEach(seg => {
+                                        const m = seg.match(/^([A-Z])\.(up|dn)\.v(\d+)=([YN])(?:@(.+))?$/);
+                                        if (!m) return;
+                                        const [_, letter, dir, vNum, yn, wave] = m;
+                                        if (!tunableByVlan[vNum]) tunableByVlan[vNum] = {};
+                                        tunableByVlan[vNum][`${letter}_${dir}`] = { on: yn === 'Y', wave: wave || '' };
+                                    });
+                                }
+                                
+                                // Fallback to JSON if columns empty
+                                if (Object.keys(hopsByVlan).length === 0) {
+                                    const parsed = circuit.additionalLocations ? safeParseJson(circuit.additionalLocations, null) : null;
+                                    const waypoints = parsed?.waypoints || {};
+                                    Object.entries(waypoints).forEach(([vNum, list]) => {
+                                        hopsByVlan[vNum] = list.map((h, i) => ({ letter: String.fromCharCode(66 + i), ...h }));
+                                    });
+                                }
+                                
+                                // Build VLAN list from circuit.circuitVlans for VLAN IDs
+                                const vlans = circuit.circuitVlans ? safeParseJson(circuit.circuitVlans, []) : [];
+                                const allVlanNums = Array.from(new Set([
+                                    ...vlans.map((_, i) => (i+1).toString()),
+                                    ...Object.keys(hopsByVlan),
+                                    ...Object.keys(tunableByVlan)
+                                ])).map(Number).filter(n=>!isNaN(n) && n > 0).sort((a,b)=>a-b);
+                                if (allVlanNums.length === 0) return '';
+                                
                                 return `
                                     <div style="background: var(--bg-tertiary); padding: 1.5rem; border-radius: 8px; margin-bottom: 2rem; border-left: 4px solid var(--accent-secondary);">
                                         <h3 style="margin: 0 0 1rem; color: var(--accent-secondary);">Per-VLAN Path Detail</h3>
-                                        ${vlanNums.map(v => {
-                                            const t = tunable[v] || {};
-                                            const hops = waypoints[v] || [];
-                                            const aTun = (t.aUpstream || t.aDownstream) ? `🌈 ${t.aUpstream ? 'Up ' + (t.aWavelengthUpstream||'?nm') : ''} ${t.aDownstream ? 'Down ' + (t.aWavelengthDownstream||'?nm') : ''}`.trim() : '';
-                                            const zTun = (t.zUpstream || t.zDownstream) ? `🌈 ${t.zUpstream ? 'Up ' + (t.zWavelengthUpstream||'?nm') : ''} ${t.zDownstream ? 'Down ' + (t.zWavelengthDownstream||'?nm') : ''}`.trim() : '';
+                                        ${allVlanNums.map(v => {
+                                            const vlanInfo = vlans[v-1] || {};
+                                            const vlanId = vlanInfo.vlanId || '?';
+                                            const t = tunableByVlan[v] || {};
+                                            const hops = hopsByVlan[v] || [];
+                                            const aTunStr = (t.A_up?.on || t.A_dn?.on) ? `🌈 ${t.A_up?.on ? '↑'+(t.A_up.wave||'?') : ''}${t.A_dn?.on ? ' ↓'+(t.A_dn.wave||'?') : ''}`.trim() : '';
+                                            const zTunStr = (t.Z_up?.on || t.Z_dn?.on) ? `🌈 ${t.Z_up?.on ? '↑'+(t.Z_up.wave||'?') : ''}${t.Z_dn?.on ? ' ↓'+(t.Z_dn.wave||'?') : ''}`.trim() : '';
+                                            
+                                            const formatHop = (h) => {
+                                                const site = sitesById[h.siteId];
+                                                const siteName = site?.name || site?.location || '(unknown site)';
+                                                let detail = '';
+                                                if (h.connectionType === 'nni' && h.nni) {
+                                                    const nni = nnisById[h.nni];
+                                                    detail = 'NNI ' + (nni?.name || h.nni) + (h.subinterface ? '.' + h.subinterface : '');
+                                                } else if (h.connectionType === 'equipment' && h.equipment) {
+                                                    const eq = eqById[h.equipment];
+                                                    detail = (eq?.name || h.equipment) + (h.equipmentPort ? ':' + h.equipmentPort : '');
+                                                } else if (h.connectionType === 'fdp' && h.fdp) {
+                                                    const fdp = fdpsById[h.fdp];
+                                                    detail = 'FDP ' + (fdp?.name || h.fdp) + (h.fdpPort ? ':' + h.fdpPort : '');
+                                                }
+                                                const hTun = (t[h.letter+'_up']?.on || t[h.letter+'_dn']?.on) ? ` 🌈${t[h.letter+'_up']?.on?'↑'+(t[h.letter+'_up'].wave||'?'):''}${t[h.letter+'_dn']?.on?' ↓'+(t[h.letter+'_dn'].wave||'?'):''}`.trim() : '';
+                                                return ` → <span style="color: var(--accent-secondary); font-weight: 600;">${h.letter}</span> ${siteName}${detail ? ' [' + detail + ']' : ''}${hTun}`;
+                                            };
+                                            
                                             return `
                                                 <div style="margin-bottom: 1.25rem; padding: 0.75rem 1rem; background: var(--bg-secondary); border-radius: 6px;">
-                                                    <div style="font-weight: 700; color: var(--accent-primary); margin-bottom: 0.4rem;">VLAN ${v}</div>
-                                                    <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.9em;">
-                                                        <span style="color: var(--accent-secondary);">A</span>${aTun ? ' (' + aTun + ')' : ''}
-                                                        ${hops.map((h, i) => {
-                                                            const letter = String.fromCharCode(66 + i);
-                                                            const site = sitesById[h.siteId];
-                                                            const siteName = site?.name || site?.location || h.siteId || '?';
-                                                            const eq = h.equipment ? (eqById[h.equipment]?.name || h.equipment) : '';
-                                                            const detail = h.connectionType === 'equipment' ? eq + (h.equipmentPort ? ':' + h.equipmentPort : '')
-                                                                : h.connectionType === 'nni' ? 'NNI ' + (h.nni||'?') + (h.subinterface ? '.' + h.subinterface : '')
-                                                                : h.connectionType === 'fdp' ? 'FDP ' + (h.fdp||'?') + (h.fdpPort ? ':' + h.fdpPort : '')
-                                                                : '';
-                                                            const hTun = (h.tunableUpstream || h.tunableDownstream) ? ` 🌈${h.tunableUpstream ? '↑'+(h.wavelengthUpstream||'?'):''}${h.tunableDownstream ? '↓'+(h.wavelengthDownstream||'?'):''}` : '';
-                                                            return ` → <span style="color: var(--accent-secondary);">${letter}</span> ${siteName}${detail ? ' [' + detail + ']' : ''}${hTun}`;
-                                                        }).join('')}
-                                                        → <span style="color: var(--accent-secondary);">Z</span>${zTun ? ' (' + zTun + ')' : ''}
+                                                    <div style="font-weight: 700; color: var(--accent-primary); margin-bottom: 0.4rem;">VLAN ${v} ${vlanId !== '?' ? '— ID: ' + vlanId : ''}</div>
+                                                    <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.9em; line-height: 1.6;">
+                                                        <span style="color: var(--accent-secondary); font-weight: 600;">A</span>${aTunStr ? ' (' + aTunStr + ')' : ''}${hops.map(formatHop).join('')} → <span style="color: var(--accent-secondary); font-weight: 600;">Z</span>${zTunStr ? ' (' + zTunStr + ')' : ''}
                                                     </div>
                                                 </div>
                                             `;
