@@ -806,7 +806,7 @@
         // BUILD: 2024-05-19-23-00-TEMPLATE-LITERALS-FIXED
         // This timestamp forces browser to reload: 1747719600
         console.log('%c🔧 NetInventory Version: 2026-06-10-OTDR-PINPOINT', 'background: #8b5cf6; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;');
-        console.log('🗑 Strict empty-address-only site cleanup + reference safety check + all prior!');
+        console.log('🔧 Waypoint loader moved from openAddCircuitModal → editCircuit (after VLAN spawn) + all prior!');
         console.log('✅ Edit buttons ACTUALLY work now - template literals fixed!');
         console.log('🔢 Build timestamp: 1747719600');
         
@@ -7761,48 +7761,7 @@
             toggleConnectionFields('a');
             toggleConnectionFields('z');
             toggleCpeFields();
-            // Load per-VLAN waypoints + tunable
-            // Phase 2 preferred: delimited columns (B-N). Fallback: JSON in AdditionalLocations.
-            const vlanCountForLoad = parseInt(circuit.vlanCount) || (circuit.circuitVlans ? (safeParseJson(circuit.circuitVlans, []).length || 1) : 1);
-            const hasDelimitedWaypoints = circuit.bLocationSiteId || circuit.cLocationSiteId || circuit.dLocationSiteId;
-            const tunableValue = circuit.tunable || '';
-            const hasDelimitedTunable = tunableValue && (tunableValue.includes('.up.') || tunableValue.includes('.dn.'));
-            
-            if (hasDelimitedWaypoints) {
-                await loadWaypointsFromColumns(circuit, vlanCountForLoad);
-            } else if (circuit.additionalLocations) {
-                // Legacy JSON fallback
-                const parsed = safeParseJson(circuit.additionalLocations, null);
-                if (parsed && parsed.waypoints) {
-                    Object.entries(parsed.waypoints).forEach(([vNum, list]) => {
-                        list.forEach(entry => addVlanIntermediateLocation(parseInt(vNum), entry));
-                    });
-                }
-            }
-            
-            if (hasDelimitedTunable) {
-                loadTunableFromColumn(tunableValue);
-            } else if (circuit.additionalLocations) {
-                const parsed = safeParseJson(circuit.additionalLocations, null);
-                if (parsed && parsed.tunable) {
-                    Object.entries(parsed.tunable).forEach(([vNum, t]) => {
-                        const form = document.getElementById('circuitForm');
-                        if (!form) return;
-                        const set = (name, val, isCheckbox) => {
-                            const el = form.elements[name]; if (!el) return;
-                            if (isCheckbox) el.checked = !!val; else el.value = val || '';
-                        };
-                        set(`vlan${vNum}_aTunableUpstream`, t.aUpstream, true);
-                        set(`vlan${vNum}_aWavelengthUpstream`, t.aWavelengthUpstream);
-                        set(`vlan${vNum}_aTunableDownstream`, t.aDownstream, true);
-                        set(`vlan${vNum}_aWavelengthDownstream`, t.aWavelengthDownstream);
-                        set(`vlan${vNum}_zTunableUpstream`, t.zUpstream, true);
-                        set(`vlan${vNum}_zWavelengthUpstream`, t.zWavelengthUpstream);
-                        set(`vlan${vNum}_zTunableDownstream`, t.zDownstream, true);
-                        set(`vlan${vNum}_zWavelengthDownstream`, t.zWavelengthDownstream);
-                    });
-                }
-            }
+
             
             document.getElementById('circuitModal').classList.add('active');
         }
@@ -8167,6 +8126,47 @@
                     }
                 } catch (error) {
                     console.error('Error parsing VLAN data:', error);
+                }
+            }
+            
+            // Load per-VLAN waypoints + tunable (deferred until AFTER VLAN sections spawn so vlan{N}_intermediateContainer exists)
+            const vlanCountForLoad = parseInt(circuit.vlanCount) || (circuit.circuitVlans ? (safeParseJson(circuit.circuitVlans, []).length || 1) : 1);
+            const hasDelimitedWaypoints = circuit.bLocationSiteId || circuit.cLocationSiteId || circuit.dLocationSiteId;
+            const tunableValue = circuit.tunable || '';
+            const hasDelimitedTunable = tunableValue && (tunableValue.includes('.up.') || tunableValue.includes('.dn.'));
+            
+            if (hasDelimitedWaypoints) {
+                await loadWaypointsFromColumns(circuit, vlanCountForLoad);
+            } else if (circuit.additionalLocations) {
+                const parsed = safeParseJson(circuit.additionalLocations, null);
+                if (parsed && parsed.waypoints) {
+                    Object.entries(parsed.waypoints).forEach(([vNum, list]) => {
+                        list.forEach(entry => addVlanIntermediateLocation(parseInt(vNum), entry));
+                    });
+                }
+            }
+            
+            if (hasDelimitedTunable) {
+                loadTunableFromColumn(tunableValue);
+            } else if (circuit.additionalLocations) {
+                const parsed = safeParseJson(circuit.additionalLocations, null);
+                if (parsed && parsed.tunable) {
+                    Object.entries(parsed.tunable).forEach(([vNum, t]) => {
+                        const form = document.getElementById('circuitForm');
+                        if (!form) return;
+                        const set = (name, val, isCheckbox) => {
+                            const el = form.elements[name]; if (!el) return;
+                            if (isCheckbox) el.checked = !!val; else el.value = val || '';
+                        };
+                        set(`vlan${vNum}_aTunableUpstream`, t.aUpstream, true);
+                        set(`vlan${vNum}_aWavelengthUpstream`, t.aWavelengthUpstream);
+                        set(`vlan${vNum}_aTunableDownstream`, t.aDownstream, true);
+                        set(`vlan${vNum}_aWavelengthDownstream`, t.aWavelengthDownstream);
+                        set(`vlan${vNum}_zTunableUpstream`, t.zUpstream, true);
+                        set(`vlan${vNum}_zWavelengthUpstream`, t.zWavelengthUpstream);
+                        set(`vlan${vNum}_zTunableDownstream`, t.zDownstream, true);
+                        set(`vlan${vNum}_zWavelengthDownstream`, t.zWavelengthDownstream);
+                    });
                 }
             }
             
