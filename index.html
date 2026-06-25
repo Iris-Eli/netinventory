@@ -6025,6 +6025,16 @@
                         <textarea name="notes" rows="3" placeholder="Additional notes..."></textarea>
                     </div>
                     
+                    <!-- Generated SF DLR Display -->
+                    <div id="dlrDisplaySection" style="margin-top: 2rem; padding: 1rem; border: 2px solid var(--border-color); border-radius: 6px; background: var(--bg-secondary); display: none;">
+                        <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
+                            <label style="font-weight: 600; margin: 0; flex: 1;">📄 Generated SF DLR (CFA_DLR_SOA_Notes__c)</label>
+                            <button type="button" class="btn-secondary" onclick="copyDlrToClipboard()" style="padding: 0.4rem 0.8rem; font-size: 0.85rem;">Copy</button>
+                        </div>
+                        <textarea id="dlrDisplayText" readonly rows="6" style="width: 100%; padding: 0.75rem; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 4px; font-family: 'Courier New', monospace; font-size: 0.85rem; color: var(--text-secondary); resize: vertical;"></textarea>
+                        <small style="display: block; margin-top: 0.5rem; color: var(--text-tertiary);">🔄 Auto-generated when circuit is saved as <strong>Active</strong>. Will be pushed to Salesforce once flow is created.</small>
+                    </div>
+                    
                     <div style="display: flex; gap: 1rem; margin-top: 2rem;">
                         <button type="submit" class="btn-primary" style="flex: 1;">Save Circuit</button>
                         <button type="button" class="btn-secondary" style="flex: 1;" onclick="closeCircuitModal()">Cancel</button>
@@ -7917,6 +7927,9 @@
             if (form.elements.soNumber) form.elements.soNumber.value = circuit.soNumber || '';
             form.elements.notes.value = circuit.notes || '';
             
+            // Display Generated SF DLR if present
+            updateDlrDisplay(circuit);
+            
             // If FDP is selected, populate ports
             if (circuit.aFdp) {
                 await updateCircuitFdpPorts('a');
@@ -8171,6 +8184,32 @@
             }
             
             document.getElementById('circuitModal').classList.add('active');
+        }
+        
+        // Helper: Display or hide Generated DLR section
+        function updateDlrDisplay(circuit) {
+            const dlrSection = document.getElementById('dlrDisplaySection');
+            const dlrText = document.getElementById('dlrDisplayText');
+            
+            if (circuit && circuit.generatedSFDLR) {
+                dlrText.value = circuit.generatedSFDLR;
+                dlrSection.style.display = 'block';
+            } else {
+                dlrText.value = '';
+                dlrSection.style.display = 'none';
+            }
+        }
+        
+        // Helper: Copy DLR to clipboard
+        function copyDlrToClipboard() {
+            const dlrText = document.getElementById('dlrDisplayText');
+            if (!dlrText.value) {
+                alert('No DLR text to copy.');
+                return;
+            }
+            dlrText.select();
+            document.execCommand('copy');
+            alert('✅ DLR copied to clipboard!');
         }
         
         function closeCircuitModal() {
