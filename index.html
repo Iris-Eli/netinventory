@@ -8947,6 +8947,7 @@
 
         // NNIs CRUD Functions
         let editingNniId = null;
+        let nniFormAllEquipment = []; // Store all equipment for site filtering
         
         const nniModalHTML = `
         <div class="modal" id="nniModal">
@@ -8981,7 +8982,7 @@
                     
                     <div class="form-group">
                         <label>Site *</label>
-                        <select name="siteId" required id="nniSiteSelect">
+                        <select name="siteId" required id="nniSiteSelect" onchange="filterNniEquipmentBySite()">
                             <option value="">Select Site...</option>
                         </select>
                     </div>
@@ -10034,6 +10035,9 @@
                 store.getFdps()
             ]);
             
+            // Store equipment for filtering
+            nniFormAllEquipment = equipment;
+            
             const siteSelect = document.getElementById('nniSiteSelect');
             siteSelect.innerHTML = '<option value="">Select Site...</option>' + sites.map(site => `<option value="${site.id}">${(site.name || site.location || '(unnamed)') + (site.address ? ' — ' + site.address.split(',')[0] : '') + (site.name && site.cidCode ? ' [' + site.cidCode + ']' : '')}</option>`).join('');
             attachSiteCombobox('nniSiteSelect'); syncSiteComboInput('nniSiteSelect');
@@ -10086,6 +10090,28 @@
         function closeNniModal() {
             document.getElementById('nniModal').classList.remove('active');
             editingNniId = null;
+        }
+        
+        function filterNniEquipmentBySite() {
+            const siteId = document.getElementById('nniSiteSelect').value;
+            const equipmentSelect = document.getElementById('nniEquipmentSelect');
+            
+            if (!siteId) {
+                // No site selected, show all equipment
+                equipmentSelect.innerHTML = '<option value="">Select Equipment...</option>' + nniFormAllEquipment.map(eq => `<option value="${eq.id}">${eq.name} (${eq.type || 'N/A'})</option>`).join('');
+            } else {
+                // Filter to equipment at this site only
+                const siteEquipment = nniFormAllEquipment.filter(eq => eq.siteId === siteId);
+                equipmentSelect.innerHTML = '<option value="">Select Equipment...</option>' + siteEquipment.map(eq => `<option value="${eq.id}">${eq.name} (${eq.type || 'N/A'})</option>`).join('');
+                if (siteEquipment.length === 0) {
+                    equipmentSelect.innerHTML += '<option value="" disabled style="color: #999;">No equipment at this site — register one</option>';
+                }
+            }
+            
+            // Reset equipment selection
+            equipmentSelect.value = '';
+            document.getElementById('nniEquipmentPortsSelect').innerHTML = '<option value="">Select equipment first...</option>';
+            document.getElementById('nniEquipmentPortsGroup').style.display = 'none';
         }
         
         async function saveNni(event) {
@@ -10615,6 +10641,89 @@
                     }
                 ]
             });
+        }
+        
+        // Helper: Generate SF DLR/CFA text from structured circuit data (inverse of parser)
+        async function generateDlrText(circuit, allSites, allNnis, allEquipment, allFdps) {
+            if (!circuit || !circuit.circuitVLANs || circuit.circuitVLANs.length === 0) return '';
+            
+            const lines = [];
+            
+            // Header: Circuit ID and type
+            lines.push(`Circuit: ${circuit.circuitId || 'TBD'}`);
+            if (circuit.direction) lines.push(`Direction: ${circuit.direction}`);
+            if (circuit.bandwidth) lines.push(`Bandwidth: ${circuit.bandwidth}`);
+            lines.push('');
+            
+            // For each VLAN, build the path narrative
+            for (let i = 0; i < circuit.circuitVLANs.length; i++) {
+                const vlan = circuit.circuitVLANs[i];
+                const vlanNum = vlan.vlanNumber || `VLAN${i + 1}`;
+                
+                lines.push(`VLAN ${vlanNum}:`);
+                
+                // A-site
+                if (vlan.aLocationSiteId || vlan.aNni) {
+                    const aSite = allSites?.find(s => s.id === vlan.aLocationSiteId);
+                    const aNni = allNnis?.find(n => n.id === vlan.aNni);
+                    const aEquipment = aNni?.equipmentID ? allEquipment?.find(e => e.id === aNni.equipmentID) : null;
+                    
+                    let aText = 'A-end: ';
+                    if (aSite) aText += aSite.name || aSite.location || 'unnamed site';
+                    if (aEquipment) aText += ` (${aEquipment.name})`;
+                    if (aNni?.equipmentPorts) aText += ` port ${aNni.equipmentPorts}`;
+                    if (vlan.aWavelength) aText += ` 🌈 ${vlan.aWavelength}`;
+                    lines.push('  ' + aText);
+                }
+                
+                // B intermediates
+                for (let locLetter = 66; locLetter <= 78; locLetter++) { // B-N
+                    const loc = String.fromCharCode(locLetter);
+                    const siteIdField = loc + 'LocationSiteId';
+                    const nniField = loc + 'Nni';
+                    const equipmentField = loc + 'Equipment';
+                    const equipmentPortField = loc + 'EquipmentPort';
+                    
+                    if (vlan[siteIdField] || vlan[nniField]) {
+                        const bSite = allSites?.find(s => s.id === vlan[siteIdField]);
+                        const bNni = allNnis?.find(n => n.id === vlan[nniField]);
+                        const bEquipment = vlan[equipmentField] ? allEquipment?.find(e => e.id === vlan[equipmentField]) : 
+                                          (bNni?.equipmentID ? allEquipment?.find(e => e.id === bNni.equipmentID) : null);
+                        
+                        let bText = `  ${loc}-hop: `;
+                        if (bSite) bText += bSite.name || bSite.location || 'unnamed site';
+                        if (bEquipment) bText += ` (${bEquipment.name})`;
+                        if (vlan[equipmentPortField]) bText += ` port ${vlan[equipmentPortField]}`;
+                        else if (bNni?.equipmentPorts) bText += ` port ${bNni.equipmentPorts}`;
+                        lines.push(bText);
+                    }
+                }
+                
+                // Z-site
+                if (vlan.zLocationSiteId || vlan.zNni) {
+                    const zSite = allSites?.find(s => s.id === vlan.zLocationSiteId);
+                    const zNni = allNnis?.find(n => n.id === vlan.zNni);
+                    const zEquipment = zNni?.equipmentID ? allEquipment?.find(e => e.id === zNni.equipmentID) : null;
+                    
+                    let zText = 'Z-end: ';
+                    if (zSite) zText += zSite.name || zSite.location || 'unnamed site';
+                    if (zEquipment) zText += ` (${zEquipment.name})`;
+                    if (zNni?.equipmentPorts) zText += ` port ${zNni.equipmentPorts}`;
+                    if (vlan.zWavelength) zText += ` 🌈 ${vlan.zWavelength}`;
+                    lines.push('  ' + zText);
+                }
+                
+                lines.push('');
+            }
+            
+            // Management VLAN if CPE
+            if (circuit.cpeMgmtVlan) {
+                lines.push(`Management VLAN: ${circuit.cpeMgmtVlan}`);
+                if (circuit.cpeMgmtIp) lines.push(`  IP: ${circuit.cpeMgmtIp}/${circuit.cpeMgmtSubnet || '24'}`);
+                if (circuit.cpeMgmtGateway) lines.push(`  Gateway: ${circuit.cpeMgmtGateway}`);
+            }
+            
+            return lines.join('\n');
         }
         
         // Helper: Generate path visualization for one VLAN
