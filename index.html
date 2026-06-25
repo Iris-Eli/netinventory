@@ -8877,6 +8877,35 @@
                             circuit[field] = prev[field];
                         }
                     });
+                    
+                    // Generate DLR for Salesforce when status changes to 'active'
+                    if (circuit.status === 'active') {
+                        try {
+                            // Need all reference data for DLR generation
+                            const [sites, nnis, equipment, fdps] = await Promise.all([
+                                store.getSites(),
+                                store.getNnis(),
+                                store.getEquipment(),
+                                store.getFdps()
+                            ]);
+                            
+                            // Circuit object needs circuitVlans as array for DLR generation
+                            const circuitForDlr = { ...circuit };
+                            try {
+                                const vlansStr = circuit.circuitVlans;
+                                circuitForDlr.circuitVLANs = vlansStr ? JSON.parse(vlansStr) : [];
+                            } catch {
+                                circuitForDlr.circuitVLANs = [];
+                            }
+                            
+                            circuit.generatedSFDLR = await generateDlrText(circuitForDlr, sites, nnis, equipment, fdps);
+                            console.log('Generated SF DLR for circuit', circuit.circuitId);
+                        } catch (dlrErr) {
+                            console.warn('DLR generation failed (non-fatal):', dlrErr);
+                            // Continue with save even if DLR generation fails
+                        }
+                    }
+                    
                     try {
                         await store.updateCircuit(formEditId, circuit);
                         // Verify: read back, confirm circuitVlans + vlanCount actually persisted
@@ -10643,84 +10672,87 @@
             });
         }
         
-        // Helper: Generate SF DLR/CFA text from structured circuit data (inverse of parser)
+        // Helper: Generate SF DLR text from structured circuit data (Salesforce CFA_DLR_SOA_Notes__c format)
+        // Format matches the narrative style engineers use: VLAN blocks with equipment names and ports
         async function generateDlrText(circuit, allSites, allNnis, allEquipment, allFdps) {
             if (!circuit || !circuit.circuitVLANs || circuit.circuitVLANs.length === 0) return '';
             
             const lines = [];
             
-            // Header: Circuit ID and type
-            lines.push(`Circuit: ${circuit.circuitId || 'TBD'}`);
-            if (circuit.direction) lines.push(`Direction: ${circuit.direction}`);
-            if (circuit.bandwidth) lines.push(`Bandwidth: ${circuit.bandwidth}`);
-            lines.push('');
-            
-            // For each VLAN, build the path narrative
+            // For each VLAN, build the path narrative in SF format
             for (let i = 0; i < circuit.circuitVLANs.length; i++) {
                 const vlan = circuit.circuitVLANs[i];
-                const vlanNum = vlan.vlanNumber || `VLAN${i + 1}`;
+                const vlanNum = vlan.vlanNumber || vlan.vlanId || `VLAN${i + 1}`;
                 
-                lines.push(`VLAN ${vlanNum}:`);
+                lines.push(`VLAN ${vlanNum}`);
                 
-                // A-site
+                // A-site equipment and ports
                 if (vlan.aLocationSiteId || vlan.aNni) {
-                    const aSite = allSites?.find(s => s.id === vlan.aLocationSiteId);
                     const aNni = allNnis?.find(n => n.id === vlan.aNni);
                     const aEquipment = aNni?.equipmentID ? allEquipment?.find(e => e.id === aNni.equipmentID) : null;
                     
-                    let aText = 'A-end: ';
-                    if (aSite) aText += aSite.name || aSite.location || 'unnamed site';
-                    if (aEquipment) aText += ` (${aEquipment.name})`;
-                    if (aNni?.equipmentPorts) aText += ` port ${aNni.equipmentPorts}`;
-                    if (vlan.aWavelength) aText += ` 🌈 ${vlan.aWavelength}`;
-                    lines.push('  ' + aText);
-                }
-                
-                // B intermediates
-                for (let locLetter = 66; locLetter <= 78; locLetter++) { // B-N
-                    const loc = String.fromCharCode(locLetter);
-                    const siteIdField = loc + 'LocationSiteId';
-                    const nniField = loc + 'Nni';
-                    const equipmentField = loc + 'Equipment';
-                    const equipmentPortField = loc + 'EquipmentPort';
-                    
-                    if (vlan[siteIdField] || vlan[nniField]) {
-                        const bSite = allSites?.find(s => s.id === vlan[siteIdField]);
-                        const bNni = allNnis?.find(n => n.id === vlan[nniField]);
-                        const bEquipment = vlan[equipmentField] ? allEquipment?.find(e => e.id === vlan[equipmentField]) : 
-                                          (bNni?.equipmentID ? allEquipment?.find(e => e.id === bNni.equipmentID) : null);
-                        
-                        let bText = `  ${loc}-hop: `;
-                        if (bSite) bText += bSite.name || bSite.location || 'unnamed site';
-                        if (bEquipment) bText += ` (${bEquipment.name})`;
-                        if (vlan[equipmentPortField]) bText += ` port ${vlan[equipmentPortField]}`;
-                        else if (bNni?.equipmentPorts) bText += ` port ${bNni.equipmentPorts}`;
-                        lines.push(bText);
+                    if (aEquipment && aNni?.equipmentPorts) {
+                        lines.push(`${aEquipment.name} ${aNni.equipmentPorts}`);
                     }
                 }
                 
-                // Z-site
+                // B-hop intermediates (B-N) - only if populated
+                let hasIntermediate = false;
+                for (let locLetter = 66; locLetter <= 78; locLetter++) { // B-N
+                    const loc = String.fromCharCode(locLetter);
+                    const equipmentField = loc + 'Equipment';
+                    const equipmentPortField = loc + 'EquipmentPort';
+                    
+                    if (vlan[equipmentField] && vlan[equipmentPortField]) {
+                        const bEquipment = allEquipment?.find(e => e.id === vlan[equipmentField]);
+                        if (bEquipment) {
+                            lines.push(`${bEquipment.name} ${vlan[equipmentPortField]}`);
+                            hasIntermediate = true;
+                        }
+                    }
+                }
+                
+                // Middle NNI if Type II provider (Collector NNI note)
+                if (vlan.bNni) {
+                    const bNni = allNnis?.find(n => n.id === vlan.bNni);
+                    if (bNni) {
+                        lines.push('');
+                        lines.push(`${bNni.name} (Collector NNI: ${vlan.bNni})`);
+                        lines.push('VPWS');
+                    }
+                }
+                
+                // Z-site equipment and ports (CPE or far-end equipment)
                 if (vlan.zLocationSiteId || vlan.zNni) {
-                    const zSite = allSites?.find(s => s.id === vlan.zLocationSiteId);
                     const zNni = allNnis?.find(n => n.id === vlan.zNni);
                     const zEquipment = zNni?.equipmentID ? allEquipment?.find(e => e.id === zNni.equipmentID) : null;
                     
-                    let zText = 'Z-end: ';
-                    if (zSite) zText += zSite.name || zSite.location || 'unnamed site';
-                    if (zEquipment) zText += ` (${zEquipment.name})`;
-                    if (zNni?.equipmentPorts) zText += ` port ${zNni.equipmentPorts}`;
-                    if (vlan.zWavelength) zText += ` 🌈 ${vlan.zWavelength}`;
-                    lines.push('  ' + zText);
+                    if (zEquipment && zNni?.equipmentPorts) {
+                        lines.push(`${zEquipment.name} ${zNni.equipmentPorts}`);
+                    } else if (vlan.connectionType === 'cpe' && !zEquipment) {
+                        // CPE end - no specific equipment name yet
+                        lines.push('CPE');
+                    }
                 }
                 
                 lines.push('');
             }
             
-            // Management VLAN if CPE
+            // Management VLAN section if present
             if (circuit.cpeMgmtVlan) {
-                lines.push(`Management VLAN: ${circuit.cpeMgmtVlan}`);
-                if (circuit.cpeMgmtIp) lines.push(`  IP: ${circuit.cpeMgmtIp}/${circuit.cpeMgmtSubnet || '24'}`);
-                if (circuit.cpeMgmtGateway) lines.push(`  Gateway: ${circuit.cpeMgmtGateway}`);
+                lines.push(`MGMT VLAN ${circuit.cpeMgmtVlan}`);
+                if (circuit.cpeMgmtIp) {
+                    lines.push(`IP: ${circuit.cpeMgmtIp}/${circuit.cpeMgmtSubnet || '30'}`);
+                    if (circuit.cpeMgmtGateway) lines.push(`Gateway: ${circuit.cpeMgmtGateway}`);
+                }
+            }
+            
+            // CPE type and port mapping if applicable
+            if (circuit.cpeType) {
+                lines.push('');
+                lines.push(circuit.cpeType);
+                if (circuit.cpeUplinkPorts) lines.push(`Uplink: ${circuit.cpeUplinkPorts}`);
+                if (circuit.cpeDownlinkPorts) lines.push(`Downlink: ${circuit.cpeDownlinkPorts}`);
             }
             
             return lines.join('\n');
