@@ -1308,9 +1308,30 @@
             async addCircuit(circuit) {
                 circuit.id = this.generateId();
                 const fields = this.mapToSharePoint('circuits', circuit);
-                await graphClient.createListItem('circuits', fields);
+                await this._writeCircuitTolerant(() => graphClient.createListItem('circuits', fields), fields);
                 this.clearCache('circuits');
                 return circuit;
+            }
+            
+            // If SharePoint rejects the write because the GeneratedSFDLR column doesn't exist yet,
+            // retry once without it so circuit saves are never blocked. One-time warning to the user.
+            async _writeCircuitTolerant(writeFn, fields) {
+                try {
+                    await writeFn();
+                } catch (err) {
+                    const msg = (err && err.message) || '';
+                    if (/GeneratedSFDLR/i.test(msg) && ('GeneratedSFDLR' in fields)) {
+                        console.warn('GeneratedSFDLR column missing in SharePoint - saving without it. Create it with: Add-PnPField -List "NetInventory_Circuits" -DisplayName "GeneratedSFDLR" -InternalName "GeneratedSFDLR" -Type Note -AddToDefaultView');
+                        delete fields.GeneratedSFDLR;
+                        await writeFn();
+                        if (!window._warnedNoDlrColumn) {
+                            window._warnedNoDlrColumn = true;
+                            alert('\u26a0\ufe0f Circuit saved, but the GeneratedSFDLR column does not exist in SharePoint yet, so the DLR text was NOT stored.\n\nCreate the column with PnP PowerShell:\nAdd-PnPField -List "NetInventory_Circuits" -DisplayName "GeneratedSFDLR" -InternalName "GeneratedSFDLR" -Type Note -AddToDefaultView\n\nThen use \ud83d\udd04 Regenerate DLRs on the Circuits page to backfill it.');
+                        }
+                    } else {
+                        throw err;
+                    }
+                }
             }
             
             async updateCircuit(id, updates) {
@@ -1320,7 +1341,7 @@
                 
                 const updated = { ...circuit, ...updates, id };
                 const fields = this.mapToSharePoint('circuits', updated);
-                await graphClient.updateListItem('circuits', circuit._spItemId, fields);
+                await this._writeCircuitTolerant(() => graphClient.updateListItem('circuits', circuit._spItemId, fields), fields);
                 this.clearCache('circuits');
             }
             
@@ -2953,10 +2974,31 @@
                     if (entityType === 'nni') { const all = await store.getNnis(); return id => { const x = all.find(s => s.id === id); return x ? (x.name || id) + '  [' + id + ']' : id; }; }
                     return id => id;
                 })();
-                const prompted = prompt('Merge duplicates — KEEP which one?\n\nPaste the ID of the record to KEEP. The others will be merged into it and deleted.\n\n' + ids.map(id => '  ' + labelFn(id)).join('\n'));
-                if (!prompted) return;
-                const keeper = prompted.trim();
-                if (!ids.includes(keeper)) { alert('That ID is not in the group.'); return; }
+                const keeper = await new Promise(resolve => {
+                    const m = document.createElement('div');
+                    m.className = 'modal active';
+                    m.id = 'mergePickModal';
+                    m.style.zIndex = '1200';
+                    window._mergePickResolve = (val) => { m.remove(); window._mergePickResolve = null; resolve(val); };
+                    m.innerHTML = `
+                        <div class="modal-content" style="max-width: 660px;">
+                            <div class="modal-header">
+                                <h2>\ud83d\udd00 Merge duplicates \u2014 keep which one?</h2>
+                                <button class="close-btn" onclick="_mergePickResolve(null)">&times;</button>
+                            </div>
+                            <p style="color: var(--text-secondary); margin-bottom: 1rem;">References from the others will be moved to the record you keep, then the others are deleted.</p>
+                            ${ids.map(id => `
+                                <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 0.5rem; padding: 0.75rem 1rem; margin-bottom: 0.6rem;">
+                                    <div style="min-width: 0;">
+                                        <div style="font-weight: 600; overflow-wrap: anywhere;">${labelFn(id)}</div>
+                                    </div>
+                                    <button class="btn-primary" style="white-space: nowrap; flex-shrink: 0;" data-keep-id="${id}" onclick="_mergePickResolve(this.getAttribute('data-keep-id'))">\u2705 Keep this</button>
+                                </div>`).join('')}
+                            <button class="btn-secondary" style="width: 100%; margin-top: 0.5rem;" onclick="_mergePickResolve(null)">Cancel</button>
+                        </div>`;
+                    document.body.appendChild(m);
+                });
+                if (!keeper) return;
                 const sources = ids.filter(id => id !== keeper);
                 
                 // Preview total reference count
@@ -3838,10 +3880,20 @@
                                 if (data && data.length > 0) {
                                     const result = data[0];
                                     
-                                    await store.updateSite(site.id, {
-                                        latitude: parseFloat(result.lat),
-                                        longitude: parseFloat(result.lon)
-                                    });
+                                    // PATCH the exact SharePoint item (site._spItemId), not a lookup by Title.
+                                    // With duplicate Titles, updateSite(site.id) always hit the FIRST record
+                                    // with that Title - the one in this list stayed un-geocoded forever.
+                                    if (site._spItemId) {
+                                        await graphClient.updateListItem('sites', site._spItemId, {
+                                            Latitude: parseFloat(result.lat),
+                                            Longitude: parseFloat(result.lon)
+                                        });
+                                    } else {
+                                        await store.updateSite(site.id, {
+                                            latitude: parseFloat(result.lat),
+                                            longitude: parseFloat(result.lon)
+                                        });
+                                    }
                                     
                                     successful++;
                                     const strategyNote = strategy.description !== 'full' ? ` (${strategy.description})` : '';
@@ -3879,6 +3931,7 @@
                 }
                 
                 // Show completion
+                store.clearCache('sites');
                 const remaining = total - sitesToGeocode.length;
                 statusText.innerHTML = `
                     <strong>Complete!</strong><br>
