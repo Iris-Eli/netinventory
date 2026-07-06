@@ -7324,7 +7324,7 @@
                             <input type="text" placeholder="🔍 Search circuits..." style="padding: 0.5rem 1rem; border: 1px solid var(--border-color); border-radius: 4px; width: 250px;" oninput="filterTable('circuit', this.value)">
                             <button class="btn-secondary" onclick="toggleDisconnected()" id="discoToggle" title="Toggle disconnected circuits">👻 Show disconnected</button>
                             <button class="btn-secondary" onclick="renderCircuitsSummary()">📊 Provider Summary</button>
-                            <button class="btn-secondary" onclick="exportEntityToExcel('circuits', this)" title="Export Circuits to Excel">⬇️ Export</button>
+                            <button class="btn-secondary" onclick="regenerateAllDlrs(this)" title="Generate + store the SF DLR for every circuit (fills the GeneratedSFDLR column the push-back flow reads)">🔄 Regenerate DLRs</button><button class="btn-secondary" onclick="exportEntityToExcel('circuits', this)" title="Export Circuits to Excel">⬇️ Export</button>
                             <button class="btn-primary" onclick="openAddCircuitModal()">Add Circuit</button>
                         </div>
                     </div>
@@ -8866,16 +8866,37 @@
                             function: 'CPE'
                         };
                         
-                        // Resolve existing CPE: linked record -> Z-equipment -> name match (prevents duplicate CPE records)
-                        let existingCpeId = circuit.cpeEquipmentId || circuit.zEquipment || '';
+                        // Resolve existing CPE without trusting the form (selects can repopulate late and lose values):
+                        //   1) form-linked record   2) link stored on the previous save   3) tolerant name match   4) Z-site equipment referencing this circuit ID
+                        const _allEqForCpe = await store.getEquipment();
+                        const _cpeExists = id => !!(id && _allEqForCpe.find(e => e.id === id));
+                        let existingCpeId = '';
+                        if (_cpeExists(circuit.cpeEquipmentId)) existingCpeId = circuit.cpeEquipmentId;
+                        else if (_cpeExists(circuit.zEquipment)) existingCpeId = circuit.zEquipment;
                         if (!existingCpeId) {
-                            const cpeNameMatch = (await store.getEquipment()).find(e => e.name === `CPE-${circuit.circuitId || 'AUTO'}`);
-                            if (cpeNameMatch) existingCpeId = cpeNameMatch.id;
+                            const _cpeEditId = (document.getElementById('circuitForm') && document.getElementById('circuitForm').dataset.editingCircuitId) || editingCircuitId;
+                            if (_cpeEditId) {
+                                const _prevC = (await store.getCircuits()).find(c => c.id === _cpeEditId);
+                                if (_prevC) {
+                                    if (_cpeExists(_prevC.cpeEquipmentId)) existingCpeId = _prevC.cpeEquipmentId;
+                                    else if (_cpeExists(_prevC.zEquipment)) existingCpeId = _prevC.zEquipment;
+                                }
+                            }
+                        }
+                        if (!existingCpeId) {
+                            const _wantName = ('cpe-' + (circuit.circuitId || 'AUTO')).toLowerCase();
+                            const _cid = String(circuit.circuitId || '').trim().toLowerCase();
+                            const _m = _allEqForCpe.find(e => String(e.name || '').trim().toLowerCase() === _wantName)
+                                || (_cid ? _allEqForCpe.find(e => e.siteId === circuit.zLocationSiteId && (String(e.name || '').toLowerCase().includes(_cid) || String(e.notes || '').toLowerCase().includes(_cid))) : null);
+                            if (_m) existingCpeId = _m.id;
                         }
                         if (existingCpeId) {
-                            // UPDATE existing CPE equipment
+                            // UPDATE existing CPE equipment - but never clobber tech-entered values with blanks
                             console.log('Updating existing CPE equipment:', existingCpeId);
-                            await store.updateEquipment(existingCpeId, cpeEquipment);
+                            const _cpeUpdate = { ...cpeEquipment };
+                            ['serialNumber', 'rackId', 'rackUnit'].forEach(k => { if (!_cpeUpdate[k]) delete _cpeUpdate[k]; });
+                            await store.updateEquipment(existingCpeId, _cpeUpdate);
+                            circuit.cpeEquipmentId = existingCpeId;
                             if (!circuit.zEquipment) circuit.zEquipment = existingCpeId;
                             console.log('✓ CPE equipment updated');
                         } else {
@@ -8883,6 +8904,7 @@
                             console.log('Creating new CPE equipment...');
                             const createdEquipment = await store.addEquipment(cpeEquipment);
                             circuit.zEquipment = createdEquipment.id;
+                            circuit.cpeEquipmentId = createdEquipment.id;
                             console.log('✓ CPE equipment created:', createdEquipment.id);
                             alert(`✓ CPE equipment created: ${cpeEquipment.name} at ${zSite.name || zSite.location}`);
                         }
@@ -14635,6 +14657,83 @@ ${entityActionButtons('nni', `${n.id}`, true)}
         }
         
         // Programmatic navigation (dashboard cards, links) - syncs sidebar highlight
+        // ===================== BULK DLR REGENERATION =====================
+        // GeneratedSFDLR is normally only written when a circuit is saved, so backfilled
+        // circuits have an empty column. This fills it for every circuit in one run.
+        async function regenerateAllDlrs(btn) {
+            if (btn) { btn.disabled = true; btn.textContent = '\ud83d\udd04 Loading...'; }
+            try {
+                const [circuits, allSites, allNnis, allEquipment, allFdps] = await Promise.all([
+                    store.getCircuits(), store.getSites(), store.getNnis(), store.getEquipment(), store.getFdps()
+                ]);
+                const targets = circuits.filter(c => c._spItemId);
+                if (!confirm('Regenerate the SF DLR for ' + targets.length + ' circuits?\n\nThis fills the GeneratedSFDLR column in SharePoint (only circuits whose text actually changes get written). Nothing else on the circuits is touched.')) {
+                    if (btn) { btn.disabled = false; btn.textContent = '\ud83d\udd04 Regenerate DLRs'; }
+                    return;
+                }
+                const progressModal = document.createElement('div');
+                progressModal.className = 'modal';
+                progressModal.style.display = 'block';
+                progressModal.innerHTML = `
+                    <div class="modal-content" style="max-width: 600px;">
+                        <div class="modal-header"><h2>Regenerating DLRs</h2></div>
+                        <div style="padding: 2rem;">
+                            <div style="width: 100%; background: #e0e0e0; border-radius: 8px; height: 30px; overflow: hidden;">
+                                <div id="dlrRegenProgress" style="width: 0%; background: linear-gradient(90deg, #8b5cf6, #6d28d9); height: 100%; transition: width 0.3s; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 14px;"></div>
+                            </div>
+                            <p id="dlrRegenStatus" style="margin-top: 1rem; text-align: center; color: #666;"></p>
+                            <div id="dlrRegenResults" style="margin-top: 1rem; max-height: 220px; overflow-y: auto; font-size: 12px; color: #666;"></div>
+                        </div>
+                    </div>`;
+                document.body.appendChild(progressModal);
+                const progressBar = document.getElementById('dlrRegenProgress');
+                const statusText = document.getElementById('dlrRegenStatus');
+                const resultsDiv = document.getElementById('dlrRegenResults');
+
+                let updated = 0, unchanged = 0, empty = 0, failed = 0;
+                for (let i = 0; i < targets.length; i++) {
+                    const c = targets[i];
+                    if (i > 0 && i % 50 === 0) { try { await ensureValidToken(); } catch (e) {} }
+                    try {
+                        const circuitForDlr = { ...c };
+                        try { circuitForDlr.circuitVLANs = c.circuitVlans ? JSON.parse(c.circuitVlans) : []; }
+                        catch (e) { circuitForDlr.circuitVLANs = []; }
+                        const dlrText = await generateDlrText(circuitForDlr, allSites, allNnis, allEquipment, allFdps);
+                        if (!dlrText) {
+                            empty++;
+                        } else if (dlrText === c.generatedSFDLR) {
+                            unchanged++;
+                        } else {
+                            await graphClient.updateListItem('circuits', c._spItemId, { GeneratedSFDLR: dlrText });
+                            updated++;
+                            resultsDiv.innerHTML += '<div style="color: green;">\u2713 ' + (c.circuitId || c.id) + '</div>';
+                        }
+                    } catch (err) {
+                        failed++;
+                        resultsDiv.innerHTML += '<div style="color: red;">\u2717 ' + (c.circuitId || c.id) + ': ' + (err.message || err) + '</div>';
+                    }
+                    const processed = i + 1;
+                    const pct = Math.round((processed / targets.length) * 100);
+                    progressBar.style.width = pct + '%';
+                    progressBar.textContent = pct + '%';
+                    statusText.textContent = processed + ' of ' + targets.length + ' (' + updated + ' updated, ' + unchanged + ' unchanged, ' + empty + ' no VLAN data, ' + failed + ' failed)';
+                    resultsDiv.scrollTop = resultsDiv.scrollHeight;
+                }
+                store.clearCache('circuits');
+                statusText.innerHTML = '<strong>Complete!</strong><br>\u2713 ' + updated + ' DLRs written to SharePoint<br>' + unchanged + ' already current \u00b7 ' + empty + ' without VLAN data' + (failed ? '<br>\u2717 ' + failed + ' failed' : '');
+                progressModal.querySelector('.modal-content').innerHTML += `
+                    <div style="padding: 0 2rem 2rem 2rem;">
+                        <button class="btn-primary" onclick="this.closest('.modal').remove(); render('circuits');" style="width: 100%;">Close & Refresh</button>
+                    </div>`;
+            } catch (error) {
+                console.error('Bulk DLR regen error:', error);
+                alert('Error regenerating DLRs: ' + friendlyError(error));
+            } finally {
+                if (btn) { btn.disabled = false; btn.textContent = '\ud83d\udd04 Regenerate DLRs'; }
+            }
+        }
+        // ==================================================================
+
         // ===================== SITE QR CODES (field-tech deep links) =====================
         let _qrLibPromise = null;
         function ensureQrLib() {
