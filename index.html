@@ -1448,7 +1448,7 @@
             }
             
             async addDarkFiberRoute(route) {
-                route.id = this.generateId();
+                route.id = route.id || this.generateId();
                 const fields = this.mapToSharePoint('darkfiberroutes', route);
                 await graphClient.createListItem('darkfiberroutes', fields);
                 this.clearCache('darkfiberroutes');
@@ -1816,6 +1816,11 @@
                     <div class="form-group">
                         <label>Route Name *</label>
                         <input type="text" name="routeName" required placeholder="e.g., NYC to Boston Backbone">
+                    </div>
+                    <div class="form-group">
+                        <label>Route ID</label>
+                        <input type="text" name="routeCustomId" placeholder="Auto-generated if left blank">
+                        <small style="color: var(--text-tertiary); font-size: 0.85rem;">Set once at creation (segments and KMZ maps link to it). Locked when editing.</small>
                     </div>
                     <div class="form-row">
                         <div class="form-group">
@@ -13653,6 +13658,8 @@ ${entityActionButtons('nni', `${n.id}`, true)}
             editingDarkFiberRouteId = null;
             document.getElementById('darkFiberRouteModalTitle').textContent = 'Add Dark Fiber Route';
             document.getElementById('darkFiberRouteForm').reset();
+            const _ridField = document.getElementById('darkFiberRouteForm').elements.routeCustomId;
+            if (_ridField) _ridField.disabled = false;
             document.getElementById('darkFiberRouteModal').classList.add('active');
         }
         
@@ -13670,6 +13677,7 @@ ${entityActionButtons('nni', `${n.id}`, true)}
             document.getElementById('darkFiberRouteModalTitle').textContent = 'Edit Dark Fiber Route';
             const form = document.getElementById('darkFiberRouteForm');
             form.elements.routeName.value = route.routeName || '';
+            if (form.elements.routeCustomId) { form.elements.routeCustomId.value = route.id || ''; form.elements.routeCustomId.disabled = true; }
             form.elements.aLocationSiteId.value = route.aLocationSiteId || '';
             form.elements.zLocationSiteId.value = route.zLocationSiteId || '';
             form.elements.purpose.value = route.purpose || '';
@@ -13689,6 +13697,7 @@ ${entityActionButtons('nni', `${n.id}`, true)}
             const form = event.target;
             const formData = new FormData(form);
             
+            const _customRouteId = (formData.get('routeCustomId') || '').trim();
             const route = {
                 routeName: formData.get('routeName'),
                 aLocationSiteId: formData.get('aLocationSiteId'),
@@ -13710,6 +13719,14 @@ ${entityActionButtons('nni', `${n.id}`, true)}
                     await store.updateDarkFiberRoute(editingDarkFiberRouteId, route);
                     alert('Route updated successfully!');
                 } else {
+                    if (_customRouteId) {
+                        const _existingRoutes = await store.getDarkFiberRoutes();
+                        if (_existingRoutes.find(r => String(r.id).toLowerCase() === _customRouteId.toLowerCase())) {
+                            alert('A route with ID "' + _customRouteId + '" already exists. Choose a different Route ID or leave it blank.');
+                            return;
+                        }
+                        route.id = _customRouteId;
+                    }
                     await store.addDarkFiberRoute(route);
                     alert('Route added successfully!');
                 }
@@ -14732,7 +14749,7 @@ ${entityActionButtons('nni', `${n.id}`, true)}
             const plan = new Map();
             const add = (nni, device, port) => {
                 if (!nni || nni.equipmentID) return;
-                if (!plan.has(nni.id)) plan.set(nni.id, { nni, device: String(device).toUpperCase(), port });
+                if (!plan.has(nni.id)) plan.set(nni.id, { nni, device: String(device).toUpperCase(), port: String(port).replace(/\.\d+$/, '') });
             };
             for (const c of circuits) {
                 const src = c.cfaSourceText || '';
@@ -14778,14 +14795,19 @@ ${entityActionButtons('nni', `${n.id}`, true)}
                 ]);
                 const norm = s => String(s || '').trim().toLowerCase();
                 const plan = buildNniLinkPlan(circuits, allNnis);
-                if (!plan.length) {
+                // Repair pass: already-linked NNIs whose stored port still carries a .subinterface suffix
+                const portFixes = allNnis
+                    .filter(n => n.equipmentID && /\.\d+$/.test(String(n.equipmentPorts || '')))
+                    .map(n => ({ nni: n, portOnly: true, port: String(n.equipmentPorts).replace(/\.\d+$/, '') }));
+                const work = plan.concat(portFixes);
+                if (!work.length) {
                     alert('Nothing to link - every NNI referenced by CFA paths already has equipment, or no CFA data is present.');
                     return;
                 }
                 const eqByName = new Map();
                 allEquipment.forEach(e => { if (e.name) eqByName.set(norm(e.name), e); });
                 const toCreate = new Set(plan.filter(p => !eqByName.has(norm(p.device))).map(p => p.device));
-                if (!confirm('Link ' + plan.length + ' NNIs to their equipment (from CFA paths)?\n\n' + toCreate.size + ' new equipment records will be created (with Iris CLLI auto-derived).\nNNIs that already have equipment are skipped.')) return;
+                if (!confirm('Link ' + plan.length + ' NNIs to their equipment (from CFA paths)?\n' + (portFixes.length ? portFixes.length + ' already-linked NNIs will have subinterface suffixes stripped from their ports.\n' : '') + '\n' + toCreate.size + ' new equipment records will be created (with Iris CLLI auto-derived).\nNNIs that already have equipment are skipped.')) return;
 
                 const progressModal = document.createElement('div');
                 progressModal.className = 'modal';
@@ -14805,11 +14827,20 @@ ${entityActionButtons('nni', `${n.id}`, true)}
                 const bar = document.getElementById('nniLinkProgress');
                 const status = document.getElementById('nniLinkStatus');
                 const resultsDiv = document.getElementById('nniLinkResults');
-                let linked = 0, created = 0, failed = 0;
-                for (let i = 0; i < plan.length; i++) {
-                    const { nni, device, port } = plan[i];
+                let linked = 0, created = 0, failed = 0, portsFixed = 0;
+                for (let i = 0; i < work.length; i++) {
+                    const { nni, device, port, portOnly } = work[i];
                     if (i > 0 && i % 50 === 0) { try { await ensureValidToken(); } catch (e) {} }
                     try {
+                        if (portOnly) {
+                            await graphClient.updateListItem('nnis', nni._spItemId, { EquipmentPorts: port });
+                            portsFixed++;
+                            resultsDiv.innerHTML += '<div style="color: green;">\u2713 ' + (nni.name || nni.id) + ' port \u2192 ' + port + '</div>';
+                            const pctF = Math.round(((i + 1) / work.length) * 100);
+                            bar.style.width = pctF + '%'; bar.textContent = pctF + '%';
+                            status.textContent = (i + 1) + ' of ' + work.length + ' (' + linked + ' linked, ' + portsFixed + ' ports fixed, ' + created + ' equipment created, ' + failed + ' failed)';
+                            continue;
+                        }
                         let eq = eqByName.get(norm(device));
                         if (!eq) {
                             eq = await store.addEquipment({ name: device, type: 'Switch', siteId: nni.siteId || '', irisClli: deriveIrisClli(device), notes: 'Auto-created by Link NNI Equipment from CFA paths' });
@@ -14823,13 +14854,13 @@ ${entityActionButtons('nni', `${n.id}`, true)}
                         failed++;
                         resultsDiv.innerHTML += '<div style="color: red;">\u2717 ' + (nni.name || nni.id) + ': ' + (err.message || err) + '</div>';
                     }
-                    const pct = Math.round(((i + 1) / plan.length) * 100);
+                    const pct = Math.round(((i + 1) / work.length) * 100);
                     bar.style.width = pct + '%'; bar.textContent = pct + '%';
-                    status.textContent = (i + 1) + ' of ' + plan.length + ' (' + linked + ' linked, ' + created + ' equipment created, ' + failed + ' failed)';
+                    status.textContent = (i + 1) + ' of ' + work.length + ' (' + linked + ' linked, ' + portsFixed + ' ports fixed, ' + created + ' equipment created, ' + failed + ' failed)';
                     resultsDiv.scrollTop = resultsDiv.scrollHeight;
                 }
                 store.clearCache('nnis');
-                status.innerHTML = '<strong>Complete!</strong><br>\u2713 ' + linked + ' NNIs linked \u00b7 ' + created + ' equipment created' + (failed ? '<br>\u2717 ' + failed + ' failed' : '') + '<br><span style="font-size:0.85em">Run \ud83d\udd04 Regenerate DLRs next so stored DLRs use the new native paths.</span>';
+                status.innerHTML = '<strong>Complete!</strong><br>\u2713 ' + linked + ' NNIs linked \u00b7 ' + portsFixed + ' ports fixed \u00b7 ' + created + ' equipment created' + (failed ? '<br>\u2717 ' + failed + ' failed' : '') + '<br><span style="font-size:0.85em">Run \ud83d\udd04 Regenerate DLRs next so stored DLRs use the new native paths.</span>';
                 progressModal.querySelector('.modal-content').innerHTML += `
                     <div style="padding: 0 2rem 2rem 2rem;">
                         <button class="btn-primary" onclick="this.closest('.modal').remove(); render('nnis');" style="width: 100%;">Close & Refresh</button>
