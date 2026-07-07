@@ -10116,7 +10116,7 @@
                         <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
                             <input type="text" placeholder="🔍 Search NNIs..." style="padding: 0.5rem 1rem; border: 1px solid var(--border-color); border-radius: 4px; width: 250px;" oninput="filterTable('nni', this.value)">
                             <button class="btn-secondary" onclick="renderNnisSummary()">📊 Provider Summary</button>
-                            <button class="btn-secondary" onclick="exportEntityToExcel('nnis', this)" title="Export NNIs to Excel">⬇️ Export</button>
+                            <button class="btn-secondary" onclick="linkNniEquipment(this)" title="Parse CFA paths to link each NNI to its equipment + port (creates equipment records with Iris CLLI as needed)">🔗 Link Equipment</button><button class="btn-secondary" onclick="exportEntityToExcel('nnis', this)" title="Export NNIs to Excel">⬇️ Export</button>
                             <button class="btn-primary" onclick="openAddNniModal()">Add NNI</button>
                         </div>
                     </div>
@@ -14718,6 +14718,131 @@ ${entityActionButtons('nni', `${n.id}`, true)}
         }
         
         // Programmatic navigation (dashboard cards, links) - syncs sidebar highlight
+        // ===================== NNI -> EQUIPMENT LINKING (Round 2) =====================
+        // The first device line of each CFA VLAN block is the collector NNI's equipment+port
+        // (often self-labeled "(Collector NNI: x)"); the last device line belongs to the
+        // meetpoint NNI (vlan.bNni). Pure planner (testable) + executor button.
+        function buildNniLinkPlan(circuits, allNnis) {
+            const norm = s => String(s || '').trim().toLowerCase();
+            const nniByName = new Map();
+            allNnis.forEach(n => { if (n.name) nniByName.set(norm(n.name), n); });
+            const findNni = id => id ? (nniByName.get(norm(id)) || allNnis.find(n => norm(n.id) === norm(id))) : null;
+            const deviceLine = /^([A-Za-z0-9][A-Za-z0-9\-_.]{5,})\s+(\S+)/;
+            const skipLine = /^(vpws|patch\s*panel|cpe\b)/i;
+            const plan = new Map();
+            const add = (nni, device, port) => {
+                if (!nni || nni.equipmentID) return;
+                if (!plan.has(nni.id)) plan.set(nni.id, { nni, device: String(device).toUpperCase(), port });
+            };
+            for (const c of circuits) {
+                const src = c.cfaSourceText || '';
+                if (!src.trim()) continue;
+                let vlans = [];
+                try { vlans = c.circuitVlans ? JSON.parse(c.circuitVlans) : []; } catch (e) {}
+                let cur = null; const blocks = [];
+                for (const raw of src.split(/\r?\n/)) {
+                    const line = raw.trim();
+                    if (!line) continue;
+                    const mV = line.match(/^(Shared\s+MGMT\s+VLAN|MGMT\s+VLAN|VLAN)\s+(\d+)\s*$/i);
+                    if (mV) { cur = { num: mV[2], mgmt: /MGMT/i.test(mV[1]), lines: [] }; blocks.push(cur); continue; }
+                    if (/^(?:Ciena\s+)?\d{4}$/.test(line)) { cur = null; continue; }
+                    if (cur) cur.lines.push(line);
+                }
+                for (const b of blocks) {
+                    if (b.mgmt || !b.lines.length) continue;
+                    const vlanObj = vlans.find(v => String(v.vlanId || v.vlanNumber) === String(b.num));
+                    const devLines = b.lines.filter(l => deviceLine.test(l) && !skipLine.test(l));
+                    if (!devLines.length) continue;
+                    const first = devLines[0];
+                    const mF = first.match(deviceLine);
+                    const collector = first.match(/\(Collector NNI:\s*([^)]+)\)/i);
+                    add(findNni(collector ? collector[1].trim() : (vlanObj && vlanObj.aNni)), mF[1], mF[2]);
+                    const bNniId = vlanObj && vlanObj.bNni;
+                    if (bNniId && devLines.length > 1) {
+                        const mL = devLines[devLines.length - 1].match(deviceLine);
+                        add(findNni(bNniId), mL[1], mL[2]);
+                    }
+                }
+            }
+            return Array.from(plan.values());
+        }
+        function deriveIrisClli(deviceName) {
+            const m = String(deviceName || '').toUpperCase().match(/^[A-Z]{6}[A-Z0-9]{2}/);
+            return m ? m[0] : '';
+        }
+        async function linkNniEquipment(btn) {
+            if (btn) { btn.disabled = true; btn.textContent = '\ud83d\udd17 Loading...'; }
+            try {
+                const [circuits, allNnis, allEquipment] = await Promise.all([
+                    store.getCircuits(), store.getNnis(), store.getEquipment()
+                ]);
+                const norm = s => String(s || '').trim().toLowerCase();
+                const plan = buildNniLinkPlan(circuits, allNnis);
+                if (!plan.length) {
+                    alert('Nothing to link - every NNI referenced by CFA paths already has equipment, or no CFA data is present.');
+                    return;
+                }
+                const eqByName = new Map();
+                allEquipment.forEach(e => { if (e.name) eqByName.set(norm(e.name), e); });
+                const toCreate = new Set(plan.filter(p => !eqByName.has(norm(p.device))).map(p => p.device));
+                if (!confirm('Link ' + plan.length + ' NNIs to their equipment (from CFA paths)?\n\n' + toCreate.size + ' new equipment records will be created (with Iris CLLI auto-derived).\nNNIs that already have equipment are skipped.')) return;
+
+                const progressModal = document.createElement('div');
+                progressModal.className = 'modal';
+                progressModal.style.display = 'block';
+                progressModal.innerHTML = `
+                    <div class="modal-content" style="max-width: 600px;">
+                        <div class="modal-header"><h2>Linking NNI Equipment</h2></div>
+                        <div style="padding: 2rem;">
+                            <div style="width: 100%; background: #e0e0e0; border-radius: 8px; height: 30px; overflow: hidden;">
+                                <div id="nniLinkProgress" style="width: 0%; background: linear-gradient(90deg, #0ea5e9, #0369a1); height: 100%; transition: width 0.3s; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 14px;"></div>
+                            </div>
+                            <p id="nniLinkStatus" style="margin-top: 1rem; text-align: center; color: #666;"></p>
+                            <div id="nniLinkResults" style="margin-top: 1rem; max-height: 220px; overflow-y: auto; font-size: 12px; color: #666;"></div>
+                        </div>
+                    </div>`;
+                document.body.appendChild(progressModal);
+                const bar = document.getElementById('nniLinkProgress');
+                const status = document.getElementById('nniLinkStatus');
+                const resultsDiv = document.getElementById('nniLinkResults');
+                let linked = 0, created = 0, failed = 0;
+                for (let i = 0; i < plan.length; i++) {
+                    const { nni, device, port } = plan[i];
+                    if (i > 0 && i % 50 === 0) { try { await ensureValidToken(); } catch (e) {} }
+                    try {
+                        let eq = eqByName.get(norm(device));
+                        if (!eq) {
+                            eq = await store.addEquipment({ name: device, type: 'Switch', siteId: nni.siteId || '', irisClli: deriveIrisClli(device), notes: 'Auto-created by Link NNI Equipment from CFA paths' });
+                            eqByName.set(norm(device), eq);
+                            created++;
+                        }
+                        await graphClient.updateListItem('nnis', nni._spItemId, { EquipmentID: eq.id, EquipmentPorts: port });
+                        linked++;
+                        resultsDiv.innerHTML += '<div style="color: green;">\u2713 ' + (nni.name || nni.id) + ' \u2192 ' + device + ' ' + port + '</div>';
+                    } catch (err) {
+                        failed++;
+                        resultsDiv.innerHTML += '<div style="color: red;">\u2717 ' + (nni.name || nni.id) + ': ' + (err.message || err) + '</div>';
+                    }
+                    const pct = Math.round(((i + 1) / plan.length) * 100);
+                    bar.style.width = pct + '%'; bar.textContent = pct + '%';
+                    status.textContent = (i + 1) + ' of ' + plan.length + ' (' + linked + ' linked, ' + created + ' equipment created, ' + failed + ' failed)';
+                    resultsDiv.scrollTop = resultsDiv.scrollHeight;
+                }
+                store.clearCache('nnis');
+                status.innerHTML = '<strong>Complete!</strong><br>\u2713 ' + linked + ' NNIs linked \u00b7 ' + created + ' equipment created' + (failed ? '<br>\u2717 ' + failed + ' failed' : '') + '<br><span style="font-size:0.85em">Run \ud83d\udd04 Regenerate DLRs next so stored DLRs use the new native paths.</span>';
+                progressModal.querySelector('.modal-content').innerHTML += `
+                    <div style="padding: 0 2rem 2rem 2rem;">
+                        <button class="btn-primary" onclick="this.closest('.modal').remove(); render('nnis');" style="width: 100%;">Close & Refresh</button>
+                    </div>`;
+            } catch (error) {
+                console.error('NNI linking error:', error);
+                alert('Error linking NNI equipment: ' + friendlyError(error));
+            } finally {
+                if (btn) { btn.disabled = false; btn.textContent = '\ud83d\udd17 Link Equipment'; }
+            }
+        }
+        // ===============================================================================
+
         // ===================== BULK DLR REGENERATION =====================
         // GeneratedSFDLR is normally only written when a circuit is saved, so backfilled
         // circuits have an empty column. This fills it for every circuit in one run.
