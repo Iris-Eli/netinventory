@@ -1820,7 +1820,7 @@
                     <div class="form-group">
                         <label>Route ID</label>
                         <input type="text" name="routeCustomId" placeholder="Auto-generated if left blank">
-                        <small style="color: var(--text-tertiary); font-size: 0.85rem;">Set once at creation (segments and KMZ maps link to it). Locked when editing.</small>
+                        <small style="color: var(--text-tertiary); font-size: 0.85rem;">Auto-generated if blank. Changing it later re-links all segments and requires double confirmation.</small>
                     </div>
                     <div class="form-row">
                         <div class="form-group">
@@ -10832,10 +10832,9 @@
         async function generateDlrText(circuit, allSites, allNnis, allEquipment, allFdps) {
             if (!circuit || !circuit.circuitVLANs || circuit.circuitVLANs.length === 0) return '';
             
-            // ---- Parse CFA source text into blocks (fallback source of truth for backfilled circuits) ----
-            // Layered fidelity: native structured path -> verbatim CFA source block -> parsed cfaPaths A/Z.
-            const srcVlanBlocks = {};   // vlanNum -> [lines]
-            const srcMgmtBlocks = {};   // vlanNum -> [lines]
+            // ---- Parse CFA source text into blocks (fallback + richness benchmark) ----
+            const srcVlanBlocks = {};
+            const srcMgmtBlocks = {};
             const srcCpeLines = [];
             const srcText = circuit.cfaSourceText || '';
             if (srcText.trim()) {
@@ -10855,89 +10854,73 @@
                 }
             }
             const cfaPathsArr = (typeof safeParseJson === 'function') ? safeParseJson(circuit.cfaPaths, []) : [];
+            const norm = s => String(s || '').trim().toLowerCase();
+            const findNniRec = ref => {
+                if (!ref) return null;
+                return allNnis?.find(n => norm(n.id) === norm(ref)) || allNnis?.find(n => norm(n.name) === norm(ref)) || null;
+            };
+            const eqOf = nni => (nni && nni.equipmentID) ? allEquipment?.find(e => e.id === nni.equipmentID) : null;
             
             const lines = [];
             let nativePathLines = 0;
             
-            // For each VLAN, build the path narrative in SF format
             for (let i = 0; i < circuit.circuitVLANs.length; i++) {
                 const vlan = circuit.circuitVLANs[i];
                 const vlanNum = vlan.vlanNumber || vlan.vlanId || `VLAN${i + 1}`;
-                
                 lines.push(`VLAN ${vlanNum}`);
-                const beforeCount = lines.length;
                 
-                // A-site equipment and ports
-                if (vlan.aLocationSiteId || vlan.aNni) {
-                    const aNni = allNnis?.find(n => n.id === vlan.aNni);
-                    const aEquipment = aNni?.equipmentID ? allEquipment?.find(e => e.id === aNni.equipmentID) : null;
-                    
-                    if (aEquipment && aNni?.equipmentPorts) {
-                        lines.push(`${aEquipment.name} ${aNni.equipmentPorts}`);
-                    }
+                // ---- native path from inventory (post NNI->equipment linking) ----
+                const nativeLines = [];
+                const aNniRec = findNniRec(vlan.aNni);
+                const aEq = eqOf(aNniRec);
+                if (aEq && aNniRec.equipmentPorts) {
+                    nativeLines.push(`${aEq.name} ${aNniRec.equipmentPorts} (Collector NNI: ${aNniRec.name || vlan.aNni})`);
                 }
-                
-                // B-hop intermediates (B-N) - only if populated
-                let hasIntermediate = false;
-                for (let locLetter = 66; locLetter <= 78; locLetter++) { // B-N
+                // B-N intermediates from per-VLAN fields if populated
+                for (let locLetter = 66; locLetter <= 78; locLetter++) {
                     const loc = String.fromCharCode(locLetter);
-                    const equipmentField = loc + 'Equipment';
-                    const equipmentPortField = loc + 'EquipmentPort';
-                    
-                    if (vlan[equipmentField] && vlan[equipmentPortField]) {
-                        const bEquipment = allEquipment?.find(e => e.id === vlan[equipmentField]);
-                        if (bEquipment) {
-                            lines.push(`${bEquipment.name} ${vlan[equipmentPortField]}`);
-                            hasIntermediate = true;
-                        }
+                    if (vlan[loc + 'Equipment'] && vlan[loc + 'EquipmentPort']) {
+                        const bEq = allEquipment?.find(e => e.id === vlan[loc + 'Equipment']);
+                        if (bEq) nativeLines.push(`${bEq.name} ${vlan[loc + 'EquipmentPort']}`);
                     }
                 }
-                
-                // Middle NNI if Type II provider (Collector NNI note)
-                if (vlan.bNni) {
-                    const bNni = allNnis?.find(n => n.id === vlan.bNni);
-                    if (bNni) {
-                        lines.push('');
-                        lines.push(`${bNni.name} (Collector NNI: ${vlan.bNni})`);
-                        lines.push('VPWS');
-                    }
+                // meetpoint (Type II) end via vlan.bNni
+                const bNniRec = findNniRec(vlan.bNni);
+                const bEq = eqOf(bNniRec);
+                if (bEq && bNniRec.equipmentPorts) {
+                    nativeLines.push('VPWS');
+                    nativeLines.push(`${bEq.name} ${bNniRec.equipmentPorts}`);
+                }
+                // direct Z NNI / CPE end
+                const zNniRec = findNniRec(vlan.zNni);
+                const zEq = eqOf(zNniRec);
+                if (zEq && zNniRec.equipmentPorts) {
+                    nativeLines.push(`${zEq.name} ${zNniRec.equipmentPorts}`);
+                } else if (vlan.connectionType === 'cpe' && !bEq) {
+                    nativeLines.push('CPE');
                 }
                 
-                // Z-site equipment and ports (CPE or far-end equipment)
-                if (vlan.zLocationSiteId || vlan.zNni) {
-                    const zNni = allNnis?.find(n => n.id === vlan.zNni);
-                    const zEquipment = zNni?.equipmentID ? allEquipment?.find(e => e.id === zNni.equipmentID) : null;
-                    
-                    if (zEquipment && zNni?.equipmentPorts) {
-                        lines.push(`${zEquipment.name} ${zNni.equipmentPorts}`);
-                    } else if (vlan.connectionType === 'cpe' && !zEquipment) {
-                        // CPE end - no specific equipment name yet
-                        lines.push('CPE');
-                    }
-                }
-                
-                if (lines.length > beforeCount) {
-                    nativePathLines += lines.length - beforeCount;
+                // ---- choose the richer narrative: full CFA block wins until inventory has more detail ----
+                const blk = srcVlanBlocks[String(vlanNum)];
+                if (blk && blk.length > nativeLines.length) {
+                    lines.push(...blk);
+                } else if (nativeLines.length) {
+                    lines.push(...nativeLines);
+                    nativePathLines += nativeLines.length;
+                } else if (blk && blk.length) {
+                    lines.push(...blk);
                 } else {
-                    // FALLBACK 1: verbatim CFA source block for this VLAN (full hop-by-hop detail from Salesforce)
-                    const blk = srcVlanBlocks[String(vlanNum)];
-                    if (blk && blk.length) {
-                        lines.push(...blk);
-                    } else {
-                        // FALLBACK 2: parsed cfaPaths A -> transport -> Z
-                        const p = cfaPathsArr.find(x => String(x.vlan) === String(vlanNum) && !x.isMgmt);
-                        if (p) {
-                            if (p.aDevice) lines.push((p.aDevice + ' ' + (p.aInterface || '')).trim());
-                            if (p.transport) lines.push(p.transport);
-                            if (p.zDevice) lines.push((p.zDevice + ' ' + (p.zInterface || '')).trim());
-                        }
+                    const p = cfaPathsArr.find(x => String(x.vlan) === String(vlanNum) && !x.isMgmt);
+                    if (p) {
+                        if (p.aDevice) lines.push((p.aDevice + ' ' + (p.aInterface || '')).trim());
+                        if (p.transport) lines.push(p.transport);
+                        if (p.zDevice) lines.push((p.zDevice + ' ' + (p.zInterface || '')).trim());
                     }
                 }
-                
                 lines.push('');
             }
             
-            // Management VLAN section if present
+            // Management VLAN section
             if (circuit.cpeMgmtVlan) {
                 lines.push(`MGMT VLAN ${circuit.cpeMgmtVlan}`);
                 const mgmtBlk = srcMgmtBlocks[String(circuit.cpeMgmtVlan)];
@@ -10949,7 +10932,6 @@
                     if (circuit.cpeMgmtGateway) lines.push(`Gateway: ${circuit.cpeMgmtGateway}`);
                 }
             } else {
-                // No structured MGMT - carry MGMT blocks from CFA source if present
                 for (const num of Object.keys(srcMgmtBlocks)) {
                     lines.push(`MGMT VLAN ${num}`);
                     lines.push(...srcMgmtBlocks[num]);
@@ -10957,7 +10939,7 @@
                 }
             }
             
-            // CPE type and port mapping if applicable
+            // CPE section
             if (circuit.cpeType || srcCpeLines.length) {
                 lines.push('');
                 if (circuit.cpeUplinkPorts || circuit.cpeDownlinkPorts || srcCpeLines.length === 0) {
@@ -10965,7 +10947,6 @@
                     if (circuit.cpeUplinkPorts) lines.push(`Uplink: ${circuit.cpeUplinkPorts}`);
                     if (circuit.cpeDownlinkPorts) lines.push(`Downlink: ${circuit.cpeDownlinkPorts}`);
                 } else {
-                    // Verbatim CFA CPE block (model, port roles); skip MGMT IP lines already emitted above
                     const skipIp = !!circuit.cpeMgmtIp;
                     lines.push(...srcCpeLines.filter(l => !(skipIp && /^MGMT\s+(IP|GW|Subnet):/i.test(l))));
                 }
@@ -12462,10 +12443,19 @@
             // Filter out used ports
             const availablePorts = ports.filter(p => !usedPorts.includes(p));
             
+            // Always include this NNI's own linked port(s) so existing links display as selected,
+            // even when portConfig can't parse them (CFA-style names like 1-2-3 or ET3)
+            const currentNniRec = currentNniId ? allNnis.find(n => n.id === currentNniId) : null;
+            const ownPorts = (currentNniRec && currentNniRec.equipmentID === equipmentId)
+                ? String(currentNniRec.equipmentPorts || '').split(',').map(p => p.trim()).filter(Boolean)
+                : [];
+            ownPorts.slice().reverse().forEach(p => { if (!availablePorts.includes(p)) availablePorts.unshift(p); });
+            
             // Populate dropdown
             portsSelect.innerHTML = availablePorts.length > 0 
                 ? availablePorts.map(p => `<option value="${p}">${p}</option>`).join('')
                 : '<option value="">No available ports</option>';
+            if (ownPorts.length) portsSelect.value = ownPorts[0];
             
             portsGroup.style.display = 'block';
         }
@@ -13677,7 +13667,7 @@ ${entityActionButtons('nni', `${n.id}`, true)}
             document.getElementById('darkFiberRouteModalTitle').textContent = 'Edit Dark Fiber Route';
             const form = document.getElementById('darkFiberRouteForm');
             form.elements.routeName.value = route.routeName || '';
-            if (form.elements.routeCustomId) { form.elements.routeCustomId.value = route.id || ''; form.elements.routeCustomId.disabled = true; }
+            if (form.elements.routeCustomId) { form.elements.routeCustomId.value = route.id || ''; form.elements.routeCustomId.disabled = false; }
             form.elements.aLocationSiteId.value = route.aLocationSiteId || '';
             form.elements.zLocationSiteId.value = route.zLocationSiteId || '';
             form.elements.purpose.value = route.purpose || '';
@@ -13716,8 +13706,25 @@ ${entityActionButtons('nni', `${n.id}`, true)}
             if (!(await confirmIfDuplicate('getDarkFiberRoutes', 'routeName', route.routeName, editingDarkFiberRouteId, 'dark fiber route named'))) return;
             try {
                 if (editingDarkFiberRouteId) {
-                    await store.updateDarkFiberRoute(editingDarkFiberRouteId, route);
-                    alert('Route updated successfully!');
+                    let _routeIdForUpdate = editingDarkFiberRouteId;
+                    if (_customRouteId && _customRouteId !== editingDarkFiberRouteId) {
+                        if (!confirm('\u26a0\ufe0f Change Route ID from "' + editingDarkFiberRouteId + '" to "' + _customRouteId + '"?\n\nAll segments will be re-linked to the new ID automatically. KMZ map links on this route are preserved, but files uploaded under the old ID keep their old filenames in the map library.')) return;
+                        if (!confirm('Are you sure? Click OK once more to confirm the Route ID change.')) return;
+                        const _allRoutes = await store.getDarkFiberRoutes();
+                        if (_allRoutes.find(r => String(r.id).toLowerCase() === _customRouteId.toLowerCase())) {
+                            alert('A route with ID "' + _customRouteId + '" already exists.'); return;
+                        }
+                        const _rec = _allRoutes.find(r => r.id === editingDarkFiberRouteId);
+                        if (!_rec || !_rec._spItemId) { alert('Could not locate the route record to rename.'); return; }
+                        await graphClient.updateListItem('darkfiberroutes', _rec._spItemId, { Title: _customRouteId });
+                        const _segs = (await store.getDarkFiberSegments()).filter(s => s.routeId === editingDarkFiberRouteId);
+                        for (const _s of _segs) { await store.updateDarkFiberSegment(_s.id, { routeId: _customRouteId }); }
+                        store.clearCache('darkfiberroutes');
+                        store.clearCache('darkfibersegments');
+                        _routeIdForUpdate = _customRouteId;
+                    }
+                    await store.updateDarkFiberRoute(_routeIdForUpdate, route);
+                    alert('Route updated successfully!' + (_routeIdForUpdate !== editingDarkFiberRouteId ? ' Route ID changed and ' + 'segments re-linked.' : ''));
                 } else {
                     if (_customRouteId) {
                         const _existingRoutes = await store.getDarkFiberRoutes();
@@ -14843,7 +14850,7 @@ ${entityActionButtons('nni', `${n.id}`, true)}
                         }
                         let eq = eqByName.get(norm(device));
                         if (!eq) {
-                            eq = await store.addEquipment({ name: device, type: 'Switch', siteId: nni.siteId || '', irisClli: deriveIrisClli(device), notes: 'Auto-created by Link NNI Equipment from CFA paths' });
+                            eq = await store.addEquipment({ name: device, type: 'Switch', siteId: nni.siteId || '', portConfig: port, irisClli: deriveIrisClli(device), notes: 'Auto-created by Link NNI Equipment from CFA paths' });
                             eqByName.set(norm(device), eq);
                             created++;
                         }
