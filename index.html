@@ -7687,9 +7687,9 @@
         
         // Canonical FDP port consumption: every letter column A-N and Z, both direct-FDP and
         // equipment-FDP families, plus NNIs. Excludes the circuit currently being edited.
-        function collectFdpUsedPorts(fdpId, circuits, nnis) {
+        function collectFdpUsedPorts(fdpId, circuits, nnis, includeSelf) {
             const used = new Set();
-            const selfId = (typeof editingCircuitId !== 'undefined' && editingCircuitId) || null;
+            const selfId = includeSelf ? null : ((typeof editingCircuitId !== 'undefined' && editingCircuitId) || null);
             const letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'z'];
             const usedAdd = x => { const t = String(x).trim(); if (t) used.add(t); };
             circuits.forEach(c => {
@@ -7701,6 +7701,12 @@
             });
             nnis.forEach(n => { if (n.fdpId === fdpId && n.fdpPorts) String(n.fdpPorts).split(',').forEach(usedAdd); });
             return used;
+        }
+        
+        // True if a circuit consumes this FDP anywhere: A/Z terminations, B-N intermediates, or equipment-FDP connections
+        function circuitUsesFdp(c, fdpId) {
+            const letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'z'];
+            return letters.some(l => c[l + 'Fdp'] === fdpId || c[l + 'EquipmentFdp'] === fdpId);
         }
         
         // Availability label for FDP dropdown options: "(X of Y available)" - counts every consumer
@@ -10685,7 +10691,7 @@
             
             const [site, circuits, nnis] = await Promise.all([
                 fdp.siteId ? store.getSites().then(s => s.find(site => site.id === fdp.siteId)) : Promise.resolve(null),
-                store.getCircuits().then(c => c.filter(cir => cir.aFdp === fdpId || cir.zFdp === fdpId)),
+                store.getCircuits().then(c => c.filter(cir => circuitUsesFdp(cir, fdpId))),
                 store.getNnis().then(n => n.filter(nni => nni.fdpId === fdpId))
             ]);
             
@@ -10702,8 +10708,8 @@
                             { label: 'Mounting Type', value: fdp.mountingType || '-' },
                             { label: 'Connector Type', value: fdp.connectorType || '-' },
                             { label: 'Total Ports', value: fdp.portCount || fdp.numPorts || '-' },
-                            { label: 'Ports In Use', value: `${circuits.length} (Circuits) + ${nnis.length} (NNIs)` },
-                            { label: 'Available Ports', value: (fdp.portCount || fdp.numPorts) ? `${(fdp.portCount || fdp.numPorts) - circuits.length - nnis.length}` : '-' },
+                            { label: 'Ports In Use', value: (() => { const _u = collectFdpUsedPorts(fdpId, circuits, nnis, true); return `${_u.size} port${_u.size === 1 ? '' : 's'} (${circuits.length} circuit${circuits.length === 1 ? '' : 's'}, ${nnis.length} NNI${nnis.length === 1 ? '' : 's'})`; })() },
+                            { label: 'Available Ports', value: (() => { const _t = parseInt(fdp.portCount || fdp.numPorts, 10) || 0; if (!_t) return '-'; const _u = collectFdpUsedPorts(fdpId, circuits, nnis, true).size; return `${Math.max(0, _t - _u)} of ${_t}`; })() },
                             { label: 'Location', value: fdp.location || '-' },
                             { label: 'Notes', value: fdp.notes || '-' }
                         ]
@@ -14371,16 +14377,14 @@ ${entityActionButtons('nni', `${n.id}`, true)}
                     const site = sites.find(s => s.id === fdp.siteId);
                     const totalPorts = fdp.portCount || 0;
                     
-                    // Find circuits using this FDP
-                    const fdpCircuits = circuits.filter(c => 
-                        c.aFdp === fdp.id || c.zFdp === fdp.id ||
-                        c.aEquipmentFdp === fdp.id || c.zEquipmentFdp === fdp.id
-                    );
+                    // Find circuits using this FDP - any letter column (A-N, Z) or equipment-FDP connection
+                    const fdpCircuits = circuits.filter(c => circuitUsesFdp(c, fdp.id));
                     
                     // Find NNIs using this FDP
                     const fdpNnis = nnis.filter(n => n.fdpId === fdp.id);
                     
-                    const usedPorts = fdpCircuits.length + fdpNnis.length;
+                    // Real distinct-port usage (not a record count - one circuit can consume several ports)
+                    const usedPorts = collectFdpUsedPorts(fdp.id, fdpCircuits, fdpNnis, true).size;
                     const availablePorts = Math.max(0, totalPorts - usedPorts);
                     const utilization = totalPorts > 0 ? ((usedPorts / totalPorts) * 100).toFixed(1) : 0;
                     
