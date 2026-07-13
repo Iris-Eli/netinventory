@@ -6170,11 +6170,7 @@
             }
         }
         
-        function toggleWavelengthField() {
-            const cb = document.querySelector('#circuitForm input[name="tunable"], input[name="tunable"]');
-            const grp = document.getElementById('wavelengthFieldGroup');
-            if (grp && cb) grp.style.display = cb.checked ? 'block' : 'none';
-        }
+        // legacy toggleWavelengthField removed — superseded by the per-VLAN 🌈 Tunable Optics blocks
 
         function handleCpeEquipmentSelect(sel) {
             if (sel.value === '__new__') {
@@ -6593,7 +6589,35 @@
             });
             return parts.join('|');
         }
-        
+
+        // Human-readable wavelength summary derived from the per-VLAN tunable inputs, e.g.
+        //   "V1 A↑ 1550.92nm | V1 Z↑ 1550nm | V2 A↓ 1490nm"  (only ends that carry a wavelength).
+        // Populates the discrete `wavelength` column; the machine-parseable copy stays in `tunable`.
+        function serializeWavelengthColumn(form, vlanCount) {
+            const fd = new FormData(form);
+            const parts = [];
+            const push = (vNum, letter, arrow, wv) => {
+                const w = String(wv || '').trim();
+                if (w) parts.push(`V${vNum} ${letter}${arrow} ${w}${/nm$/i.test(w) ? '' : 'nm'}`);
+            };
+            for (let v = 1; v <= (vlanCount || 1); v++) {
+                [['A', 'a'], ['Z', 'z']].forEach(([L, l]) => {
+                    push(v, L, '↑', fd.get(`vlan${v}_${l}WavelengthUpstream`));
+                    push(v, L, '↓', fd.get(`vlan${v}_${l}WavelengthDownstream`));
+                });
+            }
+            // Intermediate locations (B, C, D... per the tunable serializer's letter scheme)
+            document.querySelectorAll('.vlan-intermediate-card').forEach(card => {
+                const vNum = card.dataset.vlanNum;
+                const idx = parseInt(card.dataset.locIdx);
+                const letter = String.fromCharCode(65 + idx);
+                const get = f => { const el = card.querySelector(`[name="vlan${vNum}_int${idx}_${f}"]`); return el ? el.value : ''; };
+                push(vNum, letter, '↑', get('wavelengthUpstream'));
+                push(vNum, letter, '↓', get('wavelengthDownstream'));
+            });
+            return parts.join(' | ');
+        }
+
         // Parse Tunable column back into form fields
         function loadTunableFromColumn(rawValue) {
             if (!rawValue) return;
@@ -8087,9 +8111,7 @@
             // (Defensive default of 1 only if JSON parsing fails — the proper loader will overwrite.)
             if (form.elements.vlanCount) form.elements.vlanCount.value = '1';
             form.elements.provider.value = circuit.provider || '';
-            if (form.elements.tunable) { form.elements.tunable.checked = circuit.tunable === 'yes'; toggleWavelengthField(); }
             if (form.elements.cpeEquipment) form.elements.cpeEquipment.value = circuit.cpeEquipmentId || '';
-            if (form.elements.wavelength) form.elements.wavelength.value = circuit.wavelength || '';
             
             // A-Location
             form.elements.aLocationSiteId.value = circuit.aLocationSiteId || ''; syncSiteComboInput('circuitASiteSelect');
@@ -8481,7 +8503,6 @@
                     const fromLabel = opt => { const m = opt && opt.textContent.match(/—\s*(ET\S+)\s*\(/); return m ? m[1] : ''; };
                     if (aOpt && !data.aInterface) data.aInterface = fromLabel(aOpt);
                     if (zOpt && !data.zInterface) data.zInterface = fromLabel(zOpt);
-                    const vlanField = document.querySelector('#circuitForm [name="wavelength"]');
                 } catch (e) { /* prefill is best-effort */ }
             }
             const i = wrap.children.length;
@@ -8894,8 +8915,7 @@
                 bandwidth: formData.get('bandwidth'),
                 cpeEquipmentId: formData.get('cpeEquipment') === '__new__' ? '' : (formData.get('cpeEquipment') || ''),
                 cfaPaths: JSON.stringify(collectCfaPaths()),
-                tunable: formData.get('tunable') ? 'yes' : 'no',
-                wavelength: formData.get('tunable') ? (formData.get('wavelength') || '') : '',
+                wavelength: serializeWavelengthColumn(event.target, parseInt(formData.get('vlanCount')) || 1),
                 status: formData.get('status'),
                 // dlrText + activation gate applied after object build (see below)
                 
