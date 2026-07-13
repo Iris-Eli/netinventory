@@ -5824,13 +5824,14 @@
                         <div id="aEquipmentFdpFields" style="display: none; margin-left: 1.5rem; border-left: 3px solid var(--accent-primary); padding-left: 1rem;">
                             <div class="form-group">
                                 <label>FDP</label>
-                                <select name="aEquipmentFdp" id="aEquipmentFdpSelect">
+                                <select name="aEquipmentFdp" id="aEquipmentFdpSelect" onchange="updateEquipmentFdpPorts('a')">
                                     <option value="">Select FDP...</option>
                                 </select>
                             </div>
                             <div class="form-group">
                                 <label>FDP Ports</label>
-                                <input type="text" name="aEquipmentFdpPorts" placeholder="e.g., 1,2,3">
+                                <select name="aEquipmentFdpPorts" id="aEquipmentFdpPortsSelect" multiple size="3"><option value="">Select FDP first...</option></select>
+                                <small style="color: var(--text-tertiary); font-size: 0.8rem;">Ctrl/Cmd-click to select multiple ports</small>
                             </div>
                         </div>
                     </div>
@@ -5941,13 +5942,14 @@
                         <div id="zEquipmentFdpFields" style="display: none; margin-left: 1.5rem; border-left: 3px solid var(--accent-primary); padding-left: 1rem;">
                             <div class="form-group">
                                 <label>FDP</label>
-                                <select name="zEquipmentFdp" id="zEquipmentFdpSelect">
+                                <select name="zEquipmentFdp" id="zEquipmentFdpSelect" onchange="updateEquipmentFdpPorts('z')">
                                     <option value="">Select FDP...</option>
                                 </select>
                             </div>
                             <div class="form-group">
                                 <label>FDP Ports</label>
-                                <input type="text" name="zEquipmentFdpPorts" placeholder="e.g., 1,2,3">
+                                <select name="zEquipmentFdpPorts" id="zEquipmentFdpPortsSelect" multiple size="3"><option value="">Select FDP first...</option></select>
+                                <small style="color: var(--text-tertiary); font-size: 0.8rem;">Ctrl/Cmd-click to select multiple ports</small>
                             </div>
                         </div>
                     </div>
@@ -7586,11 +7588,19 @@
             // Get all circuits and NNIs to check port availability
             const [circuits, nnis] = await Promise.all([store.getCircuits(), store.getNnis()]);
             
-            // Track used ports on this FDP
+            // Track used ports on this FDP (excluding the circuit being edited - its own ports must stay selectable)
             const usedPorts = new Set();
+            const _selfId = (typeof editingCircuitId !== 'undefined' && editingCircuitId) || null;
             
-            // Check circuits
+            // Check circuits (A/Z FDP terminations AND equipment-FDP connections)
             circuits.forEach(circuit => {
+                if (_selfId && circuit.id === _selfId) return;
+                if (circuit.aEquipmentFdp === selectedFdpId && circuit.aEquipmentFdpPorts) {
+                    String(circuit.aEquipmentFdpPorts).split(',').forEach(p => usedPorts.add(p.trim()));
+                }
+                if (circuit.zEquipmentFdp === selectedFdpId && circuit.zEquipmentFdpPorts) {
+                    String(circuit.zEquipmentFdpPorts).split(',').forEach(p => usedPorts.add(p.trim()));
+                }
                 if (circuit.aFdp === selectedFdpId && circuit.aPort) {
                     circuit.aPort.split(',').forEach(p => usedPorts.add(p.trim()));
                 }
@@ -7616,6 +7626,40 @@
                 const option = document.createElement('option');
                 option.value = portNum;
                 option.textContent = `Port ${portNum}${isUsed ? ' - IN USE' : ' - Available'}`;
+                option.disabled = isUsed;
+                option.style.color = isUsed ? 'var(--text-tertiary)' : 'var(--text-primary)';
+                portSelect.appendChild(option);
+            }
+        }
+        
+        // Populate the equipment-FDP ports multiselect (same availability logic as A/Z terminations)
+        async function updateEquipmentFdpPorts(end) {
+            const fdpSelect = document.getElementById(end === 'a' ? 'aEquipmentFdpSelect' : 'zEquipmentFdpSelect');
+            const portSelect = document.getElementById(end === 'a' ? 'aEquipmentFdpPortsSelect' : 'zEquipmentFdpPortsSelect');
+            if (!fdpSelect || !portSelect) return;
+            const selectedFdpId = fdpSelect.value;
+            portSelect.innerHTML = '';
+            if (!selectedFdpId) { portSelect.innerHTML = '<option value="">Select FDP first...</option>'; return; }
+            const fdps = await store.getFdps();
+            const selectedFdp = fdps.find(f => f.id === selectedFdpId);
+            if (!selectedFdp) { portSelect.innerHTML = '<option value="">FDP not found</option>'; return; }
+            const [circuits, nnis] = await Promise.all([store.getCircuits(), store.getNnis()]);
+            const usedPorts = new Set();
+            const _selfId = (typeof editingCircuitId !== 'undefined' && editingCircuitId) || null;
+            circuits.forEach(c => {
+                if (_selfId && c.id === _selfId) return;
+                [['aFdp', 'aPort'], ['zFdp', 'zPort'], ['aEquipmentFdp', 'aEquipmentFdpPorts'], ['zEquipmentFdp', 'zEquipmentFdpPorts']].forEach(pair => {
+                    if (c[pair[0]] === selectedFdpId && c[pair[1]]) String(c[pair[1]]).split(',').forEach(x => usedPorts.add(x.trim()));
+                });
+            });
+            nnis.forEach(nni => { if (nni.fdpId === selectedFdpId && nni.fdpPorts) nni.fdpPorts.split(',').forEach(p => usedPorts.add(p.trim())); });
+            const portCount = selectedFdp.portCount || selectedFdp.numPorts || 24;
+            for (let i = 1; i <= portCount; i++) {
+                const portNum = i.toString();
+                const isUsed = usedPorts.has(portNum);
+                const option = document.createElement('option');
+                option.value = portNum;
+                option.textContent = 'Port ' + portNum + (isUsed ? ' - IN USE' : ' - Available');
                 option.disabled = isUsed;
                 option.style.color = isUsed ? 'var(--text-tertiary)' : 'var(--text-primary)';
                 portSelect.appendChild(option);
@@ -7789,6 +7833,10 @@
         }
         
         async function openAddCircuitModal() {
+            // Show the modal shell immediately - a data/auth failure must never make the button feel dead
+            document.getElementById('circuitModalTitle').textContent = 'Add Circuit';
+            document.getElementById('circuitModal').classList.add('active');
+            try {
             window._equipmentCache = await store.getEquipment();
             editingCircuitId = null;
             additionalLocationCounter = 0;
@@ -7838,7 +7886,10 @@
             // Note: NNI and port dropdowns will be populated when site is selected
             // via updateCircuitNniDropdowns and updateCircuitFdpPorts
             
-            document.getElementById('additionalLocationsContainer').innerHTML = '';
+            // Legacy intermediate-locations container no longer exists in the modal (replaced by per-VLAN cards).
+            // Unguarded, this line threw and silently killed the Add Circuit button - never dereference it blind.
+            const _legacyAlc = document.getElementById('additionalLocationsContainer');
+            if (_legacyAlc) _legacyAlc.innerHTML = '';
             document.querySelector('input[name="direction"][value="provider"]').checked = true;
             document.querySelector('input[name="networkType"][value="on-net"]').checked = true;
             document.querySelector('input[name="aConnectionType"][value="fdp"]').checked = true;
@@ -7852,10 +7903,15 @@
 
             
             document.getElementById('circuitModal').classList.add('active');
+            } catch (e) {
+                console.error('Add Circuit initialization error:', e);
+                alert('\u26a0\ufe0f Add Circuit could not finish loading form data: ' + (typeof friendlyError === 'function' ? friendlyError(e) : (e && e.message || e)));
+            }
         }
         
         async function editCircuit(circuit) {
-            window._equipmentCache = await store.getEquipment();
+            try { window._equipmentCache = await store.getEquipment(); }
+            catch (e) { window._equipmentCache = []; console.error('Edit Circuit: equipment load failed:', e); alert('\u26a0\ufe0f Could not load the equipment list: ' + (typeof friendlyError === 'function' ? friendlyError(e) : (e && e.message || e))); }
             // Safety check - ensure modal exists
             if (!document.getElementById('circuitModal')) {
                 console.log('Circuit modal not found, initializing...');
@@ -7953,7 +8009,11 @@
             form.elements.aFdp.value = circuit.aFdp || '';
             form.elements.aEquipment.value = circuit.aEquipment || '';
             form.elements.aEquipmentFdp.value = circuit.aEquipmentFdp || '';
-            form.elements.aEquipmentFdpPorts.value = circuit.aEquipmentFdpPorts || '';
+            await updateEquipmentFdpPorts('a');
+            if (circuit.aEquipmentFdpPorts) {
+                const _psA = document.getElementById('aEquipmentFdpPortsSelect');
+                if (_psA) { const _selA = String(circuit.aEquipmentFdpPorts).split(',').map(p => p.trim()); Array.from(_psA.options).forEach(o => { if (_selA.includes(o.value)) o.selected = true; }); }
+            }
             form.elements.aNni.value = circuit.aNni || '';
             form.elements.aNniSubinterface.value = circuit.aNniSubinterface || '';
             
@@ -7974,7 +8034,11 @@
             form.elements.zFdp.value = circuit.zFdp || '';
             form.elements.zEquipment.value = circuit.zEquipment || '';
             form.elements.zEquipmentFdp.value = circuit.zEquipmentFdp || '';
-            form.elements.zEquipmentFdpPorts.value = circuit.zEquipmentFdpPorts || '';
+            await updateEquipmentFdpPorts('z');
+            if (circuit.zEquipmentFdpPorts) {
+                const _psZ = document.getElementById('zEquipmentFdpPortsSelect');
+                if (_psZ) { const _selZ = String(circuit.zEquipmentFdpPorts).split(',').map(p => p.trim()); Array.from(_psZ.options).forEach(o => { if (_selZ.includes(o.value)) o.selected = true; }); }
+            }
             form.elements.zNni.value = circuit.zNni || '';
             form.elements.zNniSubinterface.value = circuit.zNniSubinterface || '';
             
@@ -8015,7 +8079,7 @@
                 if (circuit.aPort) {
                     const portSelect = document.getElementById('aFdpPortSelect');
                     if (portSelect) {
-                        const ports = circuit.aPort.split(',');
+                        const ports = circuit.aPort.split(',').map(p => p.trim());
                         Array.from(portSelect.options).forEach(opt => {
                             if (ports.includes(opt.value)) opt.selected = true;
                         });
@@ -8029,7 +8093,7 @@
                 if (circuit.zPort) {
                     const portSelect = document.getElementById('zFdpPortSelect');
                     if (portSelect) {
-                        const ports = circuit.zPort.split(',');
+                        const ports = circuit.zPort.split(',').map(p => p.trim());
                         Array.from(portSelect.options).forEach(opt => {
                             if (ports.includes(opt.value)) opt.selected = true;
                         });
@@ -8744,7 +8808,7 @@
                 aEquipment: formData.get('aEquipment') || '',
                 aEquipmentPort: aEquipmentPorts || '',
                 aEquipmentFdp: formData.get('aEquipmentFdp') || '',
-                aEquipmentFdpPorts: formData.get('aEquipmentFdpPorts') || '',
+                aEquipmentFdpPorts: (function() { const s = document.getElementById('aEquipmentFdpPortsSelect'); return s ? Array.from(s.selectedOptions).map(o => o.value).filter(Boolean).join(',') : (formData.get('aEquipmentFdpPorts') || ''); })(),
                 aNni: formData.get('aNni') || '',
                 aNniSubinterface: formData.get('aNniSubinterface') || '',
                 
@@ -8756,7 +8820,7 @@
                 zEquipment: formData.get('zEquipment') || '',
                 zEquipmentPort: zEquipmentPorts || '',
                 zEquipmentFdp: formData.get('zEquipmentFdp') || '',
-                zEquipmentFdpPorts: formData.get('zEquipmentFdpPorts') || '',
+                zEquipmentFdpPorts: (function() { const s = document.getElementById('zEquipmentFdpPortsSelect'); return s ? Array.from(s.selectedOptions).map(o => o.value).filter(Boolean).join(',') : (formData.get('zEquipmentFdpPorts') || ''); })(),
                 zNni: formData.get('zNni') || '',
                 zNniSubinterface: formData.get('zNniSubinterface') || '',
                 
@@ -14406,6 +14470,10 @@ ${entityActionButtons('nni', `${n.id}`, true)}
                         <div style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 0.75rem; padding: 1.5rem; margin-bottom: 2rem;">
                             <div style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: center;">
                                 <div style="flex: 1; min-width: 250px;">
+                                    <label style="display: block; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Search</label>
+                                    <input type="text" id="portsSearchInput" oninput="filterAvailablePorts()" placeholder="\U0001F50D Equipment, site, model..." style="width: 100%; padding: 0.75rem; border: 1px solid var(--border-color); border-radius: 0.5rem; background: var(--bg-tertiary); color: var(--text-primary);">
+                                </div>
+                                <div style="flex: 1; min-width: 250px;">
                                     <label style="display: block; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Filter by Site</label>
                                     <select id="siteFilterSelect" onchange="filterAvailablePorts()" style="width: 100%; padding: 0.75rem; border: 1px solid var(--border-color); border-radius: 0.5rem; background: var(--bg-tertiary); color: var(--text-primary);">
                                         <option value="">All Sites (${Object.keys(siteGroups).length})</option>
@@ -14686,6 +14754,8 @@ ${entityActionButtons('nni', `${n.id}`, true)}
             const siteFilter = document.getElementById('siteFilterSelect').value;
             const typeFilter = document.getElementById('typeFilterSelect').value;
             const availFilter = document.getElementById('availabilityFilterSelect').value;
+            const searchEl = document.getElementById('portsSearchInput');
+            const searchTerm = searchEl ? searchEl.value.trim().toLowerCase() : '';
             
             // Get all tables (now multiple tables across sections)
             const rows = document.querySelectorAll('table tbody tr[data-site]');
@@ -14697,6 +14767,7 @@ ${entityActionButtons('nni', `${n.id}`, true)}
                 
                 let show = true;
                 
+                if (searchTerm && !row.textContent.toLowerCase().includes(searchTerm)) show = false;
                 if (siteFilter && rowSite !== siteFilter) show = false;
                 if (typeFilter && rowType !== typeFilter) show = false;
                 if (availFilter === 'available' && !rowHasAvailable) show = false;
