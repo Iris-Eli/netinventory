@@ -7270,29 +7270,8 @@
             if (!selectedFdp) return;
             
             const [circuits, nnis] = await Promise.all([store.getCircuits(), store.getNnis()]);
-            const usedPorts = new Set();
-            const _selfId = (typeof editingCircuitId !== 'undefined' && editingCircuitId) || null;
-            
-            // Check circuits for used ports
-            circuits.forEach(circuit => {
-                if (_selfId && circuit.id === _selfId) return;
-                ['b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n'].forEach(l => {
-                    if (circuit[l + 'Fdp'] === selectedFdpId && circuit[l + 'Port']) String(circuit[l + 'Port']).split(',').forEach(p => usedPorts.add(p.trim()));
-                });
-                if (circuit.aFdp === selectedFdpId && circuit.aPort) {
-                    circuit.aPort.split(',').forEach(p => usedPorts.add(p.trim()));
-                }
-                if (circuit.zFdp === selectedFdpId && circuit.zPort) {
-                    circuit.zPort.split(',').forEach(p => usedPorts.add(p.trim()));
-                }
-            });
-            
-            // Check NNIs for used ports
-            nnis.forEach(nni => {
-                if (nni.fdpId === selectedFdpId && nni.fdpPorts) {
-                    nni.fdpPorts.split(',').forEach(p => usedPorts.add(p.trim()));
-                }
-            });
+            // Canonical distinct-port set: all letters a-n+z, direct + equipment-FDP, plus NNIs; excludes the circuit being edited
+            const usedPorts = collectFdpUsedPorts(selectedFdpId, circuits, nnis);
             
             const portCount = selectedFdp.portCount || selectedFdp.numPorts || 24;
             
@@ -7708,7 +7687,30 @@
             const letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'z'];
             return letters.some(l => c[l + 'Fdp'] === fdpId || c[l + 'EquipmentFdp'] === fdpId);
         }
-        
+
+        // Distinct port identifiers a circuit occupies on ONE specific FDP (direct + equipment-FDP, all letters A-N + Z)
+        function circuitPortsOnFdp(c, fdpId) {
+            const letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'z'];
+            const ports = [];
+            letters.forEach(l => {
+                if (c[l + 'Fdp'] === fdpId && c[l + 'Port']) String(c[l + 'Port']).split(',').forEach(p => { const t = p.trim(); if (t) ports.push(t); });
+                if (c[l + 'EquipmentFdp'] === fdpId && c[l + 'EquipmentFdpPorts']) String(c[l + 'EquipmentFdpPorts']).split(',').forEach(p => { const t = p.trim(); if (t) ports.push(t); });
+            });
+            return [...new Set(ports)].join(', ');
+        }
+
+        // Canonical distinct equipment-port usage: {l}Equipment ports (A-N + Z) + NNI equipmentPorts.
+        // Normalizes "Port 46 (100G)" -> "46" so it matches how ports are stored/compared.
+        function collectEquipmentUsedPorts(equipId, circuits, nnis) {
+            const used = new Set();
+            const letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'z'];
+            const norm = p => { const t = String(p).trim(); const m = t.match(/Port\s+(\d+)/i); return m ? m[1] : t; };
+            const add = s => String(s).split(',').forEach(p => { const t = norm(p); if (t) used.add(t); });
+            circuits.forEach(c => letters.forEach(l => { if (c[l + 'Equipment'] === equipId && c[l + 'EquipmentPort']) add(c[l + 'EquipmentPort']); }));
+            nnis.forEach(n => { if (n.equipmentID === equipId && n.equipmentPorts) add(n.equipmentPorts); });
+            return used;
+        }
+
         // Availability label for FDP dropdown options: "(X of Y available)" - counts every consumer
         // (A/Z terminations, equipment-FDP connections, NNIs), excluding the circuit being edited.
         function fdpAvailabilityLabel(fdp, circuits, nnis) {
@@ -7949,12 +7951,13 @@
             attachSiteCombobox('circuitZSiteSelect');
             
             const fdps = await store.getFdps();
-            const fdpOptions = '<option value="">Select FDP...</option>' + fdps.map(fdp => `<option value="${fdp.id}">${fdp.name}</option>`).join('');
+            const [_fdpLblCircuits, _fdpLblNnis] = await Promise.all([store.getCircuits(), store.getNnis()]);
+            const fdpOptions = '<option value="">Select FDP...</option>' + fdps.map(fdp => `<option value="${fdp.id}">${fdp.name}${fdpAvailabilityLabel(fdp, _fdpLblCircuits, _fdpLblNnis)}</option>`).join('');
             document.getElementById('aFdpSelect').innerHTML = fdpOptions;
             document.getElementById('zFdpSelect').innerHTML = fdpOptions;
             document.getElementById('aEquipmentFdpSelect').innerHTML = fdpOptions;
             document.getElementById('zEquipmentFdpSelect').innerHTML = fdpOptions;
-            
+
             const equipment = await store.getEquipment();
             const equipmentOptions = '<option value="">Select Equipment...</option>' + equipment.map(e => `<option value="${e.id}">${e.name}</option>`).join('');
             document.getElementById('aEquipmentSelect').innerHTML = equipmentOptions;
@@ -8028,12 +8031,13 @@
             attachSiteCombobox('circuitZSiteSelect');
             
             const fdps = await store.getFdps();
-            const fdpOptions = '<option value="">Select FDP...</option>' + fdps.map(fdp => `<option value="${fdp.id}">${fdp.name}</option>`).join('');
+            const [_fdpLblCircuits, _fdpLblNnis] = await Promise.all([store.getCircuits(), store.getNnis()]);
+            const fdpOptions = '<option value="">Select FDP...</option>' + fdps.map(fdp => `<option value="${fdp.id}">${fdp.name}${fdpAvailabilityLabel(fdp, _fdpLblCircuits, _fdpLblNnis)}</option>`).join('');
             document.getElementById('aFdpSelect').innerHTML = fdpOptions;
             document.getElementById('zFdpSelect').innerHTML = fdpOptions;
             document.getElementById('aEquipmentFdpSelect').innerHTML = fdpOptions;
             document.getElementById('zEquipmentFdpSelect').innerHTML = fdpOptions;
-            
+
             // CPE selector (edit flow) — load equipment and populate, then value set below
             try {
                 const _cpeEq = await store.getEquipment();
@@ -10554,7 +10558,11 @@
                         data: circuits,
                         columns: ['circuitId', 'type', 'direction', 'status', 'provider'],
                         headers: ['Circuit ID', 'Type', 'Direction', 'Status', 'Provider'],
-                        emptyMessage: 'No circuits using this NNI'
+                        emptyMessage: 'No circuits using this NNI',
+                        actions: [
+                            { label: '👁️ View', onclick: (circuit) => `stackViewModal(); viewCircuitDetails('${circuit.id}')`, tooltip: 'View circuit details' },
+                            { label: '📄 DLR', onclick: (circuit) => `closeViewModal(); viewDLR('${circuit.id}')`, tooltip: 'View Design Layout Record' }
+                        ]
                     }
                 ]
             });
@@ -10567,11 +10575,28 @@
                 return;
             }
             
-            const [equipment, site] = await Promise.all([
+            const [equipment, site, allFdps, allCircuits, allNnis] = await Promise.all([
                 store.getEquipment().then(e => e.filter(eq => eq.rackId === rackId)),
-                rack.siteId ? store.getSites().then(s => s.find(site => site.id === rack.siteId)) : Promise.resolve(null)
+                rack.siteId ? store.getSites().then(s => s.find(site => site.id === rack.siteId)) : Promise.resolve(null),
+                store.getFdps(),
+                store.getCircuits(),
+                store.getNnis()
             ]);
-            
+
+            // Roll up everything that lives in or touches this rack (hierarchy bleeds up & down):
+            // FDPs by rackId; circuits touching any of the rack's FDPs (a-n+z via circuitUsesFdp) or
+            // equipment (a-n+z {l}Equipment + cpeEquipmentId); NNIs by their equipment/FDP.
+            const rackFdps = allFdps.filter(f => f.rackId === rackId);
+            const rackEqIds = new Set(equipment.map(e => e.id));
+            const rackFdpIds = new Set(rackFdps.map(f => f.id));
+            const _rackLetters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'z'];
+            const rackCircuits = allCircuits.filter(c =>
+                [...rackFdpIds].some(fid => circuitUsesFdp(c, fid)) ||
+                _rackLetters.some(l => rackEqIds.has(c[l + 'Equipment'])) ||
+                rackEqIds.has(c.cpeEquipmentId)
+            );
+            const rackNnis = allNnis.filter(n => rackEqIds.has(n.equipmentID) || rackFdpIds.has(n.fdpId));
+
             showViewModal({
                 title: `Rack Details: ${rack.name}`,
                 entityType: 'rack', entityId: rackId,
@@ -10586,7 +10611,10 @@
                             { label: 'Mounting Type', value: rack.mountingType || '-' },
                             { label: 'RU Capacity', value: rack.ruCapacity || '-' },
                             { label: 'Depth', value: rack.depth || '-' },
-                            { label: 'Installed Equipment', value: `${equipment.length} items` }
+                            { label: 'Installed Equipment', value: `${equipment.length} items` },
+                            { label: 'FDPs', value: `${rackFdps.length}` },
+                            { label: 'Circuits Through Rack', value: `${rackCircuits.length}` },
+                            { label: 'NNIs', value: `${rackNnis.length}` }
                         ]
                     },
                     {
@@ -10595,7 +10623,46 @@
                         data: equipment.sort((a, b) => (parseInt(a.rackPosition || a.ruPosition) || 0) - (parseInt(b.rackPosition || b.ruPosition) || 0)),
                         columns: ['name', 'rackPosition', 'rackUnits', 'manufacturer', 'model', 'type'],
                         headers: ['Equipment Name', 'RU Position', 'RU Size', 'Manufacturer', 'Model', 'Type'],
-                        emptyMessage: 'No equipment in this rack'
+                        emptyMessage: 'No equipment in this rack',
+                        actions: [
+                            { label: '👁️ View', onclick: (equip) => `stackViewModal(); viewEquipmentDetails('${equip.id}')`, tooltip: 'View equipment details' },
+                            { label: '🔌 Ports', onclick: (equip) => `closeViewModal(); viewEquipmentPorts('${equip.id}')`, tooltip: 'View port map' }
+                        ]
+                    },
+                    {
+                        title: `Fiber Distribution Panels (${rackFdps.length})`,
+                        type: 'table',
+                        data: rackFdps,
+                        columns: ['name', 'mountingType', 'connectorType', 'portCount'],
+                        headers: ['FDP Name', 'Mounting', 'Connector', 'Ports'],
+                        emptyMessage: 'No FDPs in this rack',
+                        actions: [
+                            { label: '👁️ View', onclick: (fdp) => `stackViewModal(); viewFdpDetails('${fdp.id}')`, tooltip: 'View FDP details' },
+                            { label: '🔌 Ports', onclick: (fdp) => `closeViewModal(); viewFdpLayout('${fdp.id}')`, tooltip: 'View port map' }
+                        ]
+                    },
+                    {
+                        title: `Circuits Through This Rack (${rackCircuits.length})`,
+                        type: 'table',
+                        data: rackCircuits,
+                        columns: ['circuitId', 'type', 'direction', 'status', 'provider'],
+                        headers: ['Circuit ID', 'Type', 'Direction', 'Status', 'Provider'],
+                        emptyMessage: 'No circuits through this rack',
+                        actions: [
+                            { label: '👁️ View', onclick: (circuit) => `stackViewModal(); viewCircuitDetails('${circuit.id}')`, tooltip: 'View circuit details' },
+                            { label: '📄 DLR', onclick: (circuit) => `closeViewModal(); viewDLR('${circuit.id}')`, tooltip: 'View Design Layout Record' }
+                        ]
+                    },
+                    {
+                        title: `Network-to-Network Interfaces (${rackNnis.length})`,
+                        type: 'table',
+                        data: rackNnis,
+                        columns: ['name', 'direction', 'fdpPorts', 'contact'],
+                        headers: ['NNI Name', 'Direction', 'Ports Used', 'Contact'],
+                        emptyMessage: 'No NNIs in this rack',
+                        actions: [
+                            { label: '👁️ View', onclick: (nni) => `stackViewModal(); viewNniDetails('${nni.id}')`, tooltip: 'View NNI details' }
+                        ]
                     }
                 ]
             });
@@ -10661,7 +10728,9 @@
                     columns: ['slotNumber', 'name', 'manufacturer', 'model', 'portConfig'],
                     headers: ['Slot', 'Card Name', 'Manufacturer', 'Model', 'Port Config'],
                     emptyMessage: 'No line cards installed',
-                    onclick: (card) => `stackViewModal(); viewEquipmentDetails('${card.id}')`
+                    actions: [
+                        { label: '👁️ View', onclick: (card) => `stackViewModal(); viewEquipmentDetails('${card.id}')`, tooltip: 'View card details' }
+                    ]
                 });
             }
             
@@ -10672,7 +10741,10 @@
                 data: nnis,
                 columns: ['name', 'direction', 'equipmentPorts', 'contact'],
                 headers: ['NNI Name', 'Direction', 'Ports Used', 'Contact'],
-                emptyMessage: 'No NNIs using this equipment'
+                emptyMessage: 'No NNIs using this equipment',
+                actions: [
+                    { label: '👁️ View', onclick: (nni) => `stackViewModal(); viewNniDetails('${nni.id}')`, tooltip: 'View NNI details' }
+                ]
             });
             
             showViewModal({
@@ -10694,7 +10766,10 @@
                 store.getCircuits().then(c => c.filter(cir => circuitUsesFdp(cir, fdpId))),
                 store.getNnis().then(n => n.filter(nni => nni.fdpId === fdpId))
             ]);
-            
+
+            // Annotate each circuit with the port(s) it occupies on THIS FDP for the table's Port(s) column
+            const circuitsWithPorts = circuits.map(c => ({ ...c, _fdpPorts: circuitPortsOnFdp(c, fdpId) || '-' }));
+
             showViewModal({
                 title: `FDP Details: ${fdp.name}`,
                 entityType: 'fdp', entityId: fdpId,
@@ -10717,10 +10792,14 @@
                     {
                         title: `Circuits Using This FDP (${circuits.length})`,
                         type: 'table',
-                        data: circuits,
-                        columns: ['circuitId', 'type', 'direction', 'status', 'provider'],
-                        headers: ['Circuit ID', 'Type', 'Direction', 'Status', 'Provider'],
-                        emptyMessage: 'No circuits using this FDP'
+                        data: circuitsWithPorts,
+                        columns: ['circuitId', '_fdpPorts', 'type', 'direction', 'status', 'provider'],
+                        headers: ['Circuit ID', 'Port(s)', 'Type', 'Direction', 'Status', 'Provider'],
+                        emptyMessage: 'No circuits using this FDP',
+                        actions: [
+                            { label: '👁️ View', onclick: (circuit) => `stackViewModal(); viewCircuitDetails('${circuit.id}')`, tooltip: 'View circuit details' },
+                            { label: '📄 DLR', onclick: (circuit) => `closeViewModal(); viewDLR('${circuit.id}')`, tooltip: 'View Design Layout Record' }
+                        ]
                     },
                     {
                         title: `NNIs Using This FDP (${nnis.length})`,
@@ -10728,7 +10807,10 @@
                         data: nnis,
                         columns: ['name', 'direction', 'fdpPorts', 'contact'],
                         headers: ['NNI Name', 'Direction', 'Ports Used', 'Contact'],
-                        emptyMessage: 'No NNIs using this FDP'
+                        emptyMessage: 'No NNIs using this FDP',
+                        actions: [
+                            { label: '👁️ View', onclick: (nni) => `stackViewModal(); viewNniDetails('${nni.id}')`, tooltip: 'View NNI details' }
+                        ]
                     }
                 ]
             });
@@ -11491,75 +11573,23 @@
             const portCircuits = {}; // port number -> array of circuit objects
             
             circuits.forEach(circuit => {
-                // Helper to parse comma-separated ports
-                const parsePorts = (portString) => {
-                    if (!portString) return [];
-                    return portString.split(',').map(p => p.trim()).filter(p => p);
-                };
-                
-                // Check A location - direct FDP connection
-                if (circuit.aFdp === fdpId) {
-                    const ports = parsePorts(circuit.aPort);
-                    console.log(`Circuit ${circuit.circuitId} A-end: FDP match, ports:`, ports);
-                    ports.forEach(port => {
-                        if (!portCircuits[port]) portCircuits[port] = [];
-                        portCircuits[port].push({ 
-                            circuitId: circuit.circuitId, 
-                            id: circuit.id, 
-                            location: 'A',
-                            type: circuit.type,
-                            direction: circuit.direction
+                const parsePorts = (portString) => portString ? portString.split(',').map(p => p.trim()).filter(p => p) : [];
+                // Every letter column A-N + Z, both direct-FDP terminations and equipment-to-FDP connections
+                ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'z'].forEach(l => {
+                    const L = l.toUpperCase();
+                    if (circuit[l + 'Fdp'] === fdpId) {
+                        parsePorts(circuit[l + 'Port']).forEach(port => {
+                            if (!portCircuits[port]) portCircuits[port] = [];
+                            portCircuits[port].push({ circuitId: circuit.circuitId, id: circuit.id, location: L, type: circuit.type, direction: circuit.direction });
                         });
-                    });
-                }
-                
-                // Check A location - equipment-to-FDP connection (dark fiber)
-                if (circuit.aEquipmentFdp === fdpId) {
-                    const ports = parsePorts(circuit.aEquipmentFdpPorts);
-                    console.log(`Circuit ${circuit.circuitId} A-end: Equipment-FDP match, ports:`, ports);
-                    ports.forEach(port => {
-                        if (!portCircuits[port]) portCircuits[port] = [];
-                        portCircuits[port].push({ 
-                            circuitId: circuit.circuitId, 
-                            id: circuit.id, 
-                            location: 'A (via Equipment)',
-                            type: circuit.type,
-                            direction: circuit.direction
+                    }
+                    if (circuit[l + 'EquipmentFdp'] === fdpId) {
+                        parsePorts(circuit[l + 'EquipmentFdpPorts']).forEach(port => {
+                            if (!portCircuits[port]) portCircuits[port] = [];
+                            portCircuits[port].push({ circuitId: circuit.circuitId, id: circuit.id, location: L + ' (via Equipment)', type: circuit.type, direction: circuit.direction });
                         });
-                    });
-                }
-                
-                // Check Z location - direct FDP connection
-                if (circuit.zFdp === fdpId) {
-                    const ports = parsePorts(circuit.zPort);
-                    console.log(`Circuit ${circuit.circuitId} Z-end: FDP match, ports:`, ports);
-                    ports.forEach(port => {
-                        if (!portCircuits[port]) portCircuits[port] = [];
-                        portCircuits[port].push({ 
-                            circuitId: circuit.circuitId, 
-                            id: circuit.id, 
-                            location: 'Z',
-                            type: circuit.type,
-                            direction: circuit.direction
-                        });
-                    });
-                }
-                
-                // Check Z location - equipment-to-FDP connection (dark fiber)
-                if (circuit.zEquipmentFdp === fdpId) {
-                    const ports = parsePorts(circuit.zEquipmentFdpPorts);
-                    console.log(`Circuit ${circuit.circuitId} Z-end: Equipment-FDP match, ports:`, ports);
-                    ports.forEach(port => {
-                        if (!portCircuits[port]) portCircuits[port] = [];
-                        portCircuits[port].push({ 
-                            circuitId: circuit.circuitId, 
-                            id: circuit.id, 
-                            location: 'Z (via Equipment)',
-                            type: circuit.type,
-                            direction: circuit.direction
-                        });
-                    });
-                }
+                    }
+                });
             });
             
             console.log(`FDP ${fdpId}: Port circuits map:`, portCircuits);
@@ -11589,8 +11619,10 @@
             const totalPorts = parseInt(fdp.portCount || fdp.numPorts) || 24;
             const usedPorts = Object.keys(portCircuits).length;
             const nniPortCount = Object.keys(nniPorts).length;
-            const availablePorts = totalPorts - usedPorts - nniPortCount;
-            const utilization = ((usedPorts + nniPortCount) / totalPorts * 100).toFixed(1);
+            // Distinct occupied ports (a port used by both a circuit and an NNI counts once - no double subtraction)
+            const distinctUsed = new Set([...Object.keys(portCircuits), ...Object.keys(nniPorts)]).size;
+            const availablePorts = Math.max(0, totalPorts - distinctUsed);
+            const utilization = totalPorts ? ((distinctUsed / totalPorts) * 100).toFixed(1) : '0.0';
             const utilizationColor = utilization > 80 ? 'var(--danger)' : utilization > 50 ? 'var(--warning)' : 'var(--success)';
             
             const modalHTML = `
@@ -11852,41 +11884,16 @@
             // Find circuits that reference this equipment
             const portCircuits = {};
             circuits.forEach(circuit => {
-                // Helper to parse comma-separated ports
-                const parsePorts = (portString) => {
-                    if (!portString) return [];
-                    return portString.split(',').map(p => p.trim()).filter(p => p);
-                };
-                
-                // Check A location equipment
-                if (circuit.aEquipment === equipmentId) {
-                    const ports = parsePorts(circuit.aEquipmentPort);
-                    ports.forEach(port => {
-                        if (!portCircuits[port]) portCircuits[port] = [];
-                        portCircuits[port].push({ 
-                            circuitId: circuit.circuitId, 
-                            id: circuit.id, 
-                            location: 'A',
-                            type: circuit.type,
-                            direction: circuit.direction
+                const parsePorts = (portString) => portString ? portString.split(',').map(p => p.trim()).filter(p => p) : [];
+                // Every letter column A-N + Z holds an equipment id + its ports
+                ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'z'].forEach(l => {
+                    if (circuit[l + 'Equipment'] === equipmentId) {
+                        parsePorts(circuit[l + 'EquipmentPort']).forEach(port => {
+                            if (!portCircuits[port]) portCircuits[port] = [];
+                            portCircuits[port].push({ circuitId: circuit.circuitId, id: circuit.id, location: l.toUpperCase(), type: circuit.type, direction: circuit.direction });
                         });
-                    });
-                }
-                
-                // Check Z location equipment
-                if (circuit.zEquipment === equipmentId) {
-                    const ports = parsePorts(circuit.zEquipmentPort);
-                    ports.forEach(port => {
-                        if (!portCircuits[port]) portCircuits[port] = [];
-                        portCircuits[port].push({ 
-                            circuitId: circuit.circuitId, 
-                            id: circuit.id, 
-                            location: 'Z',
-                            type: circuit.type,
-                            direction: circuit.direction
-                        });
-                    });
-                }
+                    }
+                });
             });
             
             console.log(`Equipment ${equipmentId}: Port circuits map:`, portCircuits);
@@ -11959,8 +11966,10 @@
             
             const usedPortsCircuit = Object.keys(portCircuits).length;
             const assignedPortCount = Object.keys(nniPorts).length;
-            const availablePorts = totalPorts - usedPortsCircuit - assignedPortCount;
-            const utilization = (((usedPortsCircuit + assignedPortCount) / totalPorts) * 100).toFixed(1);
+            // Distinct occupied ports (a port used by both a circuit and an NNI counts once)
+            const equipDistinctUsed = new Set([...Object.keys(portCircuits), ...Object.keys(nniPorts)]).size;
+            const availablePorts = Math.max(0, totalPorts - equipDistinctUsed);
+            const utilization = totalPorts ? ((equipDistinctUsed / totalPorts) * 100).toFixed(1) : '0.0';
             const utilizationColor = utilization > 80 ? 'var(--danger)' : utilization > 50 ? 'var(--warning)' : 'var(--success)';
             
             const modalHTML = `
@@ -12633,19 +12642,9 @@
             const allNnis = await store.getNnis();
             const allCircuits = await store.getCircuits();
             const currentNniId = editingNniId;
-            
-            // Get used ports from other NNIs
-            const usedByNnis = allNnis
-                .filter(n => n.fdpId === fdpId && n.id !== currentNniId)
-                .flatMap(n => (n.fdpPorts || '').split(',').map(p => p.trim()))
-                .filter(Boolean);
-            
-            // Get used ports from circuits
-            const usedByCircuits = allCircuits
-                .filter(c => c.aFdp === fdpId || c.zFdp === fdpId)
-                .flatMap(c => [c.aPort, c.zPort].filter(Boolean));
-            
-            const usedPorts = [...new Set([...usedByNnis, ...usedByCircuits])];
+
+            // Canonical distinct-port set across all circuit letters + equipment-FDP + other NNIs (excludes the NNI being edited)
+            const usedPorts = [...collectFdpUsedPorts(fdpId, allCircuits, allNnis.filter(n => n.id !== currentNniId), true)];
             
             // Generate port list based on FDP port count
             const portCount = fdp ? (fdp.portCount || 24) : 24;
@@ -14342,16 +14341,15 @@ ${entityActionButtons('nni', `${n.id}`, true)}
                     const totalPorts = portInfo.total;
                     const hasPortConfig = portInfo.parsed;
                     
-                    // Find circuits using this equipment
-                    const equipCircuits = circuits.filter(c => 
-                        c.aEquipment === equip.id || c.zEquipment === equip.id
-                    );
-                    
+                    // Find circuits using this equipment (any letter end A-N + Z)
+                    const _eqLetters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'z'];
+                    const equipCircuits = circuits.filter(c => _eqLetters.some(l => c[l + 'Equipment'] === equip.id));
+
                     // Find NNIs using this equipment
                     const equipNnis = nnis.filter(n => n.equipmentID === equip.id);
-                    
-                    // Count used ports (rough estimate - each circuit/NNI uses 1+ ports)
-                    const usedPorts = equipCircuits.length + equipNnis.length;
+
+                    // Distinct equipment ports actually consumed (not a record count)
+                    const usedPorts = collectEquipmentUsedPorts(equip.id, equipCircuits, equipNnis).size;
                     const availablePorts = Math.max(0, totalPorts - usedPorts);
                     const utilization = totalPorts > 0 ? ((usedPorts / totalPorts) * 100).toFixed(1) : 0;
                     
