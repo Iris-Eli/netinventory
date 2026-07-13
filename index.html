@@ -6292,13 +6292,17 @@
                 <div id="vlan${vlanNum}_int${idx}_FdpFields" style="display: none; grid-template-columns: 1fr 1fr; gap: 0.75rem;" class="int-conn-fields">
                     <div class="form-group">
                         <label style="font-size: 0.9em;">FDP</label>
-                        <select id="vlan${vlanNum}_int${idx}_fdpSelect" name="vlan${vlanNum}_int${idx}_fdp">
+                        <select id="vlan${vlanNum}_int${idx}_fdpSelect" name="vlan${vlanNum}_int${idx}_fdp" onchange="updateIntermediateFdpPorts(${vlanNum}, ${idx})">
                             <option value="">Select site first...</option>
                         </select>
                     </div>
                     <div class="form-group">
                         <label style="font-size: 0.9em;">Port</label>
-                        <input type="text" name="vlan${vlanNum}_int${idx}_fdpPort" placeholder="Port">
+                        <select id="vlan${vlanNum}_int${idx}_fdpPortSelect" multiple size="3" onchange="syncIntermediateFdpPorts(${vlanNum}, ${idx})">
+                            <option value="">Select FDP first...</option>
+                        </select>
+                        <input type="hidden" name="vlan${vlanNum}_int${idx}_fdpPort">
+                        <small style="color: var(--text-tertiary); font-size: 0.8rem;">Ctrl/Cmd-click for multiple</small>
                     </div>
                 </div>
                 
@@ -6394,14 +6398,15 @@
             const siteId = siteSel ? siteSel.value : '';
             if (!siteId) return;
             
-            const [fdps, equipment, nnis] = await Promise.all([store.getFdps(), store.getEquipment(), store.getNnis()]);
+            const [fdps, equipment, nnis, _intCircuits] = await Promise.all([store.getFdps(), store.getEquipment(), store.getNnis(), store.getCircuits()]);
             
             const fdpSel = document.getElementById(`vlan${vlanNum}_int${idx}_fdpSelect`);
             if (fdpSel) {
                 const matches = fdps.filter(f => f.siteId === siteId);
                 const prev = fdpSel.value;
-                fdpSel.innerHTML = '<option value="">Select FDP...</option>' + matches.map(f => `<option value="${f.id}">${f.name || f.id}</option>`).join('');
+                fdpSel.innerHTML = '<option value="">Select FDP...</option>' + matches.map(f => `<option value="${f.id}">${f.name || f.id}${fdpAvailabilityLabel(f, _intCircuits, nnis)}</option>`).join('');
                 if (prev && matches.find(f => f.id === prev)) fdpSel.value = prev;
+                updateIntermediateFdpPorts(vlanNum, idx);
             }
             
             const eqSel = document.getElementById(`vlan${vlanNum}_int${idx}_equipmentSelect`);
@@ -6418,6 +6423,40 @@
                 const prev = nniSel.value;
                 nniSel.innerHTML = '<option value="">Select NNI...</option>' + matches.map(n => `<option value="${n.id}">${n.name || n.id}</option>`).join('');
                 if (prev && matches.find(n => n.id === prev)) nniSel.value = prev;
+            }
+        }
+        
+        // Intermediate (B-N) FDP port multiselect: populate with availability, sync to hidden carrier input
+        function syncIntermediateFdpPorts(vlanNum, idx) {
+            const sel = document.getElementById(`vlan${vlanNum}_int${idx}_fdpPortSelect`);
+            const hid = document.querySelector(`[name="vlan${vlanNum}_int${idx}_fdpPort"]`);
+            if (sel && hid) hid.value = Array.from(sel.selectedOptions).map(o => o.value).filter(Boolean).join(',');
+        }
+        async function updateIntermediateFdpPorts(vlanNum, idx) {
+            const fdpSel = document.getElementById(`vlan${vlanNum}_int${idx}_fdpSelect`);
+            const portSel = document.getElementById(`vlan${vlanNum}_int${idx}_fdpPortSelect`);
+            if (!fdpSel || !portSel) return;
+            const fdpId = fdpSel.value;
+            if (!fdpId) { portSel.innerHTML = '<option value="">Select FDP first...</option>'; return; }
+            const [fdps, circuits, nnis] = await Promise.all([store.getFdps(), store.getCircuits(), store.getNnis()]);
+            const fdp = fdps.find(f => f.id === fdpId);
+            if (!fdp) { portSel.innerHTML = '<option value="">FDP not found</option>'; return; }
+            const usedPorts = collectFdpUsedPorts(fdpId, circuits, nnis);
+            const hid = document.querySelector(`[name="vlan${vlanNum}_int${idx}_fdpPort"]`);
+            const own = (hid && hid.value) ? hid.value.split(',').map(p => p.trim()).filter(Boolean) : [];
+            own.forEach(p => usedPorts.delete(p));
+            portSel.innerHTML = '';
+            const total = parseInt(fdp.portCount || fdp.numPorts, 10) || 24;
+            for (let i = 1; i <= total; i++) {
+                const p = i.toString();
+                const isUsed = usedPorts.has(p);
+                const o = document.createElement('option');
+                o.value = p;
+                o.textContent = 'Port ' + p + (isUsed ? ' - IN USE' : ' - Available');
+                o.disabled = isUsed;
+                o.selected = own.includes(p);
+                o.style.color = isUsed ? 'var(--text-tertiary)' : 'var(--text-primary)';
+                portSel.appendChild(o);
             }
         }
         
@@ -7232,9 +7271,14 @@
             
             const [circuits, nnis] = await Promise.all([store.getCircuits(), store.getNnis()]);
             const usedPorts = new Set();
+            const _selfId = (typeof editingCircuitId !== 'undefined' && editingCircuitId) || null;
             
             // Check circuits for used ports
             circuits.forEach(circuit => {
+                if (_selfId && circuit.id === _selfId) return;
+                ['b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n'].forEach(l => {
+                    if (circuit[l + 'Fdp'] === selectedFdpId && circuit[l + 'Port']) String(circuit[l + 'Port']).split(',').forEach(p => usedPorts.add(p.trim()));
+                });
                 if (circuit.aFdp === selectedFdpId && circuit.aPort) {
                     circuit.aPort.split(',').forEach(p => usedPorts.add(p.trim()));
                 }
@@ -7609,6 +7653,15 @@
                 }
             });
             
+            // Intermediate letter columns (B-N) also consume FDP ports
+            circuits.forEach(circuit => {
+                if (_selfId && circuit.id === _selfId) return;
+                ['b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n'].forEach(l => {
+                    if (circuit[l + 'Fdp'] === selectedFdpId && circuit[l + 'Port']) String(circuit[l + 'Port']).split(',').forEach(p => usedPorts.add(p.trim()));
+                    if (circuit[l + 'EquipmentFdp'] === selectedFdpId && circuit[l + 'EquipmentFdpPorts']) String(circuit[l + 'EquipmentFdpPorts']).split(',').forEach(p => usedPorts.add(p.trim()));
+                });
+            });
+            
             // Check NNIs
             nnis.forEach(nni => {
                 if (nni.fdpId === selectedFdpId && nni.fdpPorts) {
@@ -7632,6 +7685,24 @@
             }
         }
         
+        // Canonical FDP port consumption: every letter column A-N and Z, both direct-FDP and
+        // equipment-FDP families, plus NNIs. Excludes the circuit currently being edited.
+        function collectFdpUsedPorts(fdpId, circuits, nnis) {
+            const used = new Set();
+            const selfId = (typeof editingCircuitId !== 'undefined' && editingCircuitId) || null;
+            const letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'z'];
+            const usedAdd = x => { const t = String(x).trim(); if (t) used.add(t); };
+            circuits.forEach(c => {
+                if (selfId && c.id === selfId) return;
+                letters.forEach(l => {
+                    if (c[l + 'Fdp'] === fdpId && c[l + 'Port']) String(c[l + 'Port']).split(',').forEach(usedAdd);
+                    if (c[l + 'EquipmentFdp'] === fdpId && c[l + 'EquipmentFdpPorts']) String(c[l + 'EquipmentFdpPorts']).split(',').forEach(usedAdd);
+                });
+            });
+            nnis.forEach(n => { if (n.fdpId === fdpId && n.fdpPorts) String(n.fdpPorts).split(',').forEach(usedAdd); });
+            return used;
+        }
+        
         // Availability label for FDP dropdown options: "(X of Y available)" - counts every consumer
         // (A/Z terminations, equipment-FDP connections, NNIs), excluding the circuit being edited.
         function fdpAvailabilityLabel(fdp, circuits, nnis) {
@@ -7641,7 +7712,7 @@
             const used = new Set();
             circuits.forEach(c => {
                 if (selfId && c.id === selfId) return;
-                [['aFdp', 'aPort'], ['zFdp', 'zPort'], ['aEquipmentFdp', 'aEquipmentFdpPorts'], ['zEquipmentFdp', 'zEquipmentFdpPorts']].forEach(pair => {
+                [].concat.apply([], ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'z'].map(function(l) { return [[l + 'Fdp', l + 'Port'], [l + 'EquipmentFdp', l + 'EquipmentFdpPorts']]; })).forEach(pair => {
                     if (c[pair[0]] === fdp.id && c[pair[1]]) String(c[pair[1]]).split(',').forEach(x => used.add(x.trim()));
                 });
             });
@@ -7665,7 +7736,7 @@
             const _selfId = (typeof editingCircuitId !== 'undefined' && editingCircuitId) || null;
             circuits.forEach(c => {
                 if (_selfId && c.id === _selfId) return;
-                [['aFdp', 'aPort'], ['zFdp', 'zPort'], ['aEquipmentFdp', 'aEquipmentFdpPorts'], ['zEquipmentFdp', 'zEquipmentFdpPorts']].forEach(pair => {
+                [].concat.apply([], ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'z'].map(function(l) { return [[l + 'Fdp', l + 'Port'], [l + 'EquipmentFdp', l + 'EquipmentFdpPorts']]; })).forEach(pair => {
                     if (c[pair[0]] === selectedFdpId && c[pair[1]]) String(c[pair[1]]).split(',').forEach(x => usedPorts.add(x.trim()));
                 });
             });
