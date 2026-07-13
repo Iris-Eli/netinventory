@@ -7160,14 +7160,14 @@
             // Update FDP dropdown
             const fdpSelect = document.getElementById(fdpSelectId);
             if (fdpSelect && selectedSiteId) {
-                const allFdps = await store.getFdps();
+                const [allFdps, _vfCircuits, _vfNnis] = await Promise.all([store.getFdps(), store.getCircuits(), store.getNnis()]);
                 const siteFdps = allFdps.filter(fdp => fdp.siteId === selectedSiteId);
                 
                 fdpSelect.innerHTML = '<option value="">Select FDP...</option>';
                 siteFdps.forEach(fdp => {
                     const option = document.createElement('option');
                     option.value = fdp.id;
-                    option.textContent = `${fdp.name}${fdp.portCount ? ` (${fdp.portCount} ports)` : ''}`;
+                    option.textContent = `${fdp.name}${fdpAvailabilityLabel(fdp, _vfCircuits, _vfNnis)}`;
                     fdpSelect.appendChild(option);
                 });
             }
@@ -7632,6 +7632,23 @@
             }
         }
         
+        // Availability label for FDP dropdown options: "(X of Y available)" - counts every consumer
+        // (A/Z terminations, equipment-FDP connections, NNIs), excluding the circuit being edited.
+        function fdpAvailabilityLabel(fdp, circuits, nnis) {
+            const total = parseInt(fdp.portCount || fdp.numPorts, 10) || 0;
+            if (!total) return '';
+            const selfId = (typeof editingCircuitId !== 'undefined' && editingCircuitId) || null;
+            const used = new Set();
+            circuits.forEach(c => {
+                if (selfId && c.id === selfId) return;
+                [['aFdp', 'aPort'], ['zFdp', 'zPort'], ['aEquipmentFdp', 'aEquipmentFdpPorts'], ['zEquipmentFdp', 'zEquipmentFdpPorts']].forEach(pair => {
+                    if (c[pair[0]] === fdp.id && c[pair[1]]) String(c[pair[1]]).split(',').forEach(x => used.add(x.trim()));
+                });
+            });
+            nnis.forEach(n => { if (n.fdpId === fdp.id && n.fdpPorts) String(n.fdpPorts).split(',').forEach(x => used.add(x.trim())); });
+            return ' (' + Math.max(0, total - used.size) + ' of ' + total + ' available)';
+        }
+        
         // Populate the equipment-FDP ports multiselect (same availability logic as A/Z terminations)
         async function updateEquipmentFdpPorts(end) {
             const fdpSelect = document.getElementById(end === 'a' ? 'aEquipmentFdpSelect' : 'zEquipmentFdpSelect');
@@ -7696,6 +7713,7 @@
             // Get all FDPs for the selected site
             const allFdps = await store.getFdps();
             const siteFdps = allFdps.filter(fdp => fdp.siteId === selectedSiteId);
+            const [_fdpCircuits, _fdpNnis] = await Promise.all([store.getCircuits(), store.getNnis()]);
             
             // Update main FDP dropdown
             if (fdpSelect) {
@@ -7709,7 +7727,7 @@
                     siteFdps.forEach(fdp => {
                         const option = document.createElement('option');
                         option.value = fdp.id;
-                        const portInfo = fdp.portCount ? ` (${fdp.portCount} ports)` : '';
+                        const portInfo = fdpAvailabilityLabel(fdp, _fdpCircuits, _fdpNnis);
                         option.textContent = `${fdp.name}${portInfo}`;
                         fdpSelect.appendChild(option);
                     });
@@ -7728,7 +7746,7 @@
                     siteFdps.forEach(fdp => {
                         const option = document.createElement('option');
                         option.value = fdp.id;
-                        const portInfo = fdp.portCount ? ` (${fdp.portCount} ports)` : '';
+                        const portInfo = fdpAvailabilityLabel(fdp, _fdpCircuits, _fdpNnis);
                         option.textContent = `${fdp.name}${portInfo}`;
                         equipmentFdpSelect.appendChild(option);
                     });
