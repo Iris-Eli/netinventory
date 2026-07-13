@@ -11840,29 +11840,45 @@
         
         // Show circuits using a specific port
         async function showPortCircuits(fdpId, portNum) {
-            const circuits = await store.getCircuits();
-            const portCircuits = circuits.filter(c => {
-                const parsePorts = (portString) => {
-                    if (!portString) return [];
-                    return portString.split(',').map(p => p.trim()).filter(p => p);
-                };
-                
-                const aPorts = c.aFdp === fdpId ? parsePorts(c.aPort) : [];
-                const zPorts = c.zFdp === fdpId ? parsePorts(c.zPort) : [];
-                
-                return aPorts.includes(portNum) || zPorts.includes(portNum);
-            });
-            
-            if (portCircuits.length === 0) {
-                alert(`No circuits on port ${portNum}`);
+            const [circuits, nnis] = await Promise.all([store.getCircuits(), store.getNnis()]);
+            const parsePorts = (s) => s ? String(s).split(',').map(p => p.trim()).filter(Boolean) : [];
+            const letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'z'];
+            // Match every letter end A-N + Z, direct-FDP AND equipment-FDP (same coverage as the port map)
+            const matches = circuits.filter(c => letters.some(l =>
+                (c[l + 'Fdp'] === fdpId && parsePorts(c[l + 'Port']).includes(portNum)) ||
+                (c[l + 'EquipmentFdp'] === fdpId && parsePorts(c[l + 'EquipmentFdpPorts']).includes(portNum))
+            ));
+
+            if (matches.length === 0) {
+                // Port may be held by an NNI rather than a circuit
+                const nni = nnis.find(n => n.fdpId === fdpId && parsePorts(n.fdpPorts).includes(portNum));
+                if (nni) { closeFdpLayoutModal(); viewNniDetails(nni.id); return; }
+                alert(`No circuits or NNIs found on port ${portNum}`);
                 return;
             }
-            
-            const circuitList = portCircuits.map(c => 
-                `• ${c.circuitId} (${c.type || 'N/A'}) - ${c.direction || 'N/A'}`
-            ).join('\n');
-            
-            alert(`Circuits on Port ${portNum}:\n\n${circuitList}`);
+
+            // Single occupant → go straight to it; multiple → chooser with drill-down links
+            if (matches.length === 1) {
+                closeFdpLayoutModal();
+                viewCircuitDetails(matches[0].id);
+                return;
+            }
+            closeFdpLayoutModal();
+            showViewModal({
+                title: `Port ${portNum} — ${matches.length} circuits`,
+                sections: [{
+                    title: `Circuits on Port ${portNum}`,
+                    type: 'table',
+                    data: matches,
+                    columns: ['circuitId', 'type', 'direction', 'status', 'provider'],
+                    headers: ['Circuit ID', 'Type', 'Direction', 'Status', 'Provider'],
+                    emptyMessage: 'None',
+                    actions: [
+                        { label: '👁️ View', onclick: (c) => `closeViewModal(); viewCircuitDetails('${c.id}')`, tooltip: 'View circuit details' },
+                        { label: '📄 DLR', onclick: (c) => `closeViewModal(); viewDLR('${c.id}')`, tooltip: 'View Design Layout Record' }
+                    ]
+                }]
+            });
         }
         
         // Equipment Port Map - Visual port configuration and NNI assignments
