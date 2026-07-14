@@ -823,14 +823,15 @@
         //     Use a SharePoint agent share link, Teams/M365 deep link, etc. Blocked from iframing by CSP, so we pop it out.
         // Both are Microsoft-hosted URLs (no secrets) and the agent enforces Entra sign-in — safe in public HTML.
         const COPILOT_EMBED_URL = '';
-        const COPILOT_URL = 'https://iristransport.sharepoint.com/:u:/s/EngineeringPriorities/IQA1R2X50HJMSp80m-B3JE6kATkpGIm0jo-SxB9e53r-cNw?e=iin87q';
+        // Full SharePoint library URL (the short :u: share link opens a preview host that can't run agents).
+        const COPILOT_URL = 'https://iristransport.sharepoint.com/sites/EngineeringPriorities/Shared%20Documents/Copilot%20Studio%20Agents?id=/sites/EngineeringPriorities/Shared%20Documents/Copilot%20Studio%20Agents/NetInventory%20Assistant_cr1c1_NetInventoryAssistant.agent&parent=/sites/EngineeringPriorities/Shared%20Documents/Copilot%20Studio%20Agents';
         let _copilotOpen = false, _copilotLoaded = false;
 
         // FAB entry point: iframe in-panel if an embed URL exists; else pop out a docked window; else show the setup panel.
         function openAssistant() {
             if (COPILOT_EMBED_URL) return toggleCopilotPanel();
             if (!COPILOT_URL) return toggleCopilotPanel();
-            const w = 440, h = Math.max(560, Math.min(900, (screen.availHeight || 900) - 60));
+            const w = Math.min(960, (screen.availWidth || 1280) - 80), h = Math.max(640, (screen.availHeight || 900) - 60);
             const left = Math.max(0, (screen.availWidth || 1280) - w - 24);
             const win = window.open(COPILOT_URL, 'netinvAssistant', `width=${w},height=${h},left=${left},top=48,resizable=yes,scrollbars=yes`);
             if (win) win.focus(); else window.open(COPILOT_URL, '_blank', 'noopener'); // popup blocked → new tab
