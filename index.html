@@ -6770,80 +6770,9 @@
             }
         }
         
-        // Legacy single-section function (kept for back-compat — used by historic data)
-        function addAdditionalLocation() {
-            const container = document.getElementById('additionalLocationsContainer');
-            const locationId = ++additionalLocationCounter;
-            // B is 66, so B=1, C=2, D=3, etc.
-            const locationLetter = String.fromCharCode(65 + locationId); // 65 is 'A', so +1 = 'B', +2 = 'C'
-            const locationCard = document.createElement('div');
-            locationCard.id = `additionalLocation_${locationId}`;
-            locationCard.style.cssText = 'border: 1px solid var(--border-color); padding: 1rem; border-radius: 8px; margin-bottom: 1rem; position: relative;';
-            locationCard.innerHTML = `
-                <button type="button" onclick="removeAdditionalLocation(${locationId})" style="position: absolute; top: 0.5rem; right: 0.5rem; background: var(--danger); color: white; border: none; border-radius: 4px; padding: 0.25rem 0.5rem; cursor: pointer;">Remove</button>
-                <h4 style="margin-bottom: 1rem; color: var(--accent-primary);">${locationLetter}-Location</h4>
-                <div class="form-group">
-                    <label>Site *</label>
-                    <select name="additionalLocation_${locationId}_siteId" required class="additionalLocationSiteSelect">
-                        <option value="">Select Site...</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>Connection Type *</label>
-                    <div style="display: flex; gap: 2rem;">
-                        <label>
-                            <input type="radio" name="additionalLocation_${locationId}_connectionType" value="fdp" required onchange="toggleAdditionalConnectionFields(${locationId})" >
-                            <span>FDP</span>
-                        </label>
-                        <label>
-                            <input type="radio" name="additionalLocation_${locationId}_connectionType" value="nni" onchange="toggleAdditionalConnectionFields(${locationId})" >
-                            <span>NNI</span>
-                        </label>
-                    </div>
-                </div>
-                <div id="additionalLocation_${locationId}_fdpFields" style="display: none;">
-                    <div class="form-group">
-                        <label>FDP</label>
-                        <input type="text" name="additionalLocation_${locationId}_fdp" placeholder="FDP ID">
-                    </div>
-                    <div class="form-group">
-                        <label>Port</label>
-                        <input type="text" name="additionalLocation_${locationId}_port" placeholder="Port number">
-                    </div>
-                </div>
-                <div id="additionalLocation_${locationId}_nniFields" style="display: none;">
-                    <div class="form-group">
-                        <label>NNI</label>
-                        <input type="text" name="additionalLocation_${locationId}_nni" placeholder="NNI ID">
-                    </div>
-                    <div class="form-group">
-                        <label>Subinterface</label>
-                        <input type="text" name="additionalLocation_${locationId}_nniSubinterface" placeholder="e.g., 1.100">
-                    </div>
-                </div>
-            `;
-            container.appendChild(locationCard);
-            
-            // Populate site dropdown
-            const select = locationCard.querySelector('.additionalLocationSiteSelect');
-            const mainSiteSelect = document.getElementById('circuitASiteSelect');
-            select.innerHTML = mainSiteSelect.innerHTML;
-        }
-        
-        function removeAdditionalLocation(locationId) {
-            const element = document.getElementById(`additionalLocation_${locationId}`);
-            if (element) element.remove();
-        }
-        
-        function toggleAdditionalConnectionFields(locationId) {
-            const connectionType = document.querySelector(`input[name="additionalLocation_${locationId}_connectionType"]:checked`)?.value;
-            const fdpFields = document.getElementById(`additionalLocation_${locationId}_fdpFields`);
-            const nniFields = document.getElementById(`additionalLocation_${locationId}_nniFields`);
-            if (fdpFields && nniFields) {
-                fdpFields.style.display = connectionType === 'fdp' ? 'block' : 'none';
-                nniFields.style.display = connectionType === 'nni' ? 'block' : 'none';
-            }
-        }
+        // Legacy addAdditionalLocation / removeAdditionalLocation / toggleAdditionalConnectionFields
+        // removed — superseded by the per-VLAN addVlanIntermediateLocation system (they had zero callers).
+        // The `additionalLocations` DATA field and the _legacyAlc guard in openAddCircuitModal remain live.
         
         // Check if NNI subinterface is already in use
         async function checkNniSubinterfaceDuplicate(end) {
