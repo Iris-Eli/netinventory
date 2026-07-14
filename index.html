@@ -758,8 +758,8 @@
             <div class="nav-item active" onclick="navigateTo('dashboard')">
                 <span>📊</span> Dashboard
             </div>
-            <div class="nav-item" onclick="navigateTo('duplicates')">
-                <span>🔄</span> Duplicates
+            <div class="nav-item" onclick="navigateTo('health')">
+                <span>🩺</span> Health
             </div>
             <div class="nav-item" onclick="navigateTo('sites')">
                 <span>🏢</span> Sites
@@ -2709,8 +2709,10 @@
             const equipIds = new Set(equipment.map(e => e.id));
             const fdpIds = new Set(fdps.map(f => f.id));
             const rackIds = new Set(racks.map(r => r.id));
+            const nniIds = new Set(nnis.map(n => n.id));
+            const LETTERS = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'z'];
             const o = { equipNoSite: [], equipDanglingSite: [], cardsDanglingParent: [], equipDanglingRack: [],
-                        circFdpPortsNoFdp: [], circDangling: [], circNoAConnectivity: [], fdpNoSite: [], racksDanglingSite: [] };
+                        circFdpPortsNoFdp: [], circDangling: [], circNoAConnectivity: [], fdpNoSite: [], racksDanglingSite: [], nniDangling: [] };
 
             equipment.forEach(e => {
                 if (!e.siteId) o.equipNoSite.push(e);
@@ -2720,19 +2722,28 @@
             });
             circuits.forEach(c => {
                 const issues = [];
-                ['a', 'z'].forEach(side => {
-                    const fdpPorts = c[side + 'FdpPorts'] || c[side + 'EquipmentFdpPorts'];
-                    const fdpSel = c[side + 'Fdp'] || c[side + 'EquipmentFdp'];
-                    if (fdpPorts && String(fdpPorts).trim() && !fdpSel) issues.push(side.toUpperCase() + ': FDP ports listed but no FDP selected');
-                    if (fdpSel && !fdpIds.has(fdpSel)) issues.push(side.toUpperCase() + ': FDP reference no longer exists');
-                    const eq = c[side + 'Equipment'];
-                    if (eq && !equipIds.has(eq)) issues.push(side.toUpperCase() + ': equipment reference no longer exists');
+                // Every letter end A-N + Z, direct-FDP + equipment-FDP + equipment + NNI + site references
+                LETTERS.forEach(l => {
+                    const L = l.toUpperCase();
+                    const ports = c[l + 'Port'] || c[l + 'EquipmentFdpPorts'];
+                    const fdpSel = c[l + 'Fdp'] || c[l + 'EquipmentFdp'];
+                    if (ports && String(ports).trim() && !fdpSel) issues.push(L + ': ports listed but no FDP selected');
+                    if (c[l + 'Fdp'] && !fdpIds.has(c[l + 'Fdp'])) issues.push(L + ': FDP reference no longer exists');
+                    if (c[l + 'EquipmentFdp'] && !fdpIds.has(c[l + 'EquipmentFdp'])) issues.push(L + ': equipment-FDP reference no longer exists');
+                    if (c[l + 'Equipment'] && !equipIds.has(c[l + 'Equipment'])) issues.push(L + ': equipment reference no longer exists');
+                    if (c[l + 'Nni'] && !nniIds.has(c[l + 'Nni'])) issues.push(L + ': NNI reference no longer exists');
+                    if (c[l + 'LocationSiteId'] && !siteIds.has(c[l + 'LocationSiteId'])) issues.push(L + ': site reference no longer exists');
                 });
-                if (c.aLocation && !siteIds.has(c.aLocation)) issues.push('A site reference no longer exists');
-                if (c.zLocation && !siteIds.has(c.zLocation)) issues.push('Z site reference no longer exists');
+                if (c.cpeEquipmentId && !equipIds.has(c.cpeEquipmentId)) issues.push('CPE equipment reference no longer exists');
                 if (issues.some(i => i.includes('no longer exists'))) o.circDangling.push({ c, issues });
                 else if (issues.length) o.circFdpPortsNoFdp.push({ c, issues });
                 if (!c.aEquipment && !c.aNni && !c.aFdp && !c.aEquipmentFdp) o.circNoAConnectivity.push(c);
+            });
+            nnis.forEach(n => {
+                const issues = [];
+                if (n.equipmentID && !equipIds.has(n.equipmentID)) issues.push('equipment reference no longer exists');
+                if (n.fdpId && !fdpIds.has(n.fdpId)) issues.push('FDP reference no longer exists');
+                if (issues.length) o.nniDangling.push({ n, issues });
             });
             fdps.forEach(f => { if (f.siteId && !siteIds.has(f.siteId)) o.fdpNoSite.push(f); });
             racks.forEach(r => { if (r.siteId && !siteIds.has(r.siteId)) o.racksDanglingSite.push(r); });
@@ -2747,6 +2758,92 @@
                     <ul style="padding-left: 1.5rem;">${rows.slice(0, MAX).map(lineFn).join('')}</ul>
                     ${rows.length > MAX ? `<div style="color: var(--text-tertiary); font-size: 0.85rem;">…and ${rows.length - MAX} more (use page export for the full list)</div>` : ''}
                 </div>`;
+        }
+
+        // 🩺 Inventory Health — integrity, duplicates, and completeness grouped by severity.
+        async function renderHealthPage() {
+            try {
+                const [sites, racks, equipment, fdps, circuits, nnis] = await Promise.all([
+                    store.getSites(), store.getRacks(), store.getEquipment(), store.getFdps(), store.getCircuits(), store.getNnis()
+                ]);
+                const [orphans, duplicates] = await Promise.all([findOrphans(), findDuplicates()]);
+
+                // Integrity — port oversubscription via the canonical collectors
+                const fdpOver = fdps.map(f => { const total = parseInt(f.portCount || f.numPorts, 10) || 0; return { f, total, used: collectFdpUsedPorts(f.id, circuits, nnis, true).size }; }).filter(x => x.total > 0 && x.used > x.total);
+                const equipOver = equipment.map(e => { const total = ((typeof parsePortConfig === 'function' ? parsePortConfig(e.portConfig) : {}) || {}).total || 0; return { e, total, used: collectEquipmentUsedPorts(e.id, circuits, nnis).size }; }).filter(x => x.total > 0 && x.used > x.total);
+
+                // Completeness
+                const sitesNoGeo = sites.filter(s => (!s.latitude || !s.longitude) && (s.address || s.city));
+                const activeNoDlr = circuits.filter(c => String(c.status || '').toLowerCase() === 'active' && !String(c.generatedSFDLR || '').trim());
+                const circNoBw = circuits.filter(c => !String(c.bandwidth || '').trim());
+
+                const cName = c => (c.circuitId || c.id);
+                const card = (title, count, color) => `<div class="stat-card" style="cursor: default; border-left: 4px solid ${color};"><h3>${title}</h3><div class="value" style="color: ${color};">${count}</div></div>`;
+                const listBox = (title, icon, rows, lineFn) => rows.length ? `
+                    <h3 style="margin-top: 1.5rem; margin-bottom: 0.75rem;">${icon} ${title} (${rows.length})</h3>
+                    <div style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 0.5rem; padding: 1rem; margin-bottom: 1rem;">
+                        <ul style="padding-left: 1.25rem; margin: 0; line-height: 1.9;">${rows.slice(0, 50).map(lineFn).join('')}</ul>
+                        ${rows.length > 50 ? `<div style="color: var(--text-tertiary); font-size: 0.85rem; margin-top: 0.5rem;">…and ${rows.length - 50} more (export the page for the full list)</div>` : ''}
+                    </div>` : '';
+                const dupGroup = (entity, g, mergeable) => `
+                    <div style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 0.5rem; padding: 0.85rem 1rem; margin-bottom: 0.6rem;">
+                        <div style="font-weight: 600; overflow-wrap: anywhere;">${g.key} <span style="color: var(--text-tertiary); font-weight: 400;">— ${g.items.length} records</span></div>
+                        ${mergeable ? `<button class="btn-secondary" data-entity="${entity}" data-ids="${encodeURIComponent(JSON.stringify(g.items.map(i => i.id)))}" onclick="mergeDupGroupFromBtn(this)" style="padding: 0.4rem 0.8rem; margin-top: 0.5rem; font-size: 0.85rem;">🔀 Review & merge</button>` : `<div style="color: var(--text-tertiary); font-size: 0.82rem; margin-top: 0.35rem;">Review manually</div>`}
+                    </div>`;
+                const dupSection = (label, entity, groups, note, mergeable = true) => groups.length ? `
+                    <h3 style="margin-top: 1.5rem; margin-bottom: 0.5rem;">${label} (${groups.length} group${groups.length === 1 ? '' : 's'})</h3>
+                    ${note ? `<div style="color: var(--text-tertiary); font-size: 0.85rem; margin-bottom: 0.6rem;">${note}</div>` : ''}
+                    ${groups.map(g => dupGroup(entity, g, mergeable)).join('')}` : '';
+
+                const critCount = fdpOver.length + equipOver.length + orphans.circDangling.length + orphans.nniDangling.length + orphans.equipDanglingSite.length + orphans.equipDanglingRack.length + orphans.cardsDanglingParent.length + orphans.fdpNoSite.length + orphans.racksDanglingSite.length;
+                const dupCount = duplicates.circuits.length + duplicates.equipment.length + duplicates.fdps.length + duplicates.racks.length + duplicates.darkFibers.length + duplicates.sites.length;
+                const warnCount = activeNoDlr.length + orphans.circNoAConnectivity.length + orphans.circFdpPortsNoFdp.length + orphans.equipNoSite.length + sitesNoGeo.length + circNoBw.length;
+
+                content.innerHTML = `
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                        <h1 style="font-size: 2rem;">🩺 Inventory Health</h1>
+                        <button class="btn-secondary" onclick="renderHealthPage()">🔄 Re-scan</button>
+                    </div>
+                    <div class="stats-grid">
+                        ${card('CRITICAL', critCount, 'var(--danger)')}
+                        ${card('DUPLICATE GROUPS', dupCount, 'var(--warning)')}
+                        ${card('WARNINGS', warnCount, 'var(--accent-secondary)')}
+                    </div>
+
+                    <h2 style="margin-top: 2rem; color: var(--danger);">① Integrity — fix first</h2>
+                    ${critCount === 0 ? '<div style="color: var(--success); padding: 0.5rem 0;">✅ No integrity problems found.</div>' : ''}
+                    ${listBox('FDP port oversubscription', '🔴', fdpOver, x => `<li>${x.f.name} — <strong>${x.used}</strong> used / ${x.total} ports <button class="btn-secondary" style="padding: 0.1rem 0.5rem; font-size: 0.78rem; margin-left: 0.4rem;" onclick="viewFdpLayout('${x.f.id}')">Ports</button></li>`)}
+                    ${listBox('Equipment port oversubscription', '🔴', equipOver, x => `<li>${x.e.name} — <strong>${x.used}</strong> used / ${x.total} ports <button class="btn-secondary" style="padding: 0.1rem 0.5rem; font-size: 0.78rem; margin-left: 0.4rem;" onclick="viewEquipmentPorts('${x.e.id}')">Ports</button></li>`)}
+                    ${listBox('Circuits with dangling references', '🧩', orphans.circDangling, r => `<li>${cName(r.c)} — ${r.issues.join('; ')} <button class="btn-secondary" style="padding: 0.1rem 0.5rem; font-size: 0.78rem; margin-left: 0.4rem;" onclick="viewCircuitDetails('${r.c.id}')">View</button></li>`)}
+                    ${listBox('NNIs with dangling references', '🧩', orphans.nniDangling, r => `<li>${r.n.name || r.n.id} — ${r.issues.join('; ')} <button class="btn-secondary" style="padding: 0.1rem 0.5rem; font-size: 0.78rem; margin-left: 0.4rem;" onclick="viewNniDetails('${r.n.id}')">View</button></li>`)}
+                    ${listBox('Equipment pointing at a missing site', '🧩', orphans.equipDanglingSite, e => `<li>${e.name}</li>`)}
+                    ${listBox('Equipment pointing at a missing rack', '🧩', orphans.equipDanglingRack, e => `<li>${e.name}</li>`)}
+                    ${listBox('Line cards pointing at a missing chassis', '🧩', orphans.cardsDanglingParent, e => `<li>${e.name}</li>`)}
+                    ${listBox('FDPs pointing at a missing site', '🧩', orphans.fdpNoSite, f => `<li>${f.name}</li>`)}
+                    ${listBox('Racks pointing at a missing site', '🧩', orphans.racksDanglingSite, r => `<li>${r.name}</li>`)}
+
+                    <h2 style="margin-top: 2.5rem; color: var(--warning);">② Duplicates</h2>
+                    ${dupCount === 0 ? '<div style="color: var(--success); padding: 0.5rem 0;">✅ No duplicate groups found.</div>' : ''}
+                    ${dupSection('⚡ Circuits — same Circuit ID', 'circuit', duplicates.circuits, 'High confidence: identical CircuitID.')}
+                    ${dupSection('🖥️ Equipment — same name', 'equipment', duplicates.equipment)}
+                    ${dupSection('🔆 FDPs — same name + site + rack', 'fdp', duplicates.fdps)}
+                    ${dupSection('🗄️ Racks — same name + site', 'rack', duplicates.racks)}
+                    ${dupSection('🌑 Dark fiber — same route name', 'darkfiber', duplicates.darkFibers, 'Merge not automated for dark fiber — review and resolve manually.', false)}
+                    ${dupSection('🏢 Sites — same address', 'site', duplicates.sites, '⚠️ Sites can legitimately share an address (carrier hotels, per-order Z-sites). Merge only true duplicates — merging preserves data from both records and re-points every reference (all A–N + Z ends) to the one you keep.')}
+
+                    <h2 style="margin-top: 2.5rem; color: var(--accent-secondary);">③ Warnings</h2>
+                    ${warnCount === 0 ? '<div style="color: var(--success); padding: 0.5rem 0;">✅ No warnings.</div>' : ''}
+                    ${listBox('Active circuits with no generated DLR', '📄', activeNoDlr, c => `<li>${cName(c)} <button class="btn-secondary" style="padding: 0.1rem 0.5rem; font-size: 0.78rem; margin-left: 0.4rem;" onclick="viewCircuitDetails('${c.id}')">View</button></li>`)}
+                    ${listBox('Circuits with no A-side connectivity', '⚠️', orphans.circNoAConnectivity, c => `<li>${cName(c)}</li>`)}
+                    ${listBox('Circuits with ports listed but no FDP selected', '⚠️', orphans.circFdpPortsNoFdp, r => `<li>${cName(r.c)} — ${r.issues.join('; ')}</li>`)}
+                    ${listBox('Equipment with no site assigned', '⚠️', orphans.equipNoSite, e => `<li>${e.name}</li>`)}
+                    ${listBox('Sites missing map coordinates', '📍', sitesNoGeo, s => `<li>${s.name || s.address}</li>`)}
+                    ${listBox('Circuits missing bandwidth', '⚠️', circNoBw, c => `<li>${cName(c)}</li>`)}
+                `;
+            } catch (err) {
+                content.innerHTML = `<div style="padding: 2rem; color: var(--danger);">Health scan failed: ${(typeof friendlyError === 'function' ? friendlyError(err) : (err && err.message || err))}</div>`;
+                console.error('renderHealthPage error', err);
+            }
         }
 
         async function renderDuplicatesPage() {
@@ -2919,36 +3016,49 @@
             ]);
             const refs = { count: 0 };
             const moves = [];  // [{call, args}]
-            
+            const LETTERS = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'z'];
+            // Re-point every circuit column in `cols` that currently equals sourceId -> targetId (one PATCH per circuit).
+            // Covers ALL letter ends a-n+z, not just A/Z, so intermediate references are never orphaned on merge.
+            const moveCircuitCols = (cols) => circuits.forEach(c => {
+                const patch = {};
+                cols.forEach(col => { if (c[col] === sourceId) patch[col] = targetId; });
+                if (Object.keys(patch).length) moves.push(() => store.updateCircuit(c.id, patch));
+            });
+
             if (entityType === 'site') {
                 racks.filter(r => r.siteId === sourceId).forEach(r => moves.push(() => store.updateRack(r.id, { siteId: targetId })));
                 equipment.filter(e => e.siteId === sourceId).forEach(e => moves.push(() => store.updateEquipment(e.id, { siteId: targetId })));
                 fdps.filter(f => f.siteId === sourceId).forEach(f => moves.push(() => store.updateFdp(f.id, { siteId: targetId })));
                 nnis.filter(n => n.siteId === sourceId).forEach(n => moves.push(() => store.updateNni(n.id, { siteId: targetId })));
-                circuits.filter(c => c.aLocationSiteId === sourceId).forEach(c => moves.push(() => store.updateCircuit(c.id, { aLocationSiteId: targetId })));
-                circuits.filter(c => c.zLocationSiteId === sourceId).forEach(c => moves.push(() => store.updateCircuit(c.id, { zLocationSiteId: targetId })));
+                moveCircuitCols(LETTERS.map(l => l + 'LocationSiteId'));
             } else if (entityType === 'rack') {
                 equipment.filter(e => e.rackId === sourceId).forEach(e => moves.push(() => store.updateEquipment(e.id, { rackId: targetId })));
                 fdps.filter(f => f.rackId === sourceId).forEach(f => moves.push(() => store.updateFdp(f.id, { rackId: targetId })));
             } else if (entityType === 'equipment') {
                 equipment.filter(e => e.parentEquipmentID === sourceId).forEach(e => moves.push(() => store.updateEquipment(e.id, { parentEquipmentID: targetId })));
                 nnis.filter(n => n.equipmentID === sourceId).forEach(n => moves.push(() => store.updateNni(n.id, { equipmentID: targetId })));
-                circuits.filter(c => c.aEquipment === sourceId).forEach(c => moves.push(() => store.updateCircuit(c.id, { aEquipment: targetId })));
-                circuits.filter(c => c.zEquipment === sourceId).forEach(c => moves.push(() => store.updateCircuit(c.id, { zEquipment: targetId })));
-                circuits.filter(c => c.cpeEquipmentId === sourceId).forEach(c => moves.push(() => store.updateCircuit(c.id, { cpeEquipmentId: targetId })));
+                moveCircuitCols([...LETTERS.map(l => l + 'Equipment'), 'cpeEquipmentId']);
             } else if (entityType === 'fdp') {
                 nnis.filter(n => n.fdpId === sourceId).forEach(n => moves.push(() => store.updateNni(n.id, { fdpId: targetId })));
-                circuits.filter(c => c.aFdp === sourceId).forEach(c => moves.push(() => store.updateCircuit(c.id, { aFdp: targetId })));
-                circuits.filter(c => c.zFdp === sourceId).forEach(c => moves.push(() => store.updateCircuit(c.id, { zFdp: targetId })));
-                circuits.filter(c => c.aEquipmentFdp === sourceId).forEach(c => moves.push(() => store.updateCircuit(c.id, { aEquipmentFdp: targetId })));
-                circuits.filter(c => c.zEquipmentFdp === sourceId).forEach(c => moves.push(() => store.updateCircuit(c.id, { zEquipmentFdp: targetId })));
+                moveCircuitCols([...LETTERS.map(l => l + 'Fdp'), ...LETTERS.map(l => l + 'EquipmentFdp')]);
             } else if (entityType === 'nni') {
-                circuits.filter(c => c.aNni === sourceId).forEach(c => moves.push(() => store.updateCircuit(c.id, { aNni: targetId })));
-                circuits.filter(c => c.zNni === sourceId).forEach(c => moves.push(() => store.updateCircuit(c.id, { zNni: targetId })));
+                moveCircuitCols(LETTERS.map(l => l + 'Nni'));
             }
             refs.count = moves.length;
             if (opts.previewOnly) return refs;
-            
+
+            // Preserve data when BOTH records hold values: copy the source's non-empty fields into the keeper
+            // ONLY where the keeper is currently empty (never overwrite an existing keeper value), before deleting the source.
+            const updater = { site: 'updateSite', rack: 'updateRack', equipment: 'updateEquipment', fdp: 'updateFdp', nni: 'updateNni' }[entityType];
+            const pool = { site: sites, rack: racks, equipment: equipment, fdp: fdps, nni: nnis }[entityType] || [];
+            const src = pool.find(x => x.id === sourceId), tgt = pool.find(x => x.id === targetId);
+            if (updater && src && tgt) {
+                const isEmpty = v => v === undefined || v === null || String(v).trim() === '';
+                const fill = {};
+                Object.keys(src).forEach(k => { if (k !== 'id' && !k.startsWith('_') && !isEmpty(src[k]) && isEmpty(tgt[k])) fill[k] = src[k]; });
+                if (Object.keys(fill).length) moves.push(() => store[updater](targetId, fill));
+            }
+
             for (const m of moves) { try { await m(); } catch (e) { console.error('merge ref move failed', e); } }
             // Delete source
             const deleteFn = { site: 'deleteSite', rack: 'deleteRack', equipment: 'deleteEquipment', fdp: 'deleteFdp', nni: 'deleteNni', circuit: 'deleteCircuit' }[entityType];
@@ -3017,7 +3127,7 @@
                     done++;
                 }
                 alert('Merged ' + done + ' duplicate' + (done !== 1 ? 's' : '') + ' into the kept record.');
-                renderDuplicatesPage();
+                renderHealthPage();
             } catch (err) {
                 alert('Merge failed: ' + friendlyError(err));
             }
@@ -15144,7 +15254,7 @@ ${entityActionButtons('nni', `${n.id}`, true)}
         //   .../#/circuit/{id}          -> circuit details   .../#/circuit/{id}/dlr -> DLR viewer
         //   .../#/equipment/{id}  .../#/fdp/{id}  .../#/nni/{id}  .../#/rack/{id}  .../#/darkfiber/{id}
         // Hashes NOT starting with '#/' (e.g. MSAL auth #code=...) are ignored.
-        const VALID_ROUTE_PAGES = ['dashboard','duplicates','sites','siteMap','racks','equipment','templates','darkfiber','fdps','availablePorts','circuits','nnis','search'];
+        const VALID_ROUTE_PAGES = ['dashboard','health','duplicates','sites','siteMap','racks','equipment','templates','darkfiber','fdps','availablePorts','circuits','nnis','search'];
         const ENTITY_ROUTES = { site: 'sites', circuit: 'circuits', equipment: 'equipment', fdp: 'fdps', nni: 'nnis', rack: 'racks', darkfiber: 'darkfiber' };
         let _routingSuppress = false;
         let _routeApplying = false;
@@ -15289,7 +15399,7 @@ ${entityActionButtons('nni', `${n.id}`, true)}
                             <div style="display: flex; gap: 0.75rem;">
                                 <button class="btn-secondary" onclick="exportAllToExcel(this)">⬇️ Export All (XLSX)</button>
                                 <button class="btn-secondary" onclick="backupAllToJson(this)">💾 Backup (JSON)</button>
-                                <button class="btn-secondary" onclick="removeDuplicates()">🔄 Remove Duplicates</button>
+                                <button class="btn-secondary" onclick="navigateTo('health')">🩺 Health</button>
                             </div>
                         </div>
                         <div class="stats-grid">
@@ -15350,8 +15460,8 @@ ${entityActionButtons('nni', `${n.id}`, true)}
                         </div>
                     `;
                 }
-            } else if (page === 'duplicates') {
-                await renderDuplicatesPage();
+            } else if (page === 'health' || page === 'duplicates') {
+                await renderHealthPage();
             } else if (page === 'sites') {
                 await renderSitesPage();
             } else if (page === 'siteMap') {
