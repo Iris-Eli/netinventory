@@ -823,7 +823,7 @@
         //     Use a SharePoint agent share link, Teams/M365 deep link, etc. Blocked from iframing by CSP, so we pop it out.
         // Both are Microsoft-hosted URLs (no secrets) and the agent enforces Entra sign-in — safe in public HTML.
         const COPILOT_EMBED_URL = '';
-        const COPILOT_URL = '';
+        const COPILOT_URL = 'https://iristransport.sharepoint.com/:u:/s/EngineeringPriorities/IQA1R2X50HJMSp80m-B3JE6kATkpGIm0jo-SxB9e53r-cNw?e=iin87q';
         let _copilotOpen = false, _copilotLoaded = false;
 
         // FAB entry point: iframe in-panel if an embed URL exists; else pop out a docked window; else show the setup panel.
