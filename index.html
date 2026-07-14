@@ -15054,7 +15054,7 @@ ${entityActionButtons('nni', `${n.id}`, true)}
                 const src = c.cfaSourceText || '';
                 if (!src.trim()) continue;
                 let vlans = [];
-                try { vlans = c.circuitVlans ? JSON.parse(c.circuitVlans) : []; } catch (e) {}
+                vlans = safeParseJson(c.circuitVlans, []); // HTML-tolerant: SharePoint Note columns are entity-encoded
                 let cur = null; const blocks = [];
                 for (const raw of src.split(/\r?\n/)) {
                     const line = raw.trim();
@@ -15212,8 +15212,9 @@ ${entityActionButtons('nni', `${n.id}`, true)}
                     if (i > 0 && i % 50 === 0) { try { await ensureValidToken(); } catch (e) {} }
                     try {
                         const circuitForDlr = { ...c };
-                        try { circuitForDlr.circuitVLANs = c.circuitVlans ? JSON.parse(c.circuitVlans) : []; }
-                        catch (e) { circuitForDlr.circuitVLANs = []; }
+                        // circuitVlans comes back HTML-wrapped/entity-encoded from the SharePoint Note column —
+                        // raw JSON.parse throws, which silently emptied VLANs and made every DLR regenerate to '' (the "always 0" bug).
+                        circuitForDlr.circuitVLANs = safeParseJson(c.circuitVlans, []);
                         const dlrText = await generateDlrText(circuitForDlr, allSites, allNnis, allEquipment, allFdps);
                         if (!dlrText) {
                             empty++;
