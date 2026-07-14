@@ -816,27 +816,28 @@
     <script>
         // BUILD: 2024-05-19-23-00-TEMPLATE-LITERALS-FIXED
 
-        // 🤖 Ask panel — embeds the published Copilot Studio agent.
-        // Copilot Studio → your agent → Channels → Custom website → copy the demo/iframe URL, paste it here, redeploy.
-        // Safe to live in the public HTML: it's a Microsoft-hosted embed URL (no secrets), and the agent enforces Entra sign-in.
-        const COPILOT_EMBED_URL = '';  // e.g. 'https://copilotstudio.microsoft.com/environments/<env>/bots/<bot>/webchat?__version__=2'
-        let _copilotOpen = false, _copilotLoaded = false;
+        // 🤖 Ask panel — LAUNCHER for the org's Copilot agent (opens in a new tab; no premium embed needed).
+        // Use the SharePoint-native agent's share link, a Teams/M365 Copilot deep link, or any published agent URL.
+        // Safe in public HTML: it's a Microsoft-hosted URL (no secrets) and the agent enforces Entra sign-in.
+        const COPILOT_URL = '';  // e.g. the SharePoint agent share link
+        let _copilotOpen = false;
         function toggleCopilotPanel() {
             const panel = document.getElementById('copilotPanel');
             const body = document.getElementById('copilotBody');
             if (!panel || !body) return;
             _copilotOpen = !_copilotOpen;
             panel.style.transform = _copilotOpen ? 'translateX(0)' : 'translateX(100%)';
-            if (_copilotOpen && !_copilotLoaded) {
-                _copilotLoaded = true;  // lazy-load the iframe only on first open
-                if (COPILOT_EMBED_URL) {
-                    body.innerHTML = `<iframe src="${COPILOT_EMBED_URL}" title="NetInventory assistant" style="width: 100%; height: 100%; border: 0;"></iframe>`;
-                } else {
-                    body.innerHTML = `<div style="padding: 1.5rem; color: var(--text-secondary); font-size: 0.9rem; line-height: 1.6;">
-                        <p><strong>Assistant not connected yet.</strong></p>
-                        <p>Publish the Copilot Studio agent, then in <em>Channels → Custom website</em> copy the embed URL, set <code>COPILOT_EMBED_URL</code> in index.html, and deploy.</p>
-                    </div>`;
-                }
+            if (COPILOT_URL) {
+                body.innerHTML = `<div style="padding: 1.5rem; color: var(--text-secondary); font-size: 0.92rem; line-height: 1.6;">
+                    <p>Ask about the network inventory, or how to run a procedure (MoP/SoP).</p>
+                    <a href="${COPILOT_URL}" target="_blank" rel="noopener" class="btn-primary" style="display: inline-block; text-decoration: none; padding: 0.6rem 1.1rem; margin: 0.5rem 0 1rem;">Open Assistant ↗</a>
+                    <div style="color: var(--text-tertiary); font-size: 0.85rem;">Try:<ul style="padding-left: 1.2rem; margin-top: 0.4rem;"><li>What's on rack &lt;name&gt;?</li><li>Which circuits use NNI &lt;name&gt;?</li><li>Draft the MoP to add a card to &lt;device&gt;</li></ul></div>
+                </div>`;
+            } else {
+                body.innerHTML = `<div style="padding: 1.5rem; color: var(--text-secondary); font-size: 0.9rem; line-height: 1.6;">
+                    <p><strong>Assistant not connected yet.</strong></p>
+                    <p>Create/share the SharePoint agent, then set <code>COPILOT_URL</code> in index.html and deploy.</p>
+                </div>`;
             }
         }
         // This timestamp forces browser to reload: 1747719600
