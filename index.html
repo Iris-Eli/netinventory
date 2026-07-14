@@ -802,7 +802,7 @@
         </main>
 
         <!-- 🤖 Ask assistant — floating button + slide-in panel. Inside #mainApp so it only shows post-login. -->
-        <button id="copilotFab" onclick="toggleCopilotPanel()" title="Ask the NetInventory assistant"
+        <button id="copilotFab" onclick="openAssistant()" title="Ask the NetInventory assistant"
             style="position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 1400; border: none; cursor: pointer; width: 56px; height: 56px; border-radius: 50%; background: var(--accent-primary); color: #fff; font-size: 1.5rem; box-shadow: 0 4px 14px rgba(0,0,0,0.35);">🤖</button>
         <div id="copilotPanel" style="position: fixed; top: 0; right: 0; height: 100vh; width: 420px; max-width: 100vw; z-index: 1401; background: var(--bg-primary); border-left: 1px solid var(--border-color); box-shadow: -4px 0 20px rgba(0,0,0,0.35); transform: translateX(100%); transition: transform 0.25s ease; display: flex; flex-direction: column;">
             <div style="display: flex; align-items: center; justify-content: space-between; padding: 1rem 1.25rem; border-bottom: 1px solid var(--border-color);">
@@ -819,12 +819,22 @@
         // 🤖 Ask panel — dual mode. Set EITHER of these (embed takes priority):
         //   COPILOT_EMBED_URL — iframe an agent IN the panel. Needs an embeddable web-chat URL, i.e. Copilot Studio
         //     "Custom website" channel (unlocked by Copilot Studio premium OR pay-as-you-go/metered billing).
-        //   COPILOT_URL — fallback launcher that opens the agent in a NEW TAB (SharePoint agent share link, Teams/M365
-        //     deep link, etc.). No premium needed; use when the frame embed isn't licensed.
+        //   COPILOT_URL — opens the agent in a right-docked POPUP WINDOW (feels like a side panel; no premium needed).
+        //     Use a SharePoint agent share link, Teams/M365 deep link, etc. Blocked from iframing by CSP, so we pop it out.
         // Both are Microsoft-hosted URLs (no secrets) and the agent enforces Entra sign-in — safe in public HTML.
         const COPILOT_EMBED_URL = '';
         const COPILOT_URL = '';
         let _copilotOpen = false, _copilotLoaded = false;
+
+        // FAB entry point: iframe in-panel if an embed URL exists; else pop out a docked window; else show the setup panel.
+        function openAssistant() {
+            if (COPILOT_EMBED_URL) return toggleCopilotPanel();
+            if (!COPILOT_URL) return toggleCopilotPanel();
+            const w = 440, h = Math.max(560, Math.min(900, (screen.availHeight || 900) - 60));
+            const left = Math.max(0, (screen.availWidth || 1280) - w - 24);
+            const win = window.open(COPILOT_URL, 'netinvAssistant', `width=${w},height=${h},left=${left},top=48,resizable=yes,scrollbars=yes`);
+            if (win) win.focus(); else window.open(COPILOT_URL, '_blank', 'noopener'); // popup blocked → new tab
+        }
         function toggleCopilotPanel() {
             const panel = document.getElementById('copilotPanel');
             const body = document.getElementById('copilotBody');
