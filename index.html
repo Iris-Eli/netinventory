@@ -831,7 +831,7 @@
         function openAssistant() {
             if (COPILOT_EMBED_URL) return toggleCopilotPanel();
             if (!COPILOT_URL) return toggleCopilotPanel();
-            const w = Math.min(960, (screen.availWidth || 1280) - 80), h = Math.max(640, (screen.availHeight || 900) - 60);
+            const w = Math.min(720, (screen.availWidth || 1280) - 80), h = Math.min(860, (screen.availHeight || 900) - 80);
             const left = Math.max(0, (screen.availWidth || 1280) - w - 24);
             const win = window.open(COPILOT_URL, 'netinvAssistant', `width=${w},height=${h},left=${left},top=48,resizable=yes,scrollbars=yes`);
             if (win) win.focus(); else window.open(COPILOT_URL, '_blank', 'noopener'); // popup blocked → new tab
