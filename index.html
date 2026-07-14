@@ -896,7 +896,7 @@
             },
             
             fieldMappings: {
-                sites: { id: 'Title', name: 'SiteID', cidCode: 'CidCode', location: 'Location', type: 'SiteType', address: 'Address', city: 'City', state: 'State', zip: 'ZipCode', contact: 'Contact', latitude: 'Latitude', longitude: 'Longitude', soNumber: 'SONumber' },
+                sites: { id: 'Title', name: 'SiteID', cidCode: 'CidCode', irisClli: 'IrisCLLI', location: 'Location', type: 'SiteType', address: 'Address', city: 'City', state: 'State', zip: 'ZipCode', contact: 'Contact', latitude: 'Latitude', longitude: 'Longitude', soNumber: 'SONumber' },
                 racks: { id: 'Title', name: 'RackID', siteId: 'SiteID', location: 'RackLocation', rackUnits: 'RackUnits', hasAC: 'HasAC', purchasedPowerAC: 'PurchasedPowerAC', hasDC: 'HasDC', purchasedPowerDC: 'PurchasedPowerDC', notes: 'Notes', soNumber: 'SONumber' },
                 equipment: { id: 'Title', name: 'EquipmentID', siteId: 'SiteID', rackId: 'RackID', manufacturer: 'Manufacturer', model: 'Model', type: 'EquipmentType', serialNumber: 'SerialNumber', rackUnits: 'RackUnits', rackPosition: 'RackPosition', powerType: 'PowerType', powerDraw: 'PowerDraw', maxPowerDraw: 'MaxPowerDraw', voltage: 'Voltage', weight: 'Weight', portConfig: 'PortConfig', installDate: 'InstallDate', notes: 'Notes', linePorts: 'LinePorts', lineCapacity: 'LineCapacity', lineWavelength: 'LineWavelength', parentEquipmentID: 'ParentEquipmentID', slotNumber: 'SlotNumber', mgmtIp: 'MgmtIP', mgmtSubnet: 'MgmtSubnet', mgmtGateway: 'MgmtGateway', soNumber: 'SONumber', irisClli: 'IrisCLLI' },
                 fdps: { id: 'Title', name: 'FdpID', siteId: 'SiteID', mountingType: 'MountingType', rackId: 'RackID', location: 'FdpLocation', portCount: 'PortCount', connectorType: 'ConnectorType', type: 'FdpType', rackUnits: 'RackUnits', rackPosition: 'RackPosition', notes: 'Notes', soNumber: 'SONumber' },
@@ -1788,6 +1788,11 @@
                     <div class="form-group">
                         <label>CID Code</label>
                         <input type="text" name="cidCode" placeholder="e.g., 21">
+                    </div>
+                    <div class="form-group">
+                        <label>Iris CLLI</label>
+                        <input type="text" name="irisClli" placeholder="e.g., WHCKTNVW" style="text-transform: uppercase;">
+                        <small style="color: var(--text-tertiary); font-size: 0.85rem;">Engineer/ops CLLI for this location (matches DLR/CFA device names). Does not replace Site ID.</small>
                     </div>
                     <div class="form-group">
                         <label>Location *</label>
@@ -3250,6 +3255,7 @@
                             <thead>
                                 <tr>
                                     <th>Site ID</th>
+                                    <th>Iris CLLI</th>
                                     <th>CID Code</th>
                                     <th>Location</th>
                                     <th>Type</th>
@@ -3261,10 +3267,11 @@
                             </thead>
                             <tbody>
                                 ${sites.length === 0 ? 
-                                    '<tr><td colspan="8" style="text-align: center; padding: 3rem; color: var(--text-secondary);">No sites yet. Click "Add Site" to get started.</td></tr>' :
+                                    '<tr><td colspan="9" style="text-align: center; padding: 3rem; color: var(--text-secondary);">No sites yet. Click "Add Site" to get started.</td></tr>' :
                                     sites.map(site => `
-                                        <tr class="site-row" data-searchable="${[site.name, site.cidCode, site.location, site.address, site.type, site.city, site.state, site.contact].filter(Boolean).join(' ').toLowerCase()}">
+                                        <tr class="site-row" data-searchable="${[site.name, site.irisClli, site.cidCode, site.location, site.address, site.type, site.city, site.state, site.contact].filter(Boolean).join(' ').toLowerCase()}">
                                             <td><strong><a href="javascript:void(0)" onclick="showQuickActions('site','${site.id}')" style="color: var(--accent-primary); text-decoration: none; cursor: pointer;" title="Quick actions">${site.name || ''}</a></strong></td>
+                                            <td>${site.irisClli || ''}</td>
                                             <td>${site.cidCode || ''}</td>
                                             <td>${site.location || ''}</td>
                                             <td>${site.type || ''}</td>
@@ -3359,6 +3366,7 @@
                         data: [
                             { label: 'Site ID', value: site.name },
                             { label: 'CID Code', value: site.cidCode || '-' },
+                            { label: 'Iris CLLI', value: site.irisClli || '-' },
                             { label: 'Location', value: site.location || '-' },
                             { label: 'Type', value: site.type || '-' },
                             { label: 'Address', value: site.address || '-' },
@@ -3534,6 +3542,7 @@
             const form = document.getElementById('siteForm');
             form.elements.name.value = site.name || '';
             form.elements.cidCode.value = site.cidCode || '';
+            if (form.elements.irisClli) form.elements.irisClli.value = site.irisClli || '';
             form.elements.location.value = site.location || '';
             form.elements.type.value = site.type || '';
             form.elements.address.value = site.address || '';
@@ -3677,6 +3686,7 @@
             const site = {
                 name: formData.get('name'),
                 cidCode: formData.get('cidCode'),
+                irisClli: (formData.get('irisClli') || '').toUpperCase().trim(),
                 location: formData.get('location'),
                 type: formData.get('type'),
                 address: formData.get('address'),
@@ -4563,7 +4573,7 @@
             const sites = await store.getSites();
             const siteSelect = document.getElementById('rackSiteSelect');
             siteSelect.innerHTML = '<option value="">Select Site...</option>' + 
-                sites.map(site => `<option value="${site.id}">${(site.name || site.location || '(unnamed)') + (site.address ? ' — ' + site.address.split(',')[0] : '') + (site.name && site.cidCode ? ' [' + site.cidCode + ']' : '')}</option>`).join('');
+                sites.map(site => `<option value="${site.id}">${(site.name || site.location || '(unnamed)') + (site.address ? ' — ' + site.address.split(',')[0] : '') + (site.irisClli ? ' [' + site.irisClli + ']' : (site.name && site.cidCode ? ' [' + site.cidCode + ']' : ''))}</option>`).join('');
             attachSiteCombobox('rackSiteSelect'); syncSiteComboInput('rackSiteSelect');
             
             document.getElementById('rackModal').classList.add('active');
@@ -4584,7 +4594,7 @@
             const sites = await store.getSites();
             const siteSelect = document.getElementById('rackSiteSelect');
             siteSelect.innerHTML = '<option value="">Select Site...</option>' + 
-                sites.map(site => `<option value="${site.id}">${(site.name || site.location || '(unnamed)') + (site.address ? ' — ' + site.address.split(',')[0] : '') + (site.name && site.cidCode ? ' [' + site.cidCode + ']' : '')}</option>`).join('');
+                sites.map(site => `<option value="${site.id}">${(site.name || site.location || '(unnamed)') + (site.address ? ' — ' + site.address.split(',')[0] : '') + (site.irisClli ? ' [' + site.irisClli + ']' : (site.name && site.cidCode ? ' [' + site.cidCode + ']' : ''))}</option>`).join('');
             attachSiteCombobox('rackSiteSelect'); syncSiteComboInput('rackSiteSelect');
             
             // Fill form
@@ -4987,7 +4997,7 @@
             document.getElementById('equipmentForm').reset();
             const sites = await store.getSites();
             const siteSelect = document.getElementById('equipmentSiteSelect');
-            siteSelect.innerHTML = '<option value="">Select Site...</option>' + sites.map(site => `<option value="${site.id}">${(site.name || site.location || '(unnamed)') + (site.address ? ' — ' + site.address.split(',')[0] : '') + (site.name && site.cidCode ? ' [' + site.cidCode + ']' : '')}</option>`).join('');
+            siteSelect.innerHTML = '<option value="">Select Site...</option>' + sites.map(site => `<option value="${site.id}">${(site.name || site.location || '(unnamed)') + (site.address ? ' — ' + site.address.split(',')[0] : '') + (site.irisClli ? ' [' + site.irisClli + ']' : (site.name && site.cidCode ? ' [' + site.cidCode + ']' : ''))}</option>`).join('');
             attachSiteCombobox('equipmentSiteSelect'); syncSiteComboInput('equipmentSiteSelect');
             document.getElementById('equipmentRackSelect').innerHTML = '<option value="">Select Rack...</option>';
             
@@ -5191,7 +5201,7 @@
             const form = document.getElementById('equipmentForm');
             const sites = await store.getSites();
             const siteSelect = document.getElementById('equipmentSiteSelect');
-            siteSelect.innerHTML = '<option value="">Select Site...</option>' + sites.map(site => `<option value="${site.id}">${(site.name || site.location || '(unnamed)') + (site.address ? ' — ' + site.address.split(',')[0] : '') + (site.name && site.cidCode ? ' [' + site.cidCode + ']' : '')}</option>`).join('');
+            siteSelect.innerHTML = '<option value="">Select Site...</option>' + sites.map(site => `<option value="${site.id}">${(site.name || site.location || '(unnamed)') + (site.address ? ' — ' + site.address.split(',')[0] : '') + (site.irisClli ? ' [' + site.irisClli + ']' : (site.name && site.cidCode ? ' [' + site.cidCode + ']' : ''))}</option>`).join('');
             attachSiteCombobox('equipmentSiteSelect'); syncSiteComboInput('equipmentSiteSelect');
             form.elements.siteId.value = equip.siteId || '';
             await updateEquipmentRackDropdown();
@@ -5676,7 +5686,7 @@
             document.getElementById('fdpForm').reset();
             const sites = await store.getSites();
             const siteSelect = document.getElementById('fdpSiteSelect');
-            siteSelect.innerHTML = '<option value="">Select Site...</option>' + sites.map(site => `<option value="${site.id}">${(site.name || site.location || '(unnamed)') + (site.address ? ' — ' + site.address.split(',')[0] : '') + (site.name && site.cidCode ? ' [' + site.cidCode + ']' : '')}</option>`).join('');
+            siteSelect.innerHTML = '<option value="">Select Site...</option>' + sites.map(site => `<option value="${site.id}">${(site.name || site.location || '(unnamed)') + (site.address ? ' — ' + site.address.split(',')[0] : '') + (site.irisClli ? ' [' + site.irisClli + ']' : (site.name && site.cidCode ? ' [' + site.cidCode + ']' : ''))}</option>`).join('');
             attachSiteCombobox('fdpSiteSelect'); syncSiteComboInput('fdpSiteSelect');
             document.getElementById('fdpRackSelect').innerHTML = '<option value="">Select Rack...</option>';
             toggleFdpRackFields();
@@ -5707,7 +5717,7 @@
             const form = document.getElementById('fdpForm');
             const sites = await store.getSites();
             const siteSelect = document.getElementById('fdpSiteSelect');
-            siteSelect.innerHTML = '<option value="">Select Site...</option>' + sites.map(site => `<option value="${site.id}">${(site.name || site.location || '(unnamed)') + (site.address ? ' — ' + site.address.split(',')[0] : '') + (site.name && site.cidCode ? ' [' + site.cidCode + ']' : '')}</option>`).join('');
+            siteSelect.innerHTML = '<option value="">Select Site...</option>' + sites.map(site => `<option value="${site.id}">${(site.name || site.location || '(unnamed)') + (site.address ? ' — ' + site.address.split(',')[0] : '') + (site.irisClli ? ' [' + site.irisClli + ']' : (site.name && site.cidCode ? ' [' + site.cidCode + ']' : ''))}</option>`).join('');
             attachSiteCombobox('fdpSiteSelect'); syncSiteComboInput('fdpSiteSelect');
             form.elements.siteId.value = fdp.siteId || '';
             await updateFdpRackDropdown();
@@ -6994,7 +7004,7 @@
         async function generateVlanSectionHTML(vlanNum) {
             // Get sites for dropdowns
             const sites = await store.getSites();
-            const siteOptions = sites.map(site => `<option value="${site.id}">${(site.name || site.location || '(unnamed)') + (site.address ? ' — ' + site.address.split(',')[0] : '') + (site.name && site.cidCode ? ' [' + site.cidCode + ']' : '')}</option>`).join('');
+            const siteOptions = sites.map(site => `<option value="${site.id}">${(site.name || site.location || '(unnamed)') + (site.address ? ' — ' + site.address.split(',')[0] : '') + (site.irisClli ? ' [' + site.irisClli + ']' : (site.name && site.cidCode ? ' [' + site.cidCode + ']' : ''))}</option>`).join('');
             
             return `
                 <hr style="border: none; border-top: 1px solid var(--border-color); margin: 2rem 0;">
@@ -8062,7 +8072,7 @@
             
             const sites = await store.getSites();
             window._sitesCache = sites;  // for intermediate cards
-            const siteOptions = '<option value="">Select Site...</option>' + sites.map(site => `<option value="${site.id}">${(site.name || site.location || '(unnamed)') + (site.address ? ' — ' + site.address.split(',')[0] : '') + (site.name && site.cidCode ? ' [' + site.cidCode + ']' : '')}</option>`).join('');
+            const siteOptions = '<option value="">Select Site...</option>' + sites.map(site => `<option value="${site.id}">${(site.name || site.location || '(unnamed)') + (site.address ? ' — ' + site.address.split(',')[0] : '') + (site.irisClli ? ' [' + site.irisClli + ']' : (site.name && site.cidCode ? ' [' + site.cidCode + ']' : ''))}</option>`).join('');
             document.getElementById('circuitASiteSelect').innerHTML = siteOptions;
             document.getElementById('circuitZSiteSelect').innerHTML = siteOptions;
             attachSiteCombobox('circuitASiteSelect');
@@ -8142,7 +8152,7 @@
             
             const sites = await store.getSites();
             window._sitesCache = sites;  // for intermediate cards
-            const siteOptions = '<option value="">Select Site...</option>' + sites.map(site => `<option value="${site.id}">${(site.name || site.location || '(unnamed)') + (site.address ? ' — ' + site.address.split(',')[0] : '') + (site.name && site.cidCode ? ' [' + site.cidCode + ']' : '')}</option>`).join('');
+            const siteOptions = '<option value="">Select Site...</option>' + sites.map(site => `<option value="${site.id}">${(site.name || site.location || '(unnamed)') + (site.address ? ' — ' + site.address.split(',')[0] : '') + (site.irisClli ? ' [' + site.irisClli + ']' : (site.name && site.cidCode ? ' [' + site.cidCode + ']' : ''))}</option>`).join('');
             document.getElementById('circuitASiteSelect').innerHTML = siteOptions;
             document.getElementById('circuitZSiteSelect').innerHTML = siteOptions;
             attachSiteCombobox('circuitASiteSelect');
@@ -8822,7 +8832,9 @@
                         const clliMatch = String(devName).match(/^([A-Z]{4,8})/);
                         if (clliMatch) {
                             const clli = clliMatch[1].toUpperCase();
-                            const matchSite = sites.find(s => 
+                            const matchSite = sites.find(s =>
+                                String(s.irisClli || '').toUpperCase() === clli ||
+                                String(s.irisClli || '').toUpperCase().startsWith(clli) ||
                                 String(s.name || '').toUpperCase().startsWith(clli) ||
                                 String(s.id || '').toUpperCase() === clli ||
                                 String(s.cidCode || '').toUpperCase() === clli
@@ -10464,7 +10476,7 @@
             ]);
             
             const siteSelect = document.getElementById('nniSiteSelect');
-            siteSelect.innerHTML = '<option value="">Select Site...</option>' + sites.map(site => `<option value="${site.id}">${(site.name || site.location || '(unnamed)') + (site.address ? ' — ' + site.address.split(',')[0] : '') + (site.name && site.cidCode ? ' [' + site.cidCode + ']' : '')}</option>`).join('');
+            siteSelect.innerHTML = '<option value="">Select Site...</option>' + sites.map(site => `<option value="${site.id}">${(site.name || site.location || '(unnamed)') + (site.address ? ' — ' + site.address.split(',')[0] : '') + (site.irisClli ? ' [' + site.irisClli + ']' : (site.name && site.cidCode ? ' [' + site.cidCode + ']' : ''))}</option>`).join('');
             attachSiteCombobox('nniSiteSelect'); syncSiteComboInput('nniSiteSelect');
             
             const equipmentSelect = document.getElementById('nniEquipmentSelect');
@@ -10499,7 +10511,7 @@
             nniFormAllEquipment = equipment;
             
             const siteSelect = document.getElementById('nniSiteSelect');
-            siteSelect.innerHTML = '<option value="">Select Site...</option>' + sites.map(site => `<option value="${site.id}">${(site.name || site.location || '(unnamed)') + (site.address ? ' — ' + site.address.split(',')[0] : '') + (site.name && site.cidCode ? ' [' + site.cidCode + ']' : '')}</option>`).join('');
+            siteSelect.innerHTML = '<option value="">Select Site...</option>' + sites.map(site => `<option value="${site.id}">${(site.name || site.location || '(unnamed)') + (site.address ? ' — ' + site.address.split(',')[0] : '') + (site.irisClli ? ' [' + site.irisClli + ']' : (site.name && site.cidCode ? ' [' + site.cidCode + ']' : ''))}</option>`).join('');
             attachSiteCombobox('nniSiteSelect'); syncSiteComboInput('nniSiteSelect');
             
             const equipmentSelect = document.getElementById('nniEquipmentSelect');
@@ -11390,7 +11402,8 @@
                                 <div style="margin-top: 0.5rem;">
                                     ${step.site ? `
                                         <div style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.25rem;">SITE</div>
-                                        <div style="font-weight: 600; margin-bottom: 0.5rem;">${step.site.name}</div>
+                                        <div style="font-weight: 600; margin-bottom: 0.5rem;">${step.site.irisClli || step.site.name}</div>
+                                        ${step.site.irisClli && step.site.name && step.site.irisClli !== step.site.name ? `<div style="font-size: 0.75rem; color: var(--text-tertiary); margin-bottom: 0.25rem;">${step.site.name}</div>` : ''}
                                         ${step.site.location ? `<div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.75rem;">${step.site.location}</div>` : ''}
                                     ` : '<div style="color: var(--text-tertiary); margin-bottom: 0.75rem;">Site not specified</div>'}
                                     
