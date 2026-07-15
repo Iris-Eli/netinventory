@@ -4917,7 +4917,7 @@
                         <h1 style="font-size: 2rem;">Equipment</h1>
                         <div style="display: flex; gap: 1rem; align-items: center;">
                             <input type="text" placeholder="🔍 Search equipment..." style="padding: 0.5rem 1rem; border: 1px solid var(--border-color); border-radius: 4px; width: 250px;" oninput="filterTable('equipment', this.value)">
-                            <button class="btn-secondary" onclick="exportEntityToExcel('equipment', this)" title="Export Equipment to Excel">⬇️ Export</button><button class="btn-secondary" onclick="openEquipmentImport()" title="Bulk import equipment from CSV/XLSX">⬆️ Import</button><button class="btn-primary" onclick="openAddEquipmentModal()">Add Equipment</button>
+                            <button class="btn-secondary" onclick="autoLinkEquipmentToPops()" title="Auto-link equipment to its PoP/site by CLLI (preview first)">🧭 Link to PoPs</button><button class="btn-secondary" onclick="exportEntityToExcel('equipment', this)" title="Export Equipment to Excel">⬇️ Export</button><button class="btn-secondary" onclick="openEquipmentImport()" title="Bulk import equipment from CSV/XLSX">⬆️ Import</button><button class="btn-primary" onclick="openAddEquipmentModal()">Add Equipment</button>
                         </div>
                     </div>
                     <div class="table-container">
@@ -15152,6 +15152,61 @@ ${entityActionButtons('nni', `${n.id}`, true)}
             }
             return Array.from(plan.values());
         }
+        // 🧭 Auto-link equipment → PoP/site by CLLI (device-name CLLI ↔ site CLLI). Preview-first, non-destructive.
+        let _popLinkPlan = [];
+        async function autoLinkEquipmentToPops() {
+            const [equipment, sites] = await Promise.all([store.getEquipment(), store.getSites()]);
+            const siteByClli = {};
+            sites.forEach(s => { const c = String(s.irisClli || '').toUpperCase().trim(); if (c && !siteByClli[c]) siteByClli[c] = s; });
+            if (!Object.keys(siteByClli).length) {
+                alert('No site CLLIs yet — run 🏷️ Backfill CLLIs on the Sites page first (or add site CLLIs), then this tool can match equipment to sites.');
+                return;
+            }
+            const link = [], conflict = [];
+            equipment.forEach(e => {
+                const clli = String(e.irisClli || '').toUpperCase().trim() || deriveIrisClli(e.name);
+                if (!clli) return;
+                const site = siteByClli[clli];
+                if (!site) return;                              // no site with that CLLI
+                if (!e.siteId) link.push({ e, site, clli });    // only fill empty
+                else if (e.siteId !== site.id) conflict.push({ e, site, clli }); // sited elsewhere → flag, never reassign
+            });
+            if (!link.length && !conflict.length) { alert('Nothing to link — every equipment with a matchable CLLI is already assigned to a site.'); return; }
+            _popLinkPlan = link;
+            const modal = document.createElement('div');
+            modal.className = 'modal active'; modal.id = 'popLinkModal'; modal.style.zIndex = '1200';
+            modal.innerHTML = `<div class="modal-content" style="max-width: 760px; max-height: 85vh; overflow-y: auto;">
+                <div class="modal-header"><h2>🧭 Auto-link Equipment → PoP</h2><button class="close-btn" onclick="document.getElementById('popLinkModal').remove()">&times;</button></div>
+                <div style="padding: 1.5rem;">
+                    <p style="color: var(--text-secondary);">Matches each equipment's CLLI (from its Iris CLLI or device name) to a site with the same CLLI. Only sets equipment that currently has <strong>no</strong> site — nothing is reassigned.</p>
+                    ${link.length ? `<h3 style="margin-top: 1rem;">Will link (${link.length})</h3>
+                        <table style="width: 100%; border-collapse: collapse;"><thead><tr style="text-align: left; border-bottom: 1px solid var(--border-color);"><th style="padding: 0.4rem;">Equipment</th><th style="padding: 0.4rem;">CLLI</th><th style="padding: 0.4rem;">→ Site</th></tr></thead>
+                        <tbody>${link.map(x => `<tr style="border-bottom: 1px solid var(--border-color);"><td style="padding: 0.4rem;">${x.e.name}</td><td style="padding: 0.4rem;"><strong>${x.clli}</strong></td><td style="padding: 0.4rem;">${x.site.name || x.site.id}</td></tr>`).join('')}</tbody></table>` : '<p style="color: var(--text-tertiary);">No unassigned equipment to link.</p>'}
+                    ${conflict.length ? `<h3 style="margin-top: 1.5rem; color: var(--warning);">Already sited elsewhere — review (${conflict.length}, not changed)</h3>
+                        <ul style="padding-left: 1.25rem; color: var(--text-secondary);">${conflict.map(x => `<li>${x.e.name} — CLLI ${x.clli} points to ${x.site.name || x.site.id}, but it's currently on a different site</li>`).join('')}</ul>` : ''}
+                    <div style="display: flex; gap: 0.75rem; margin-top: 1.5rem;">
+                        ${link.length ? `<button class="btn-primary" onclick="applyPopLinks(this)">✅ Link ${link.length} device${link.length === 1 ? '' : 's'}</button>` : ''}
+                        <button class="btn-secondary" onclick="document.getElementById('popLinkModal').remove()">Cancel</button>
+                    </div>
+                </div></div>`;
+            document.body.appendChild(modal);
+        }
+        async function applyPopLinks(btn) {
+            const plan = _popLinkPlan || [];
+            if (!plan.length) return;
+            if (btn) { btn.disabled = true; btn.textContent = 'Linking…'; }
+            let done = 0, failed = 0;
+            for (let i = 0; i < plan.length; i++) {
+                if (i > 0 && i % 50 === 0) await ensureValidToken();
+                try { await graphClient.updateListItem('equipment', plan[i].e._spItemId, { SiteID: plan[i].site.id }); done++; }
+                catch (e) { failed++; console.error('PoP link failed for', plan[i].e.id, e); }
+            }
+            store.clearCache('equipment');
+            const m = document.getElementById('popLinkModal'); if (m) m.remove();
+            alert(`Linked ${done} device${done === 1 ? '' : 's'} to their PoP${failed ? ` · ${failed} failed` : ''}.`);
+            if (typeof renderEquipmentPage === 'function') renderEquipmentPage();
+        }
+
         function deriveIrisClli(deviceName) {
             const m = String(deviceName || '').toUpperCase().match(/^[A-Z]{6}[A-Z0-9]{2}/);
             return m ? m[0] : '';
