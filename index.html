@@ -3247,7 +3247,7 @@
                         <div style="display: flex; gap: 1rem; align-items: center;">
                             <input type="text" id="sitesSearch" placeholder="🔍 Search sites..." style="padding: 0.5rem 1rem; border: 1px solid var(--border-color); border-radius: 4px; width: 250px;" oninput="filterSitesTable(this.value)">
                             <button class="btn-secondary" onclick="openGeocodeModal()" id="bulkGeocodeBtn" ${sitesNeedingGeocode === 0 ? 'disabled' : ''}>${geocodeBtnText}</button>
-                            <button class="btn-secondary" onclick="exportEntityToExcel('sites', this)" title="Export Sites to Excel">⬇️ Export</button><button class="btn-primary" onclick="openAddSiteModal()">Add Site</button>
+                            <button class="btn-secondary" onclick="backfillSiteCllis()" title="Fill blank site CLLIs from assigned equipment (preview first)">🏷️ Backfill CLLIs</button><button class="btn-secondary" onclick="exportEntityToExcel('sites', this)" title="Export Sites to Excel">⬇️ Export</button><button class="btn-primary" onclick="openAddSiteModal()">Add Site</button>
                         </div>
                     </div>
                     <div class="table-container">
@@ -3919,6 +3919,63 @@
             await bulkGeocodeSites(count);
         }
         
+        // 🏷️ Backfill blank site CLLIs from the CLLIs of equipment already assigned to each site.
+        // Preview-first, non-destructive (skips sites that already have a CLLI), unambiguous-only (mixed → review).
+        let _clliBackfillConfident = [];
+        async function backfillSiteCllis() {
+            const [sites, equipment] = await Promise.all([store.getSites(), store.getEquipment()]);
+            const confident = [], review = [];
+            sites.forEach(site => {
+                if (String(site.irisClli || '').trim()) return; // never overwrite an existing CLLI
+                const tally = {};
+                equipment.filter(e => e.siteId === site.id).forEach(e => {
+                    const clli = String(e.irisClli || '').toUpperCase().trim() || deriveIrisClli(e.name);
+                    if (clli) tally[clli] = (tally[clli] || 0) + 1;
+                });
+                const cands = Object.entries(tally).sort((a, b) => b[1] - a[1]);
+                if (!cands.length) return;                       // no equipment with a derivable CLLI
+                if (cands.length === 1) confident.push({ site, candidate: cands[0][0], count: cands[0][1] });
+                else review.push({ site, cands });
+            });
+            if (!confident.length && !review.length) {
+                alert('No sites to backfill — every site already has a CLLI, or has no equipment with a derivable CLLI.');
+                return;
+            }
+            _clliBackfillConfident = confident;
+            const modal = document.createElement('div');
+            modal.className = 'modal active'; modal.id = 'clliBackfillModal'; modal.style.zIndex = '1200';
+            modal.innerHTML = `<div class="modal-content" style="max-width: 720px; max-height: 85vh; overflow-y: auto;">
+                <div class="modal-header"><h2>🏷️ Backfill Site CLLIs</h2><button class="close-btn" onclick="document.getElementById('clliBackfillModal').remove()">&times;</button></div>
+                <div style="padding: 1.5rem;">
+                    <p style="color: var(--text-secondary);">Derived from the CLLI of equipment already assigned to each site. Only fills sites with a <strong>blank</strong> CLLI — nothing is overwritten.</p>
+                    ${confident.length ? `<h3 style="margin-top: 1rem;">Will set (${confident.length})</h3>
+                        <table style="width: 100%; border-collapse: collapse;"><thead><tr style="text-align: left; border-bottom: 1px solid var(--border-color);"><th style="padding: 0.4rem;">Site</th><th style="padding: 0.4rem;">CLLI</th><th style="padding: 0.4rem;">from</th></tr></thead>
+                        <tbody>${confident.map(c => `<tr style="border-bottom: 1px solid var(--border-color);"><td style="padding: 0.4rem;">${c.site.name || c.site.id}</td><td style="padding: 0.4rem;"><strong>${c.candidate}</strong></td><td style="padding: 0.4rem; color: var(--text-tertiary);">${c.count} device${c.count === 1 ? '' : 's'}</td></tr>`).join('')}</tbody></table>` : '<p style="color: var(--text-tertiary);">No unambiguous sites to set.</p>'}
+                    ${review.length ? `<h3 style="margin-top: 1.5rem; color: var(--warning);">Needs review — mixed CLLIs (${review.length}, not applied)</h3>
+                        <ul style="padding-left: 1.25rem; color: var(--text-secondary);">${review.map(r => `<li>${r.site.name || r.site.id}: ${r.cands.map(c => c[0] + ' (' + c[1] + ')').join(', ')}</li>`).join('')}</ul>` : ''}
+                    <div style="display: flex; gap: 0.75rem; margin-top: 1.5rem;">
+                        ${confident.length ? `<button class="btn-primary" onclick="applyClliBackfill(this)">✅ Set ${confident.length} CLLI${confident.length === 1 ? '' : 's'}</button>` : ''}
+                        <button class="btn-secondary" onclick="document.getElementById('clliBackfillModal').remove()">Cancel</button>
+                    </div>
+                </div></div>`;
+            document.body.appendChild(modal);
+        }
+        async function applyClliBackfill(btn) {
+            const plan = _clliBackfillConfident || [];
+            if (!plan.length) return;
+            if (btn) { btn.disabled = true; btn.textContent = 'Setting…'; }
+            let done = 0, failed = 0;
+            for (let i = 0; i < plan.length; i++) {
+                if (i > 0 && i % 50 === 0) await ensureValidToken();
+                try { await graphClient.updateListItem('sites', plan[i].site._spItemId, { IrisCLLI: plan[i].candidate }); done++; }
+                catch (e) { failed++; console.error('CLLI backfill failed for', plan[i].site.id, e); }
+            }
+            store.clearCache('sites');
+            const m = document.getElementById('clliBackfillModal'); if (m) m.remove();
+            alert(`Set ${done} site CLLI${done === 1 ? '' : 's'}${failed ? ` · ${failed} failed` : ''}.`);
+            if (typeof renderSitesPage === 'function') renderSitesPage();
+        }
+
         async function bulkGeocodeSites(batchSize = null) {
             const btn = document.getElementById('bulkGeocodeBtn');
             if (btn && btn.disabled) return;
