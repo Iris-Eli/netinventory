@@ -761,6 +761,9 @@
             <div class="nav-item" onclick="navigateTo('health')">
                 <span>🩺</span> Health
             </div>
+            <div class="nav-item" onclick="navigateTo('activity')">
+                <span>📝</span> Activity
+            </div>
             <div class="nav-item" onclick="navigateTo('sites')">
                 <span>🏢</span> Sites
             </div>
@@ -2818,6 +2821,85 @@
                     <ul style="padding-left: 1.5rem;">${rows.slice(0, MAX).map(lineFn).join('')}</ul>
                     ${rows.length > MAX ? `<div style="color: var(--text-tertiary); font-size: 0.85rem;">…and ${rows.length - MAX} more (use page export for the full list)</div>` : ''}
                 </div>`;
+        }
+
+        // 📝 Activity — filterable change history across all entities (SharePoint Modified/Editor/Created).
+        let _activityAll = [];
+        function _timeAgo(d) {
+            const s = Math.floor((Date.now() - d.getTime()) / 1000);
+            if (s < 60) return 'just now';
+            if (s < 3600) return Math.floor(s / 60) + 'm ago';
+            if (s < 86400) return Math.floor(s / 3600) + 'h ago';
+            if (s < 604800) return Math.floor(s / 86400) + 'd ago';
+            return d.toLocaleDateString();
+        }
+        async function renderActivityPage() {
+            const [sites, racks, equipment, fdps, circuits, nnis, dfRoutes] = await Promise.all([
+                store.getSites(), store.getRacks(), store.getEquipment(), store.getFdps(), store.getCircuits(), store.getNnis(), store.getDarkFiberRoutes().catch(() => [])
+            ]);
+            _activityAll = [];
+            const mk = (items, label, icon, qaType, nameFn) => (items || []).forEach(i => {
+                if (!i._modified) return;
+                const when = new Date(i._modified);
+                if (isNaN(when.getTime())) return;
+                _activityAll.push({ when, type: label, icon, qaType, id: i.id, name: nameFn(i) || '(unnamed)', who: i._modifiedBy || '—', isNew: !!(i._created && (when - new Date(i._created) < 60000)) });
+            });
+            mk(sites, 'Site', '🏢', 'site', i => i.name);
+            mk(racks, 'Rack', '🗄️', 'rack', i => i.name);
+            mk(equipment, 'Equipment', '🖥️', 'equipment', i => i.name);
+            mk(fdps, 'FDP', '🔆', 'fdp', i => i.name);
+            mk(circuits, 'Circuit', '⚡', 'circuit', i => i.circuitId || i.id);
+            mk(nnis, 'NNI', '🔗', 'nni', i => i.name);
+            mk(dfRoutes, 'DF Route', '🌑', 'dfroute', i => i.routeName || i.name);
+            _activityAll.sort((a, b) => b.when - a.when);
+            const users = [...new Set(_activityAll.map(a => a.who).filter(w => w && w !== '—'))].sort();
+            const types = ['Site', 'Rack', 'Equipment', 'FDP', 'Circuit', 'NNI', 'DF Route'];
+            const sel = 'padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-primary); color: var(--text-primary);';
+            content.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                    <h1 style="font-size: 2rem;">📝 Activity</h1>
+                    <button class="btn-secondary" onclick="renderActivityPage()">🔄 Refresh</button>
+                </div>
+                <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center; margin-bottom: 1rem;">
+                    <input id="actSearch" type="text" placeholder="🔍 Filter by name…" oninput="renderActivityTable()" style="flex: 1; min-width: 180px; ${sel}">
+                    <select id="actType" onchange="renderActivityTable()" style="${sel}"><option value="">All types</option>${types.map(t => `<option value="${t}">${t}</option>`).join('')}</select>
+                    <select id="actWho" onchange="renderActivityTable()" style="${sel}"><option value="">Anyone</option>${users.map(u => `<option value="${u.replace(/"/g, '&quot;')}">${u}</option>`).join('')}</select>
+                    <select id="actWhen" onchange="renderActivityTable()" style="${sel}"><option value="0">Any time</option><option value="1">Last 24h</option><option value="7">Last 7 days</option><option value="30">Last 30 days</option></select>
+                    <select id="actKind" onchange="renderActivityTable()" style="${sel}"><option value="">New & edited</option><option value="new">New only</option><option value="edited">Edited only</option></select>
+                </div>
+                <div id="actCount" style="color: var(--text-tertiary); font-size: 0.85rem; margin-bottom: 0.5rem;"></div>
+                <div style="overflow-x: auto;"><table style="width: 100%; border-collapse: collapse; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 0.5rem;">
+                    <thead><tr style="background: var(--bg-secondary);"><th style="padding: 0.6rem; text-align: left;">When</th><th style="padding: 0.6rem; text-align: left;">Type</th><th style="padding: 0.6rem; text-align: left;">Name</th><th style="padding: 0.6rem; text-align: left;">By</th><th style="padding: 0.6rem; text-align: left;">Change</th></tr></thead>
+                    <tbody id="actBody"></tbody>
+                </table></div>`;
+            renderActivityTable();
+        }
+        function renderActivityTable() {
+            const body = document.getElementById('actBody'); if (!body) return;
+            const q = (document.getElementById('actSearch')?.value || '').toLowerCase().trim();
+            const type = document.getElementById('actType')?.value || '';
+            const who = document.getElementById('actWho')?.value || '';
+            const days = parseInt(document.getElementById('actWhen')?.value || '0', 10);
+            const kind = document.getElementById('actKind')?.value || '';
+            const cutoff = days ? Date.now() - days * 86400000 : 0;
+            const rows = _activityAll.filter(a =>
+                (!type || a.type === type) &&
+                (!who || a.who === who) &&
+                (!cutoff || a.when.getTime() >= cutoff) &&
+                (!kind || (kind === 'new' ? a.isNew : !a.isNew)) &&
+                (!q || a.name.toLowerCase().includes(q) || a.who.toLowerCase().includes(q))
+            );
+            const CAP = 300, shown = rows.slice(0, CAP);
+            const countEl = document.getElementById('actCount');
+            if (countEl) countEl.textContent = `${rows.length} change${rows.length === 1 ? '' : 's'}${rows.length > CAP ? ` (showing first ${CAP})` : ''}`;
+            body.innerHTML = shown.length ? shown.map((a, idx) => `
+                <tr style="border-bottom: 1px solid var(--border-color); ${idx % 2 === 0 ? 'background: var(--bg-tertiary);' : ''}">
+                    <td style="padding: 0.6rem; color: var(--text-secondary); white-space: nowrap;" title="${a.when.toLocaleString()}">${_timeAgo(a.when)}</td>
+                    <td style="padding: 0.6rem;">${a.icon} ${a.type}</td>
+                    <td style="padding: 0.6rem;"><a href="javascript:void(0)" onclick="showQuickActions('${a.qaType}','${a.id}')" style="color: var(--accent-primary); text-decoration: none; cursor: pointer;">${a.name}</a></td>
+                    <td style="padding: 0.6rem; color: var(--text-secondary);">${a.who}</td>
+                    <td style="padding: 0.6rem;">${a.isNew ? '<span style="color: var(--success); font-weight: 600;">＋ New</span>' : '<span style="color: var(--text-tertiary);">Edited</span>'}</td>
+                </tr>`).join('') : '<tr><td colspan="5" style="padding: 2rem; text-align: center; color: var(--text-tertiary);">No matching activity.</td></tr>';
         }
 
         // 🩺 Inventory Health — integrity, duplicates, and completeness grouped by severity.
@@ -15437,7 +15519,7 @@ ${entityActionButtons('nni', `${n.id}`, true)}
         //   .../#/circuit/{id}          -> circuit details   .../#/circuit/{id}/dlr -> DLR viewer
         //   .../#/equipment/{id}  .../#/fdp/{id}  .../#/nni/{id}  .../#/rack/{id}  .../#/darkfiber/{id}
         // Hashes NOT starting with '#/' (e.g. MSAL auth #code=...) are ignored.
-        const VALID_ROUTE_PAGES = ['dashboard','health','duplicates','sites','siteMap','racks','equipment','templates','darkfiber','fdps','availablePorts','circuits','nnis','search'];
+        const VALID_ROUTE_PAGES = ['dashboard','health','activity','duplicates','sites','siteMap','racks','equipment','templates','darkfiber','fdps','availablePorts','circuits','nnis','search'];
         const ENTITY_ROUTES = { site: 'sites', circuit: 'circuits', equipment: 'equipment', fdp: 'fdps', nni: 'nnis', rack: 'racks', darkfiber: 'darkfiber' };
         let _routingSuppress = false;
         let _routeApplying = false;
@@ -15645,6 +15727,8 @@ ${entityActionButtons('nni', `${n.id}`, true)}
                 }
             } else if (page === 'health' || page === 'duplicates') {
                 await renderHealthPage();
+            } else if (page === 'activity') {
+                await renderActivityPage();
             } else if (page === 'sites') {
                 await renderSitesPage();
             } else if (page === 'siteMap') {
