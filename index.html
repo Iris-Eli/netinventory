@@ -3335,7 +3335,7 @@
                         </div>
                     </div>
                     <div class="table-container">
-                        <table id="sitesTable">
+                        <table id="sitesTable" class="js-colfilter">
                             <thead>
                                 <tr>
                                     <th>Site ID</th>
@@ -3375,7 +3375,6 @@
                         </table>
                     </div>
                 `;
-                enableColumnFilters(document.getElementById('sitesTable'), [0, 1, 2, 3, 4, 5, 6, 7]);
             } catch (error) {
                 console.error('Sites error:', error);
                 content.innerHTML = `
@@ -3412,6 +3411,7 @@
             if (!table || table._colFiltersReady) return;
             const headRow = table.querySelector('thead tr');
             if (!headRow) return;
+            if (!filterableCols) filterableCols = Array.from({ length: Math.max(0, headRow.children.length - 1) }, (_, i) => i); // default: every column except the last (Actions)
             table._colFilters = {};
             table._colFiltersReady = true;
             const tr = document.createElement('tr');
@@ -3429,14 +3429,16 @@
         function openColFilterPopup(btn) {
             document.querySelectorAll('.col-filter-popup').forEach(p => p.remove());
             const table = btn.closest('table'), ci = +btn.getAttribute('data-col');
-            const vals = new Map();
+            const vals = new Map(); // key -> { disp, count }
             table.querySelectorAll('tbody tr[data-searchable]').forEach(row => {
                 const cell = row.children[ci];
                 const disp = cell ? cell.textContent.trim() : '';
-                if (!vals.has(disp.toLowerCase())) vals.set(disp.toLowerCase(), disp || '(blank)');
+                const key = disp.toLowerCase();
+                const rec = vals.get(key);
+                if (rec) rec.count++; else vals.set(key, { disp: disp || '(blank)', count: 1 });
             });
             const sel = table._colFilters[ci] || new Set();
-            const entries = [...vals.entries()].sort((a, b) => a[1].localeCompare(b[1]));
+            const entries = [...vals.entries()].sort((a, b) => a[1].disp.localeCompare(b[1].disp));
             const pop = document.createElement('div');
             pop.className = 'col-filter-popup';
             const r = btn.getBoundingClientRect();
@@ -3450,7 +3452,7 @@
                     </div>
                 </div>
                 <div class="col-filter-list" style="overflow-y: auto; padding: 0.3rem 0.5rem;">
-                    ${entries.map(([k, d]) => `<label style="display: flex; align-items: center; gap: 0.5rem; padding: 0.2rem 0; font-size: 0.85rem; cursor: pointer;"><input type="checkbox" value="${k.replace(/"/g, '&quot;')}" ${(!sel.size || sel.has(k)) ? 'checked' : ''} onchange="_colFilterApply(this)"><span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${d}</span></label>`).join('')}
+                    ${entries.map(([k, v]) => `<label style="display: flex; align-items: center; gap: 0.5rem; padding: 0.2rem 0; font-size: 0.85rem; cursor: pointer;"><input type="checkbox" value="${k.replace(/"/g, '&quot;')}" ${(!sel.size || sel.has(k)) ? 'checked' : ''} onchange="_colFilterApply(this)"><span class="cf-val" style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${v.disp}</span><span style="color: var(--text-tertiary); font-size: 0.78rem;">${v.count}</span></label>`).join('')}
                 </div>`;
             pop._table = table; pop._ci = ci; pop._btn = btn;
             document.body.appendChild(pop);
@@ -3468,7 +3470,7 @@
         function _colFilterSearch(input) {
             const q = input.value.toLowerCase().trim();
             const list = input.closest('.col-filter-popup').querySelector('.col-filter-list');
-            list.querySelectorAll('label').forEach(l => { l.style.display = (!q || (l.textContent || '').toLowerCase().includes(q)) ? 'flex' : 'none'; });
+            list.querySelectorAll('label').forEach(l => { const v = l.querySelector('.cf-val'); const txt = ((v ? v.textContent : l.textContent) || '').toLowerCase(); l.style.display = (!q || txt.includes(q)) ? 'flex' : 'none'; });
         }
         function _colFilterApply(cb) { _colFilterCommit(cb.closest('.col-filter-popup')); }
         function _colFilterCommit(pop) {
@@ -3479,6 +3481,16 @@
             else { table._colFilters[ci] = new Set(checked); btn.textContent = `${checked.length} selected ▾`; btn.style.fontWeight = '600'; btn.style.color = 'var(--accent-primary)'; }
             applyTableFilters(table);
         }
+
+        // Auto-enable column filters on any list table tagged .js-colfilter as pages render into #content.
+        (function _initColFilterObserver() {
+            const target = document.getElementById('content');
+            if (!target || window._cfObserver) return;
+            window._cfObserver = new MutationObserver(() => {
+                target.querySelectorAll('table.js-colfilter').forEach(t => { if (!t._colFiltersReady) enableColumnFilters(t); });
+            });
+            window._cfObserver.observe(target, { childList: true, subtree: true });
+        })();
 
         function filterRacksTable(searchTerm) {
             const r0 = document.querySelector('.rack-row'); const table = r0 && r0.closest('table');
@@ -4734,7 +4746,7 @@
                         </div>
                     </div>
                     <div class="table-container">
-                        <table>
+                        <table class="js-colfilter">
                             <thead>
                                 <tr>
                                     <th>Rack ID</th>
@@ -5772,7 +5784,7 @@
                         <button class="btn-secondary" onclick="exportEntityToExcel('fdps', this)" title="Export FDPs to Excel">⬇️ Export</button><button class="btn-primary" onclick="openAddFdpModal()">Add FDP</button>
                     </div>
                     <div class="table-container">
-                        <table>
+                        <table class="js-colfilter">
                             <thead>
                                 <tr>
                                     <th>FDP ID</th>
@@ -7768,7 +7780,7 @@
                         </div>
                     </div>
                     <div class="table-container">
-                        <table>
+                        <table class="js-colfilter">
                             <thead>
                                 <tr>
                                     <th>Circuit ID</th>
@@ -10636,7 +10648,7 @@
                         </div>
                     </div>
                     <div class="table-container">
-                        <table>
+                        <table class="js-colfilter">
                             <thead>
                                 <tr>
                                     <th>NNI Name</th>
