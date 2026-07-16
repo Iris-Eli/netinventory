@@ -10931,7 +10931,34 @@
                 nni.equipmentID ? store.getEquipment().then(e => e.find(eq => eq.id === nni.equipmentID)) : Promise.resolve(null),
                 nni.fdpId ? store.getFdps().then(f => f.find(fdp => fdp.id === nni.fdpId)) : Promise.resolve(null)
             ]);
-            
+
+            // VLAN / subinterface allocations on this NNI: scan top-level {a,z}Nni + per-VLAN circuitVlans refs.
+            const allCircuitsForNni = await store.getCircuits();
+            const allocMap = new Map(); // subinterface -> Map(circuitId|end|vlan -> {circuit,end,vlan})
+            const addAlloc = (subif, circuit, end, vlan) => {
+                const sk = subif && subif !== '-' ? subif : '(unset)';
+                if (!allocMap.has(sk)) allocMap.set(sk, new Map());
+                const inner = allocMap.get(sk), ik = circuit.id + '|' + end + '|' + (vlan || '');
+                if (!inner.has(ik)) inner.set(ik, { circuit, end, vlan });
+            };
+            allCircuitsForNni.forEach(c => {
+                if (c.aNni === nniId) addAlloc(normalizeSubinterface(c.aNniSubinterface || ''), c, 'A', '');
+                if (c.zNni === nniId) addAlloc(normalizeSubinterface(c.zNniSubinterface || ''), c, 'Z', '');
+                const vlans = safeParseJson(c.circuitVlans, []);
+                (Array.isArray(vlans) ? vlans : []).forEach(v => {
+                    const vn = v.vlanNumber || v.vlanId || '';
+                    if (v.aNni === nniId) addAlloc(normalizeSubinterface(v.aNniSubinterface || c.aNniSubinterface || ''), c, 'A', vn);
+                    if (v.zNni === nniId) addAlloc(normalizeSubinterface(v.zNniSubinterface || c.zNniSubinterface || ''), c, 'Z', vn);
+                });
+            });
+            const usageRows = []; let conflictCount = 0;
+            [...allocMap.entries()].sort((a, b) => String(a[0]).localeCompare(String(b[0]), undefined, { numeric: true })).forEach(([sk, inner]) => {
+                const items = [...inner.values()];
+                const conflict = new Set(items.map(i => i.circuit.id)).size > 1; // same subinterface, different circuits
+                if (conflict) conflictCount++;
+                items.forEach(i => usageRows.push({ _subif: sk, _vlan: i.vlan || '', circuitId: i.circuit.circuitId || i.circuit.id, _end: i.end, status: i.circuit.status || '', _flag: conflict ? '⚠️ shared' : '', id: i.circuit.id }));
+            });
+
             const directionLabel = nni.direction === 'customer' ? 'Customer' : nni.direction === 'type-ii-provider' ? 'Type II Provider' : 'Router/Internal';
             
             showViewModal({
@@ -10966,11 +10993,22 @@
                             { label: '👁️ View', onclick: (circuit) => `stackViewModal(); viewCircuitDetails('${circuit.id}')`, tooltip: 'View circuit details' },
                             { label: '📄 DLR', onclick: (circuit) => `closeViewModal(); viewDLR('${circuit.id}')`, tooltip: 'View Design Layout Record' }
                         ]
+                    },
+                    {
+                        title: `VLAN / Subinterface Usage (${usageRows.length} allocation${usageRows.length === 1 ? '' : 's'}${conflictCount ? `, ⚠️ ${conflictCount} conflict${conflictCount === 1 ? '' : 's'}` : ''})`,
+                        type: 'table',
+                        data: usageRows,
+                        columns: ['_subif', '_vlan', 'circuitId', '_end', 'status', '_flag'],
+                        headers: ['Subinterface', 'VLAN', 'Circuit', 'End', 'Status', 'Flag'],
+                        emptyMessage: 'No subinterface/VLAN allocations found on this NNI',
+                        actions: [
+                            { label: '👁️ View', onclick: (r) => `stackViewModal(); viewCircuitDetails('${r.id}')`, tooltip: 'View circuit details' }
+                        ]
                     }
                 ]
             });
         }
-        
+
         async function viewRackDetails(rackId) {
             const rack = (await store.getRacks()).find(r => r.id === rackId);
             if (!rack) {
