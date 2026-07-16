@@ -1808,6 +1808,7 @@
                             <option value="Office">Office</option>
                             <option value="Remote">Remote</option>
                             <option value="Co-Location">Co-Location</option>
+                            <option value="PoP">PoP</option>
                         </select>
                     </div>
                     <div class="form-group">
@@ -3331,7 +3332,7 @@
                         <div style="display: flex; gap: 1rem; align-items: center;">
                             <input type="text" id="sitesSearch" placeholder="🔍 Search sites..." style="padding: 0.5rem 1rem; border: 1px solid var(--border-color); border-radius: 4px; width: 250px;" oninput="filterSitesTable(this.value)">
                             <button class="btn-secondary" onclick="openGeocodeModal()" id="bulkGeocodeBtn" ${sitesNeedingGeocode === 0 ? 'disabled' : ''}>${geocodeBtnText}</button>
-                            <button class="btn-secondary" onclick="backfillSiteCllis()" title="Fill blank site CLLIs from assigned equipment (preview first)">🏷️ Backfill CLLIs</button><button class="btn-secondary" onclick="exportEntityToExcel('sites', this)" title="Export Sites to Excel">⬇️ Export</button><button class="btn-primary" onclick="openAddSiteModal()">Add Site</button>
+                            <button class="btn-secondary" onclick="reviewPoPPhotos()" title="Find PoP sites with no photo in the last 3 months">📸 PoP Photo Review</button><button class="btn-secondary" onclick="backfillSiteCllis()" title="Fill blank site CLLIs from assigned equipment (preview first)">🏷️ Backfill CLLIs</button><button class="btn-secondary" onclick="exportEntityToExcel('sites', this)" title="Export Sites to Excel">⬇️ Export</button><button class="btn-primary" onclick="openAddSiteModal()">Add Site</button>
                         </div>
                     </div>
                     <div class="table-container">
@@ -4099,6 +4100,45 @@
             await bulkGeocodeSites(count);
         }
         
+        // 📸 PoP Photo Review — find PoP sites with no photo (or none in the last 3 months). On-demand.
+        async function reviewPoPPhotos() {
+            const sites = await store.getSites();
+            const pops = sites.filter(s => String(s.type || '').toLowerCase() === 'pop');
+            if (!pops.length) { alert('No PoP sites found. Set a site\'s Type to "PoP" to include it.'); return; }
+            const modal = document.createElement('div');
+            modal.className = 'modal active'; modal.id = 'popPhotoModal'; modal.style.zIndex = '1200';
+            modal.innerHTML = `<div class="modal-content" style="max-width: 720px; max-height: 85vh; overflow-y: auto;">
+                <div class="modal-header"><h2>📸 PoP Photo Review</h2><button class="close-btn" onclick="document.getElementById('popPhotoModal').remove()">&times;</button></div>
+                <div style="padding: 1.5rem;">
+                    <p style="color: var(--text-secondary);">Checking ${pops.length} PoP site${pops.length === 1 ? '' : 's'} for photos in the last 3 months…</p>
+                    <div style="width: 100%; background: var(--bg-tertiary); border-radius: 8px; height: 22px; overflow: hidden; margin: 0.5rem 0;"><div id="popPhotoBar" style="width: 0%; height: 100%; background: var(--accent-primary); transition: width 0.2s;"></div></div>
+                    <div id="popPhotoResults"></div>
+                </div></div>`;
+            document.body.appendChild(modal);
+            const bar = document.getElementById('popPhotoBar');
+            const cutoff = Date.now() - 90 * 86400000;
+            const due = [];
+            for (let i = 0; i < pops.length; i++) {
+                if (i > 0 && i % 50 === 0) await ensureValidToken();
+                const s = pops[i];
+                let latest = 0, count = 0;
+                try {
+                    const res = await graphClient.callAPI(await storageEndpoint('sitePhotos', `${s.id}:/children?$top=200`));
+                    (res.value || []).forEach(f => { if (f.file) { count++; const t = Date.parse(f.lastModifiedDateTime || ''); if (t > latest) latest = t; } });
+                } catch (e) { /* no folder yet = no photos */ }
+                if (count === 0 || latest < cutoff) due.push({ s, count, latest });
+                if (bar) bar.style.width = Math.round(((i + 1) / pops.length) * 100) + '%';
+            }
+            const results = document.getElementById('popPhotoResults');
+            if (!results) return; // modal was closed
+            const ago = t => t ? Math.floor((Date.now() - t) / 86400000) + 'd ago' : 'never';
+            results.innerHTML = `<h3 style="margin-top: 0.75rem;">${due.length} of ${pops.length} PoP${due.length === 1 ? '' : 's'} due for photos</h3>
+                ${due.length ? `<div style="overflow-x: auto;"><table style="width: 100%; border-collapse: collapse;">
+                    <thead><tr style="text-align: left; border-bottom: 1px solid var(--border-color);"><th style="padding: 0.4rem;">PoP Site</th><th style="padding: 0.4rem;">Photos</th><th style="padding: 0.4rem;">Last photo</th><th style="padding: 0.4rem;"></th></tr></thead>
+                    <tbody>${due.map(d => `<tr style="border-bottom: 1px solid var(--border-color);"><td style="padding: 0.4rem;">${d.s.name || d.s.id}${d.s.irisClli ? ` <span style="color: var(--text-tertiary);">[${d.s.irisClli}]</span>` : ''}</td><td style="padding: 0.4rem;">${d.count}</td><td style="padding: 0.4rem; color: ${d.latest ? 'var(--text-secondary)' : 'var(--danger)'};">${ago(d.latest)}</td><td style="padding: 0.4rem;"><button class="btn-secondary" style="padding: 0.15rem 0.5rem; font-size: 0.8rem;" onclick="document.getElementById('popPhotoModal').remove(); viewSitePhotos('${d.s.id}')">📷 Photos</button></td></tr>`).join('')}</tbody></table></div>`
+                : '<div style="color: var(--success); padding: 0.5rem 0;">✅ Every PoP site has a photo from the last 3 months.</div>'}`;
+        }
+
         // 🏷️ Backfill blank site CLLIs from the CLLIs of equipment already assigned to each site.
         // Preview-first, non-destructive (skips sites that already have a CLLI), unambiguous-only (mixed → review).
         let _clliBackfillConfident = [];
