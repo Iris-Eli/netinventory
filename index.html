@@ -3398,13 +3398,17 @@
             }
             return true;
         }
+        function _dataRows(table) {
+            // Real data rows only — skip empty-state / group rows that span columns.
+            return [...table.querySelectorAll('tbody tr')].filter(r => r.children.length >= 2 && !r.querySelector('td[colspan]'));
+        }
         function applyTableFilters(table, term) {
             if (!table) return;
             if (term !== undefined) table._searchTerm = (term || '').toLowerCase().trim();
             const t = table._searchTerm || '';
-            table.querySelectorAll('tbody tr[data-searchable]').forEach(row => {
-                const s = row.getAttribute('data-searchable') || '';
-                row.style.display = ((!t || s.includes(t)) && _rowPassesCols(table, row)) ? '' : 'none';
+            _dataRows(table).forEach(row => {
+                const hay = (row.getAttribute('data-searchable') || row.textContent || '').toLowerCase();
+                row.style.display = ((!t || hay.includes(t)) && _rowPassesCols(table, row)) ? '' : 'none';
             });
         }
         function enableColumnFilters(table, filterableCols) {
@@ -3430,7 +3434,7 @@
             document.querySelectorAll('.col-filter-popup').forEach(p => p.remove());
             const table = btn.closest('table'), ci = +btn.getAttribute('data-col');
             const vals = new Map(); // key -> { disp, count }
-            table.querySelectorAll('tbody tr[data-searchable]').forEach(row => {
+            _dataRows(table).forEach(row => {
                 const cell = row.children[ci];
                 const disp = cell ? cell.textContent.trim() : '';
                 const key = disp.toLowerCase();
@@ -13462,7 +13466,7 @@ ${entityActionButtons('nni', `${n.id}`, true)}
                     </div>
                     
                     <div class="table-container">
-                        <table>
+                        <table class="js-colfilter">
                             <thead>
                                 <tr>
                                     <th>Route ID</th>
