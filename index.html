@@ -3375,6 +3375,7 @@
                         </table>
                     </div>
                 `;
+                enableColumnFilters(document.getElementById('sitesTable'), [0, 1, 2, 3, 4, 5, 6, 7]);
             } catch (error) {
                 console.error('Sites error:', error);
                 content.innerHTML = `
@@ -3386,22 +3387,98 @@
             }
         }
         
-        function filterRacksTable(searchTerm) {
-            const rows = document.querySelectorAll('.rack-row');
-            const term = searchTerm.toLowerCase();
-            rows.forEach(row => {
-                const searchable = row.getAttribute('data-searchable');
-                row.style.display = searchable.includes(term) ? '' : 'none';
+        // ===== Excel-style per-column filters: persistent filter row + multi-select popups =====
+        // State on the table element: table._colFilters = { colIndex: Set(lowercased values) }, table._searchTerm.
+        function _rowPassesCols(table, row) {
+            const st = table._colFilters; if (!st) return true;
+            for (const ci in st) {
+                const set = st[ci];
+                if (!set || !set.size) continue;
+                const cell = row.children[+ci];
+                if (!set.has((cell ? cell.textContent.trim() : '').toLowerCase())) return false;
+            }
+            return true;
+        }
+        function applyTableFilters(table, term) {
+            if (!table) return;
+            if (term !== undefined) table._searchTerm = (term || '').toLowerCase().trim();
+            const t = table._searchTerm || '';
+            table.querySelectorAll('tbody tr[data-searchable]').forEach(row => {
+                const s = row.getAttribute('data-searchable') || '';
+                row.style.display = ((!t || s.includes(t)) && _rowPassesCols(table, row)) ? '' : 'none';
             });
+        }
+        function enableColumnFilters(table, filterableCols) {
+            if (!table || table._colFiltersReady) return;
+            const headRow = table.querySelector('thead tr');
+            if (!headRow) return;
+            table._colFilters = {};
+            table._colFiltersReady = true;
+            const tr = document.createElement('tr');
+            tr.className = 'col-filter-row';
+            for (let ci = 0; ci < headRow.children.length; ci++) {
+                const th = document.createElement('th');
+                th.style.cssText = 'padding: 0.2rem 0.35rem; background: var(--bg-secondary); border-bottom: 1px solid var(--border-color);';
+                if (filterableCols.includes(ci)) {
+                    th.innerHTML = `<button type="button" class="col-filter-btn" data-col="${ci}" onclick="openColFilterPopup(this)" style="width: 100%; text-align: left; padding: 0.2rem 0.4rem; font-size: 0.75rem; font-weight: 400; background: var(--bg-primary); color: var(--text-secondary); border: 1px solid var(--border-color); border-radius: 3px; cursor: pointer;">All ▾</button>`;
+                }
+                tr.appendChild(th);
+            }
+            headRow.parentNode.appendChild(tr);
+        }
+        function openColFilterPopup(btn) {
+            document.querySelectorAll('.col-filter-popup').forEach(p => p.remove());
+            const table = btn.closest('table'), ci = +btn.getAttribute('data-col');
+            const vals = new Map();
+            table.querySelectorAll('tbody tr[data-searchable]').forEach(row => {
+                const cell = row.children[ci];
+                const disp = cell ? cell.textContent.trim() : '';
+                if (!vals.has(disp.toLowerCase())) vals.set(disp.toLowerCase(), disp || '(blank)');
+            });
+            const sel = table._colFilters[ci] || new Set();
+            const entries = [...vals.entries()].sort((a, b) => a[1].localeCompare(b[1]));
+            const pop = document.createElement('div');
+            pop.className = 'col-filter-popup';
+            const r = btn.getBoundingClientRect();
+            pop.style.cssText = `position: fixed; top: ${r.bottom + 4}px; left: ${Math.max(4, Math.min(r.left, window.innerWidth - 274))}px; z-index: 1600; width: 260px; max-height: 340px; display: flex; flex-direction: column; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 6px; box-shadow: 0 6px 20px rgba(0,0,0,0.35);`;
+            pop.innerHTML = `
+                <div style="padding: 0.5rem; border-bottom: 1px solid var(--border-color); display: flex; gap: 0.4rem;">
+                    <button type="button" class="btn-secondary" style="flex: 1; padding: 0.2rem; font-size: 0.75rem;" onclick="_colFilterAll(this, true)">Select all</button>
+                    <button type="button" class="btn-secondary" style="flex: 1; padding: 0.2rem; font-size: 0.75rem;" onclick="_colFilterAll(this, false)">Clear</button>
+                </div>
+                <div style="overflow-y: auto; padding: 0.3rem 0.5rem;">
+                    ${entries.map(([k, d]) => `<label style="display: flex; align-items: center; gap: 0.5rem; padding: 0.2rem 0; font-size: 0.85rem; cursor: pointer;"><input type="checkbox" value="${k.replace(/"/g, '&quot;')}" ${(!sel.size || sel.has(k)) ? 'checked' : ''} onchange="_colFilterApply(this)"><span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${d}</span></label>`).join('')}
+                </div>`;
+            pop._table = table; pop._ci = ci; pop._btn = btn;
+            document.body.appendChild(pop);
+            setTimeout(() => {
+                const onDoc = (e) => { if (!pop.contains(e.target) && e.target !== btn) { pop.remove(); document.removeEventListener('mousedown', onDoc); } };
+                document.addEventListener('mousedown', onDoc);
+            }, 0);
+        }
+        function _colFilterAll(el, checked) {
+            const pop = el.closest('.col-filter-popup');
+            pop.querySelectorAll('input[type=checkbox]').forEach(cb => cb.checked = checked);
+            _colFilterCommit(pop);
+        }
+        function _colFilterApply(cb) { _colFilterCommit(cb.closest('.col-filter-popup')); }
+        function _colFilterCommit(pop) {
+            const table = pop._table, ci = pop._ci, btn = pop._btn;
+            const boxes = [...pop.querySelectorAll('input[type=checkbox]')];
+            const checked = boxes.filter(b => b.checked).map(b => b.value);
+            if (checked.length === boxes.length) { delete table._colFilters[ci]; btn.textContent = 'All ▾'; btn.style.fontWeight = '400'; btn.style.color = 'var(--text-secondary)'; }
+            else { table._colFilters[ci] = new Set(checked); btn.textContent = `${checked.length} selected ▾`; btn.style.fontWeight = '600'; btn.style.color = 'var(--accent-primary)'; }
+            applyTableFilters(table);
+        }
+
+        function filterRacksTable(searchTerm) {
+            const r0 = document.querySelector('.rack-row'); const table = r0 && r0.closest('table');
+            if (table) applyTableFilters(table, searchTerm);
         }
         
         function filterSitesTable(searchTerm) {
-            const rows = document.querySelectorAll('.site-row');
-            const term = searchTerm.toLowerCase();
-            rows.forEach(row => {
-                const searchable = row.getAttribute('data-searchable');
-                row.style.display = searchable.includes(term) ? '' : 'none';
-            });
+            const table = document.getElementById('sitesTable');
+            if (table) applyTableFilters(table, searchTerm);
         }
         
         function toggleDisconnected() {
@@ -3412,17 +3489,11 @@
         }
 
         function filterTable(entityType, searchTerm) {
-            const rows = document.querySelectorAll(`.${entityType}-row`);
-            const term = searchTerm.toLowerCase();
             if (entityType === 'circuit') {
-                document.body.classList.toggle('searching-disco', /disco|disconnect/.test(term));
+                document.body.classList.toggle('searching-disco', /disco|disconnect/.test((searchTerm || '').toLowerCase()));
             }
-            rows.forEach(row => {
-                const searchable = row.getAttribute('data-searchable');
-                if (searchable) {
-                    row.style.display = searchable.includes(term) ? '' : 'none';
-                }
-            });
+            const r0 = document.querySelector(`.${entityType}-row`); const table = r0 && r0.closest('table');
+            if (table) applyTableFilters(table, searchTerm);
         }
         
         async function viewSiteDetails(siteId) {
