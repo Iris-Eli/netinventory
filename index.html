@@ -2838,6 +2838,8 @@
                 const circNoBw = circuits.filter(c => !String(c.bandwidth || '').trim());
 
                 const cName = c => (c.circuitId || c.id);
+                // Make any finding clickable → opens that record's quick-action menu (View / Edit / ports / etc.)
+                const qa = (type, id, label) => `<a href="javascript:void(0)" onclick="showQuickActions('${type}','${id}')" style="color: var(--accent-primary); text-decoration: none; cursor: pointer;">${label}</a>`;
                 const card = (title, count, color) => `<div class="stat-card" style="cursor: default; border-left: 4px solid ${color};"><h3>${title}</h3><div class="value" style="color: ${color};">${count}</div></div>`;
                 const listBox = (title, icon, rows, lineFn) => rows.length ? `
                     <h3 style="margin-top: 1.5rem; margin-bottom: 0.75rem;">${icon} ${title} (${rows.length})</h3>
@@ -2872,15 +2874,15 @@
 
                     <h2 style="margin-top: 2rem; color: var(--danger);">① Integrity — fix first</h2>
                     ${critCount === 0 ? '<div style="color: var(--success); padding: 0.5rem 0;">✅ No integrity problems found.</div>' : ''}
-                    ${listBox('FDP port oversubscription', '🔴', fdpOver, x => `<li>${x.f.name} — <strong>${x.used}</strong> used / ${x.total} ports <button class="btn-secondary" style="padding: 0.1rem 0.5rem; font-size: 0.78rem; margin-left: 0.4rem;" onclick="viewFdpLayout('${x.f.id}')">Ports</button></li>`)}
-                    ${listBox('Equipment port oversubscription', '🔴', equipOver, x => `<li>${x.e.name} — <strong>${x.used}</strong> used / ${x.total} ports <button class="btn-secondary" style="padding: 0.1rem 0.5rem; font-size: 0.78rem; margin-left: 0.4rem;" onclick="viewEquipmentPorts('${x.e.id}')">Ports</button></li>`)}
-                    ${listBox('Circuits with dangling references', '🧩', orphans.circDangling, r => `<li>${cName(r.c)} — ${r.issues.join('; ')} <button class="btn-secondary" style="padding: 0.1rem 0.5rem; font-size: 0.78rem; margin-left: 0.4rem;" onclick="viewCircuitDetails('${r.c.id}')">View</button></li>`)}
-                    ${listBox('NNIs with dangling references', '🧩', orphans.nniDangling, r => `<li>${r.n.name || r.n.id} — ${r.issues.join('; ')} <button class="btn-secondary" style="padding: 0.1rem 0.5rem; font-size: 0.78rem; margin-left: 0.4rem;" onclick="viewNniDetails('${r.n.id}')">View</button></li>`)}
-                    ${listBox('Equipment pointing at a missing site', '🧩', orphans.equipDanglingSite, e => `<li>${e.name}</li>`)}
-                    ${listBox('Equipment pointing at a missing rack', '🧩', orphans.equipDanglingRack, e => `<li>${e.name}</li>`)}
-                    ${listBox('Line cards pointing at a missing chassis', '🧩', orphans.cardsDanglingParent, e => `<li>${e.name}</li>`)}
-                    ${listBox('FDPs pointing at a missing site', '🧩', orphans.fdpNoSite, f => `<li>${f.name}</li>`)}
-                    ${listBox('Racks pointing at a missing site', '🧩', orphans.racksDanglingSite, r => `<li>${r.name}</li>`)}
+                    ${listBox('FDP port oversubscription', '🔴', fdpOver, x => `<li>${qa('fdp', x.f.id, x.f.name)} — <strong>${x.used}</strong> used / ${x.total} ports <button class="btn-secondary" style="padding: 0.1rem 0.5rem; font-size: 0.78rem; margin-left: 0.4rem;" onclick="viewFdpLayout('${x.f.id}')">Ports</button></li>`)}
+                    ${listBox('Equipment port oversubscription', '🔴', equipOver, x => `<li>${qa('equipment', x.e.id, x.e.name)} — <strong>${x.used}</strong> used / ${x.total} ports <button class="btn-secondary" style="padding: 0.1rem 0.5rem; font-size: 0.78rem; margin-left: 0.4rem;" onclick="viewEquipmentPorts('${x.e.id}')">Ports</button></li>`)}
+                    ${listBox('Circuits with dangling references', '🧩', orphans.circDangling, r => `<li>${qa('circuit', r.c.id, cName(r.c))} — ${r.issues.join('; ')}</li>`)}
+                    ${listBox('NNIs with dangling references', '🧩', orphans.nniDangling, r => `<li>${qa('nni', r.n.id, r.n.name || r.n.id)} — ${r.issues.join('; ')}</li>`)}
+                    ${listBox('Equipment pointing at a missing site', '🧩', orphans.equipDanglingSite, e => `<li>${qa('equipment', e.id, e.name)}</li>`)}
+                    ${listBox('Equipment pointing at a missing rack', '🧩', orphans.equipDanglingRack, e => `<li>${qa('equipment', e.id, e.name)}</li>`)}
+                    ${listBox('Line cards pointing at a missing chassis', '🧩', orphans.cardsDanglingParent, e => `<li>${qa('equipment', e.id, e.name)}</li>`)}
+                    ${listBox('FDPs pointing at a missing site', '🧩', orphans.fdpNoSite, f => `<li>${qa('fdp', f.id, f.name)}</li>`)}
+                    ${listBox('Racks pointing at a missing site', '🧩', orphans.racksDanglingSite, r => `<li>${qa('rack', r.id, r.name)}</li>`)}
 
                     <h2 style="margin-top: 2.5rem; color: var(--warning);">② Duplicates</h2>
                     ${dupCount === 0 ? '<div style="color: var(--success); padding: 0.5rem 0;">✅ No duplicate groups found.</div>' : ''}
@@ -2893,12 +2895,12 @@
 
                     <h2 style="margin-top: 2.5rem; color: var(--accent-secondary);">③ Warnings</h2>
                     ${warnCount === 0 ? '<div style="color: var(--success); padding: 0.5rem 0;">✅ No warnings.</div>' : ''}
-                    ${listBox('Active circuits with no generated DLR', '📄', activeNoDlr, c => `<li>${cName(c)} <button class="btn-secondary" style="padding: 0.1rem 0.5rem; font-size: 0.78rem; margin-left: 0.4rem;" onclick="viewCircuitDetails('${c.id}')">View</button></li>`)}
-                    ${listBox('Circuits with no A-side connectivity', '⚠️', orphans.circNoAConnectivity, c => `<li>${cName(c)}</li>`)}
-                    ${listBox('Circuits with ports listed but no FDP selected', '⚠️', orphans.circFdpPortsNoFdp, r => `<li>${cName(r.c)} — ${r.issues.join('; ')}</li>`)}
-                    ${listBox('Equipment with no site assigned', '⚠️', orphans.equipNoSite, e => `<li>${e.name}</li>`)}
-                    ${listBox('Sites missing map coordinates', '📍', sitesNoGeo, s => `<li>${s.name || s.address}</li>`)}
-                    ${listBox('Circuits missing bandwidth', '⚠️', circNoBw, c => `<li>${cName(c)}</li>`)}
+                    ${listBox('Active circuits with no generated DLR', '📄', activeNoDlr, c => `<li>${qa('circuit', c.id, cName(c))}</li>`)}
+                    ${listBox('Circuits with no A-side connectivity', '⚠️', orphans.circNoAConnectivity, c => `<li>${qa('circuit', c.id, cName(c))}</li>`)}
+                    ${listBox('Circuits with ports listed but no FDP selected', '⚠️', orphans.circFdpPortsNoFdp, r => `<li>${qa('circuit', r.c.id, cName(r.c))} — ${r.issues.join('; ')}</li>`)}
+                    ${listBox('Equipment with no site assigned', '⚠️', orphans.equipNoSite, e => `<li>${qa('equipment', e.id, e.name)}</li>`)}
+                    ${listBox('Sites missing map coordinates', '📍', sitesNoGeo, s => `<li>${qa('site', s.id, s.name || s.address)}</li>`)}
+                    ${listBox('Circuits missing bandwidth', '⚠️', circNoBw, c => `<li>${qa('circuit', c.id, cName(c))}</li>`)}
                 `;
             } catch (err) {
                 content.innerHTML = `<div style="padding: 2rem; color: var(--danger);">Health scan failed: ${(typeof friendlyError === 'function' ? friendlyError(err) : (err && err.message || err))}</div>`;
