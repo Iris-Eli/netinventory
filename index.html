@@ -3455,7 +3455,23 @@
                 tr.appendChild(th);
             }
             headRow.parentNode.appendChild(tr);
+            // Saved-views bar above the table
+            try {
+                const bar = document.createElement('div'); bar.className = 'col-views-bar'; bar._table = table;
+                bar.style.cssText = 'display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; font-size: 0.85rem; color: var(--text-secondary); flex-wrap: wrap;';
+                bar.innerHTML = `<span>⭐ Views:</span><select class="col-views-select" onchange="_applyView(this)" style="padding: 0.25rem; border: 1px solid var(--border-color); border-radius: 3px; background: var(--bg-primary); color: var(--text-primary);"><option value="">— saved views —</option></select><button type="button" class="btn-secondary" style="padding: 0.2rem 0.6rem; font-size: 0.8rem;" onclick="_saveCurrentView(this)">Save current…</button><button type="button" class="btn-secondary" style="padding: 0.2rem 0.6rem; font-size: 0.8rem;" onclick="_deleteView(this)">Delete</button>`;
+                if (table.parentNode) table.parentNode.insertBefore(bar, table);
+                _populateViewsSelect(bar);
+            } catch (e) { /* views bar is best-effort */ }
         }
+        function _viewsKey(table) { const h = table.querySelector('thead tr'); return 'netinv_view_' + (h ? [...h.children].map(t => t.textContent.trim()).join('|') : (table.id || '')); }
+        function _loadViews(key) { try { return JSON.parse(localStorage.getItem(key) || '{}'); } catch (e) { return {}; } }
+        function _saveViewsObj(key, obj) { try { localStorage.setItem(key, JSON.stringify(obj)); } catch (e) {} }
+        function _populateViewsSelect(bar) { const views = _loadViews(_viewsKey(bar._table)); const sel = bar.querySelector('.col-views-select'); const cur = sel.value; sel.innerHTML = '<option value="">— saved views —</option>' + Object.keys(views).sort().map(n => `<option value="${n.replace(/"/g, '&quot;')}">${n}</option>`).join(''); sel.value = cur; }
+        function _refreshColFilterButtons(table) { table.querySelectorAll('.col-filter-btn').forEach(b => { const set = table._colFilters && table._colFilters[b.getAttribute('data-col')]; if (set && set.size) { b.textContent = set.size + ' selected ▾'; b.style.fontWeight = '600'; b.style.color = 'var(--accent-primary)'; } else { b.textContent = 'All ▾'; b.style.fontWeight = '400'; b.style.color = 'var(--text-secondary)'; } }); }
+        function _applyView(sel) { const bar = sel.closest('.col-views-bar'), table = bar._table, name = sel.value; if (!name) { table._colFilters = {}; _refreshColFilterButtons(table); applyTableFilters(table); return; } const v = _loadViews(_viewsKey(table))[name]; if (!v) return; table._colFilters = {}; Object.entries(v).forEach(([ci, vals]) => { table._colFilters[ci] = new Set(vals); }); _refreshColFilterButtons(table); applyTableFilters(table); }
+        function _saveCurrentView(btn) { const bar = btn.closest('.col-views-bar'), table = bar._table, st = table._colFilters || {}; if (!Object.keys(st).length) { alert('Set one or more column filters first, then save the view.'); return; } const name = (prompt('Save current filters as view name:') || '').trim(); if (!name) return; const key = _viewsKey(table), views = _loadViews(key); views[name] = {}; Object.entries(st).forEach(([ci, set]) => { views[name][ci] = [...set]; }); _saveViewsObj(key, views); _populateViewsSelect(bar); bar.querySelector('.col-views-select').value = name; }
+        function _deleteView(btn) { const bar = btn.closest('.col-views-bar'), table = bar._table, sel = bar.querySelector('.col-views-select'), name = sel.value; if (!name) { alert('Pick a saved view to delete.'); return; } if (!confirm('Delete view "' + name + '"?')) return; const key = _viewsKey(table), views = _loadViews(key); delete views[name]; _saveViewsObj(key, views); _populateViewsSelect(bar); }
         function openColFilterPopup(btn) {
             document.querySelectorAll('.col-filter-popup').forEach(p => p.remove());
             const table = btn.closest('table'), ci = +btn.getAttribute('data-col');
@@ -10704,7 +10720,10 @@
         
         async function renderNnisPage() {
             try {
-                const [nnis, sites, allEquipmentForNni, allFdpsForNni] = await Promise.all([store.getNnis(), store.getSites(), store.getEquipment(), store.getFdps()]);
+                const [nnis, sites, allEquipmentForNni, allFdpsForNni, circuitsForNni] = await Promise.all([store.getNnis(), store.getSites(), store.getEquipment(), store.getFdps(), store.getCircuits()]);
+                const nniSubints = {}; // nniId -> Set of distinct subinterfaces allocated on it
+                const _addNniSub = (id, raw) => { if (!id) return; const s = normalizeSubinterface(raw || ''); if (!s || s === '-') return; (nniSubints[id] = nniSubints[id] || new Set()).add(s); };
+                circuitsForNni.forEach(c => { _addNniSub(c.aNni, c.aNniSubinterface); _addNniSub(c.zNni, c.zNniSubinterface); (safeParseJson(c.circuitVlans, []) || []).forEach(v => { _addNniSub(v.aNni, v.aNniSubinterface || c.aNniSubinterface); _addNniSub(v.zNni, v.zNniSubinterface || c.zNniSubinterface); }); });
                 
                 content.innerHTML = `
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem;">
@@ -10726,12 +10745,13 @@
                                     <th>Equipment</th>
                                     <th>FDP</th>
                                     <th>Contact</th>
+                                    <th>Subints</th>
                                     <th style="width: 200px;">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 ${nnis.length === 0 ? 
-                                    '<tr><td colspan="7" style="text-align: center; padding: 3rem; color: var(--text-secondary);">No NNIs yet. Click "Add NNI" to get started.</td></tr>' :
+                                    '<tr><td colspan="8" style="text-align: center; padding: 3rem; color: var(--text-secondary);">No NNIs yet. Click "Add NNI" to get started.</td></tr>' :
                                     nnis.map(nni => {
                                         const site = sites.find(s => s.id === nni.siteId);
                                         const nniEquip = nni.equipmentID ? allEquipmentForNni.find(e => e.id === nni.equipmentID) : null;
@@ -10745,6 +10765,7 @@
                                                 <td>${nniEquip ? `<a href="javascript:void(0)" onclick="showQuickActions('equipment','${nniEquip.id}')" style="color: var(--accent-primary); text-decoration: none; cursor: pointer;" title="Quick actions">${nniEquip.name}</a>` : nni.equipmentID || '-'}</td>
                                                 <td>${nniFdp ? `<a href="javascript:void(0)" onclick="showQuickActions('fdp','${nniFdp.id}')" style="color: var(--accent-primary); text-decoration: none; cursor: pointer;" title="Quick actions">${nniFdp.name}</a>` : nni.fdpId || '-'}</td>
                                                 <td>${nni.contact || ''}</td>
+                                                <td>${nniSubints[nni.id] ? nniSubints[nni.id].size : 0}</td>
                                                 <td>
                                                     <button onclick="viewNniDetails('${nni.id}')" class="btn-secondary" style="padding: 0.5rem 0.75rem; margin-right: 0.5rem;" title="View circuits using this NNI">👁️ View</button>
                                                     <button onclick="editNniById('${nni.id}')"  class="btn-secondary" style="padding: 0.5rem 0.75rem; margin-right: 0.5rem;">Edit</button>
@@ -15903,7 +15924,7 @@ ${entityActionButtons('nni', `${n.id}`, true)}
                             </div>
                         </div>
                         <div style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 0.75rem; padding: 1.5rem; margin-top: 1.5rem;">
-                            <h2 style="color: var(--accent-primary); margin-bottom: 1rem; font-size: 1.1rem;">🕐 Recent Activity</h2>
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;"><h2 style="color: var(--accent-primary); margin: 0; font-size: 1.1rem;">🕐 Recent Activity</h2><a href="javascript:void(0)" onclick="navigateTo('activity')" style="color: var(--accent-primary); text-decoration: none; font-size: 0.85rem;">See all →</a></div>
                             ${recentActivity.length === 0 ? '<p style="color: var(--text-secondary);">No recent changes. ' + (sites.length + racks.length + equipment.length + fdps.length + circuits.length + nnis.length) + ' total entities tracked.</p>' :
                             recentActivity.map(a => `
                                 <div style="display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 0; border-bottom: 1px solid var(--border-color); font-size: 0.9rem;">
