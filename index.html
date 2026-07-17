@@ -2904,12 +2904,36 @@
         }
 
         // 🩺 Inventory Health — integrity, duplicates, and completeness grouped by severity.
+        // Duplicate-subinterface conflicts across ALL NNIs (same NNI + same subinterface used by >1 circuit).
+        function findNniSubinterfaceConflicts(circuits) {
+            const byKey = new Map(); // nniId|subif -> { nniId, subif, circuits: Map(id->label) }
+            const add = (nniId, subifRaw, c) => {
+                if (!nniId) return;
+                const subif = normalizeSubinterface(subifRaw || '');
+                if (!subif || subif === '-') return; // unset subinterfaces can't meaningfully conflict
+                const key = nniId + '|' + subif;
+                if (!byKey.has(key)) byKey.set(key, { nniId, subif, circuits: new Map() });
+                byKey.get(key).circuits.set(c.id, c.circuitId || c.id);
+            };
+            circuits.forEach(c => {
+                add(c.aNni, c.aNniSubinterface, c);
+                add(c.zNni, c.zNniSubinterface, c);
+                (safeParseJson(c.circuitVlans, []) || []).forEach(v => {
+                    add(v.aNni, v.aNniSubinterface || c.aNniSubinterface, c);
+                    add(v.zNni, v.zNniSubinterface || c.zNniSubinterface, c);
+                });
+            });
+            return [...byKey.values()].filter(x => x.circuits.size > 1).map(x => ({ nniId: x.nniId, subif: x.subif, circuitIds: [...x.circuits.values()] }));
+        }
+
         async function renderHealthPage() {
             try {
                 const [sites, racks, equipment, fdps, circuits, nnis] = await Promise.all([
                     store.getSites(), store.getRacks(), store.getEquipment(), store.getFdps(), store.getCircuits(), store.getNnis()
                 ]);
                 const [orphans, duplicates] = await Promise.all([findOrphans(), findDuplicates()]);
+                const nniConflicts = findNniSubinterfaceConflicts(circuits);
+                const nniName = id => { const n = nnis.find(x => x.id === id); return n ? (n.name || id) : id; };
 
                 // Integrity — port oversubscription via the canonical collectors
                 const fdpOver = fdps.map(f => { const total = parseInt(f.portCount || f.numPorts, 10) || 0; return { f, total, used: collectFdpUsedPorts(f.id, circuits, nnis, true).size }; }).filter(x => x.total > 0 && x.used > x.total);
@@ -2940,7 +2964,7 @@
                     ${note ? `<div style="color: var(--text-tertiary); font-size: 0.85rem; margin-bottom: 0.6rem;">${note}</div>` : ''}
                     ${groups.map(g => dupGroup(entity, g, mergeable)).join('')}` : '';
 
-                const critCount = fdpOver.length + equipOver.length + orphans.circDangling.length + orphans.nniDangling.length + orphans.equipDanglingSite.length + orphans.equipDanglingRack.length + orphans.cardsDanglingParent.length + orphans.fdpNoSite.length + orphans.racksDanglingSite.length;
+                const critCount = fdpOver.length + equipOver.length + orphans.circDangling.length + orphans.nniDangling.length + nniConflicts.length + orphans.equipDanglingSite.length + orphans.equipDanglingRack.length + orphans.cardsDanglingParent.length + orphans.fdpNoSite.length + orphans.racksDanglingSite.length;
                 const dupCount = duplicates.circuits.length + duplicates.equipment.length + duplicates.fdps.length + duplicates.racks.length + duplicates.darkFibers.length + duplicates.sites.length;
                 const warnCount = activeNoDlr.length + orphans.circNoAConnectivity.length + orphans.circFdpPortsNoFdp.length + orphans.equipNoSite.length + sitesNoGeo.length + circNoBw.length;
 
@@ -2961,6 +2985,7 @@
                     ${listBox('Equipment port oversubscription', '🔴', equipOver, x => `<li>${qa('equipment', x.e.id, x.e.name)} — <strong>${x.used}</strong> used / ${x.total} ports <button class="btn-secondary" style="padding: 0.1rem 0.5rem; font-size: 0.78rem; margin-left: 0.4rem;" onclick="viewEquipmentPorts('${x.e.id}')">Ports</button></li>`)}
                     ${listBox('Circuits with dangling references', '🧩', orphans.circDangling, r => `<li>${qa('circuit', r.c.id, cName(r.c))} — ${r.issues.join('; ')}</li>`)}
                     ${listBox('NNIs with dangling references', '🧩', orphans.nniDangling, r => `<li>${qa('nni', r.n.id, r.n.name || r.n.id)} — ${r.issues.join('; ')}</li>`)}
+                    ${listBox('NNI subinterface conflicts', '🧩', nniConflicts, x => `<li>${qa('nni', x.nniId, nniName(x.nniId))} · subint <strong>${x.subif}</strong> — used by ${x.circuitIds.join(', ')}</li>`)}
                     ${listBox('Equipment pointing at a missing site', '🧩', orphans.equipDanglingSite, e => `<li>${qa('equipment', e.id, e.name)}</li>`)}
                     ${listBox('Equipment pointing at a missing rack', '🧩', orphans.equipDanglingRack, e => `<li>${qa('equipment', e.id, e.name)}</li>`)}
                     ${listBox('Line cards pointing at a missing chassis', '🧩', orphans.cardsDanglingParent, e => `<li>${qa('equipment', e.id, e.name)}</li>`)}
