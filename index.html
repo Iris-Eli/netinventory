@@ -13490,6 +13490,227 @@ ${entityActionButtons('nni', `${n.id}`, true)}
             return { total, parsed: true };
         }
         
+        // ===================== Capacity & availability search =====================
+        // "Free >=N ports of speed X near <city>" — reuses the canonical port collectors
+        // (collectEquipmentUsedPorts/collectFdpUsedPorts) + parsePortConfig + site geocoding.
+        // Pure helpers below are unit-tested under node (scratchpad/cap-search.test.mjs).
+
+        // Canonicalize a port-speed token to e.g. "100G". Non-numeric tokens (e.g. "SFP+")
+        // pass through uppercased so they never match a numeric speed query.
+        function normalizeSpeed(tok) {
+            const m = String(tok || '').match(/(\d+(?:\.\d+)?)\s*([GMK])/i);
+            if (m) return m[1].replace(/\.0$/, '') + m[2].toUpperCase();
+            return String(tok || '').trim().toUpperCase();
+        }
+
+        // Parse an equipment portConfig into sequentially-numbered speed bands, matching the
+        // port picker's numbering: comma-separated "<count>x<speed>" segments, ports from 1.
+        // A segment may list several rates ("1G/10G/25G") — all recorded for that band.
+        // Returns [{ start, end, speeds:['1G',...] }]. Segments without an x-separated speed
+        // (bare numbers) are skipped — real configs always use the NxSPEED form.
+        function parseEquipmentPortBands(portConfig) {
+            const bands = [];
+            if (!portConfig || typeof portConfig !== 'string') return bands;
+            let cur = 1;
+            for (const seg of portConfig.split(',')) {
+                const m = seg.trim().match(/(\d+)\s*[xX×]\s*(.+)/);
+                if (!m) continue;
+                const count = parseInt(m[1], 10);
+                if (!count) continue;
+                const speeds = m[2].split('/').map(normalizeSpeed).filter(Boolean);
+                bands.push({ start: cur, end: cur + count - 1, speeds });
+                cur += count;
+            }
+            return bands;
+        }
+
+        // Free-port counts per normalized speed, given bands + a Set of used port-number
+        // strings (from collectEquipmentUsedPorts). A multi-rate band credits its free ports
+        // to EVERY speed it supports (a 25G port also satisfies a 10G request); do not sum
+        // across speeds — totalFree counts each band once.
+        function freePortsBySpeed(bands, usedSet) {
+            const bySpeed = {};
+            let totalFree = 0;
+            for (const b of bands) {
+                let free = 0;
+                for (let p = b.start; p <= b.end; p++) if (!usedSet.has(String(p))) free++;
+                totalFree += free;
+                for (const s of b.speeds) bySpeed[s] = (bySpeed[s] || 0) + free;
+            }
+            return { totalFree, bySpeed };
+        }
+
+        // Great-circle distance in miles.
+        function haversineMiles(lat1, lon1, lat2, lon2) {
+            const toRad = d => d * Math.PI / 180;
+            const R = 3958.7613;
+            const dLat = toRad(lat2 - lat1), dLon = toRad(lon2 - lon1);
+            const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+            return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
+        }
+
+        // Per-site free-capacity index: equipment free ports (overall + by speed) and FDP
+        // free ports. Overall equip free honors parsePortConfig's canonical total; by-speed
+        // uses the band parse. Speed-agnostic overall may exceed the sum of by-speed when a
+        // config has speed-less ports — that's intentional.
+        function buildSiteCapacityIndex(sites, equipment, fdps, circuits, nnis) {
+            const byId = {};
+            sites.forEach(s => {
+                byId[s.id] = {
+                    siteId: s.id, siteName: s.name || s.id, irisClli: s.irisClli || '',
+                    city: s.city || '', state: s.state || '',
+                    lat: parseFloat(s.latitude), lon: parseFloat(s.longitude),
+                    equipFreeBySpeed: {}, equipFreeTotal: 0, fdpFree: 0, devices: []
+                };
+            });
+            equipment.forEach(e => {
+                const site = byId[e.siteId];
+                if (!site) return;
+                const total = parsePortConfig(e.portConfig).total;
+                if (!total) return;
+                const usedSet = collectEquipmentUsedPorts(e.id, circuits, nnis);
+                const { bySpeed } = freePortsBySpeed(parseEquipmentPortBands(e.portConfig), usedSet);
+                const overallFree = Math.max(0, total - usedSet.size);
+                site.equipFreeTotal += overallFree;
+                for (const sp in bySpeed) site.equipFreeBySpeed[sp] = (site.equipFreeBySpeed[sp] || 0) + bySpeed[sp];
+                if (overallFree > 0) site.devices.push({ type: 'Equipment', id: e.id, name: e.name, free: overallFree, bySpeed });
+            });
+            fdps.forEach(f => {
+                const site = byId[f.siteId];
+                if (!site) return;
+                const total = parseInt(f.portCount || f.numPorts, 10) || 0;
+                if (!total) return;
+                const usedSet = collectFdpUsedPorts(f.id, circuits, nnis, true);
+                const free = Math.max(0, total - usedSet.size);
+                site.fdpFree += free;
+                if (free > 0) site.devices.push({ type: 'FDP', id: f.id, name: f.name, free });
+            });
+            return Object.values(byId);
+        }
+
+        // Rank sites meeting the query. On a speed-specific query FDP patch ports are excluded
+        // (they carry no speed rating). With an origin, rank by distance then free-port count;
+        // otherwise by free-port count. radiusMiles drops out-of-range and coordinate-less sites.
+        function rankSitesByCapacity(index, opts) {
+            const { minPorts = 1, speed = '', includeEquip = true, includeFdp = true, origin = null, radiusMiles = null } = opts || {};
+            const rows = [];
+            for (const s of index) {
+                let match = 0, fdpPart = 0, equipPart = 0;
+                if (speed) {
+                    equipPart = includeEquip ? (s.equipFreeBySpeed[speed] || 0) : 0;
+                    match = equipPart;
+                } else {
+                    equipPart = includeEquip ? s.equipFreeTotal : 0;
+                    fdpPart = includeFdp ? s.fdpFree : 0;
+                    match = equipPart + fdpPart;
+                }
+                if (match < minPorts) continue;
+                let dist = null;
+                if (origin && isFinite(s.lat) && isFinite(s.lon)) {
+                    dist = haversineMiles(origin.lat, origin.lon, s.lat, s.lon);
+                    if (radiusMiles != null && dist > radiusMiles) continue;
+                } else if (origin && radiusMiles != null) {
+                    continue; // radius requested but this site has no coordinates
+                }
+                rows.push({ ...s, match, equipPart, fdpPart, dist });
+            }
+            rows.sort((a, b) => {
+                if (origin) {
+                    const ad = a.dist == null ? Infinity : a.dist;
+                    const bd = b.dist == null ? Infinity : b.dist;
+                    if (ad !== bd) return ad - bd;
+                }
+                return b.match - a.match;
+            });
+            return rows;
+        }
+
+        // Geocode a free-text city/address via Nominatim (same endpoint as geocodeAddress).
+        async function geocodeCity(q) {
+            const url = 'https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=' + encodeURIComponent(q);
+            const r = await fetch(url, { method: 'GET', headers: { 'User-Agent': 'NetInventory/1.0', 'Accept': 'application/json' } });
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            const d = await r.json();
+            if (!d || !d.length) return null;
+            return { lat: parseFloat(d[0].lat), lon: parseFloat(d[0].lon), label: d[0].display_name };
+        }
+
+        // On a speed-specific query, FDP patch ports don't apply — reflect that in the UI.
+        function _capSpeedNote() {
+            const sp = document.getElementById('capSpeed');
+            const note = document.getElementById('capSpeedNoteEl');
+            const fdp = document.getElementById('capIncFdp');
+            if (!sp || !fdp) return;
+            const specific = !!sp.value;
+            fdp.disabled = specific;
+            if (note) note.textContent = specific ? 'FDP patch ports carry no speed rating — excluded on a speed-specific search.' : '';
+        }
+
+        // Run the capacity search from the panel inputs and render the ranked results table.
+        async function runCapacitySearch() {
+            const out = document.getElementById('capSearchResults');
+            if (!out) return;
+            const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+            const index = window._capSearchIndex || [];
+            const minPorts = Math.max(1, parseInt(document.getElementById('capMinPorts').value, 10) || 1);
+            const speed = document.getElementById('capSpeed').value;
+            const cityQ = document.getElementById('capCity').value.trim();
+            const radiusRaw = document.getElementById('capRadius').value.trim();
+            const radiusMiles = radiusRaw ? parseFloat(radiusRaw) : null;
+            const includeEquip = document.getElementById('capIncEquip').checked;
+            const includeFdp = document.getElementById('capIncFdp').checked && !document.getElementById('capIncFdp').disabled;
+
+            if (!includeEquip && !includeFdp) { out.innerHTML = '<div style="color:var(--warning);">Select at least one of Equipment / FDP ports.</div>'; return; }
+
+            let origin = null;
+            if (cityQ) {
+                out.innerHTML = '<div style="color:var(--text-secondary); padding:0.5rem 0;">🔄 Locating “' + esc(cityQ) + '”…</div>';
+                try { origin = await geocodeCity(cityQ); } catch (e) { origin = null; }
+            }
+
+            const rows = rankSitesByCapacity(index, { minPorts, speed, includeEquip, includeFdp, origin, radiusMiles });
+
+            const geoWarn = (cityQ && !origin)
+                ? '<div style="color:var(--warning); margin-bottom:0.75rem;">⚠️ Could not locate “' + esc(cityQ) + '”. Ranked by free ports instead.</div>'
+                : '';
+            const originNote = origin
+                ? '<div style="color:var(--text-tertiary); font-size:0.85rem; margin-bottom:0.75rem;">📍 Near ' + esc(origin.label) + (radiusMiles != null ? ' · within ' + radiusMiles + ' mi' : '') + '</div>'
+                : '';
+            const speedLabel = speed || 'any-speed';
+            const summary = '<div style="margin-bottom:0.75rem; font-weight:600;">' + rows.length + ' site' + (rows.length === 1 ? '' : 's') + ' with ≥ ' + minPorts + ' free ' + esc(speedLabel) + ' port' + (minPorts === 1 ? '' : 's') + (speed ? ' <span style="font-weight:400; color:var(--text-tertiary);">(FDP patch ports excluded)</span>' : '') + '</div>';
+
+            if (!rows.length) {
+                out.innerHTML = geoWarn + originNote + summary + '<div style="text-align:center; padding:2rem; color:var(--text-secondary); background:var(--bg-tertiary); border-radius:0.5rem;">No sites match. Try lowering the minimum, widening the radius, or choosing “Any speed”.</div>';
+                return;
+            }
+
+            const rowsHtml = rows.map((r, i) => {
+                const breakdown = speed
+                    ? (r.equipPart + ' × ' + esc(speed))
+                    : ((includeEquip ? r.equipPart + ' equip' : '') + (includeEquip && includeFdp ? ' + ' : '') + (includeFdp ? r.fdpFree + ' FDP' : ''));
+                const devTip = r.devices
+                    .filter(d => speed ? (d.bySpeed && d.bySpeed[speed] > 0) : true)
+                    .sort((a, b) => (speed ? (b.bySpeed[speed] || 0) - (a.bySpeed[speed] || 0) : b.free - a.free))
+                    .slice(0, 8)
+                    .map(d => d.name + ' (' + (speed ? (d.bySpeed[speed] || 0) + '×' + speed : d.free + ' free') + ')')
+                    .join(', ');
+                return '<tr>' +
+                    '<td style="text-align:center; color:var(--text-tertiary); font-family:monospace;">' + (i + 1) + '</td>' +
+                    '<td><a href="javascript:void(0)" onclick="showQuickActions(\'site\',\'' + r.siteId + '\')" style="color:var(--accent-primary); text-decoration:none; font-weight:600;">' + esc(r.siteName) + '</a>' + (r.irisClli ? '<div style="font-size:0.75rem; color:var(--text-tertiary); font-family:monospace;">' + esc(r.irisClli) + '</div>' : '') + '</td>' +
+                    '<td style="color:var(--text-secondary); font-size:0.9rem;">' + esc([r.city, r.state].filter(Boolean).join(', ') || '—') + '</td>' +
+                    '<td style="text-align:right; font-family:monospace;">' + (r.dist == null ? '—' : r.dist.toFixed(0) + ' mi') + '</td>' +
+                    '<td style="text-align:right; font-family:monospace; font-weight:700; color:var(--success); font-size:1.05rem;">' + r.match + '</td>' +
+                    '<td style="color:var(--text-secondary); font-size:0.85rem;">' + breakdown + '</td>' +
+                    '<td style="color:var(--text-tertiary); font-size:0.8rem;" title="' + esc(devTip) + '">' + esc(devTip.length > 60 ? devTip.slice(0, 60) + '…' : devTip) + '</td>' +
+                    '</tr>';
+            }).join('');
+
+            out.innerHTML = geoWarn + originNote + summary +
+                '<div class="table-container"><table><thead><tr>' +
+                '<th style="text-align:center;">#</th><th>Site</th><th>Location</th><th style="text-align:right;">Distance</th><th style="text-align:right;">Free (match)</th><th>Breakdown</th><th>Top devices</th>' +
+                '</tr></thead><tbody>' + rowsHtml + '</tbody></table></div>';
+        }
+
         async function renderTemplatesPage() {
             console.log('📋 Loading templates page...');
             try {
@@ -15023,6 +15244,46 @@ ${entityActionButtons('nni', `${n.id}`, true)}
                         </div>
                     </div>`;
                 
+                // ===== Capacity & availability search: per-site free-port index + speed options =====
+                const capIndex = buildSiteCapacityIndex(sites, equipment, fdps, circuits, nnis);
+                window._capSearchIndex = capIndex;
+                const _capSpeedSet = new Set();
+                capIndex.forEach(s => Object.keys(s.equipFreeBySpeed).forEach(sp => { if (s.equipFreeBySpeed[sp] > 0) _capSpeedSet.add(sp); }));
+                const _capSpeeds = [..._capSpeedSet].sort((a, b) => (parseFloat(a) || 0) - (parseFloat(b) || 0));
+                const capSpeedOptionsHtml = '<option value="">Any speed</option>' + _capSpeeds.map(sp => `<option value="${sp}">${sp}</option>`).join('');
+                const capSearchHTML = `
+                    <div style="background: var(--bg-secondary); border: 1px solid var(--accent-primary); border-radius: 0.75rem; padding: 1.5rem; margin-bottom: 2.5rem;">
+                        <h2 style="font-size: 1.4rem; margin: 0 0 0.35rem 0;">🔎 Find Available Capacity</h2>
+                        <p style="color: var(--text-secondary); margin: 0 0 1.1rem 0; font-size: 0.9rem;">Rank sites by open ports — e.g. “≥ 4 free 100G ports near Nashville, TN”. Distance uses saved site coordinates.</p>
+                        <div style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: flex-end;">
+                            <div style="flex: 0 0 120px;">
+                                <label style="display:block; font-size:0.8rem; color:var(--text-secondary); margin-bottom:0.4rem;">Min free ports</label>
+                                <input type="number" id="capMinPorts" min="1" value="1" onkeydown="if(event.key==='Enter')runCapacitySearch()" style="width:100%; padding:0.6rem; border:1px solid var(--border-color); border-radius:0.5rem; background:var(--bg-tertiary); color:var(--text-primary);">
+                            </div>
+                            <div style="flex: 0 0 160px;">
+                                <label style="display:block; font-size:0.8rem; color:var(--text-secondary); margin-bottom:0.4rem;">Speed</label>
+                                <select id="capSpeed" onchange="_capSpeedNote()" style="width:100%; padding:0.6rem; border:1px solid var(--border-color); border-radius:0.5rem; background:var(--bg-tertiary); color:var(--text-primary);">${capSpeedOptionsHtml}</select>
+                            </div>
+                            <div style="flex: 1; min-width: 220px;">
+                                <label style="display:block; font-size:0.8rem; color:var(--text-secondary); margin-bottom:0.4rem;">Near (city / address)</label>
+                                <input type="text" id="capCity" placeholder="e.g. Nashville, TN — optional" onkeydown="if(event.key==='Enter')runCapacitySearch()" style="width:100%; padding:0.6rem; border:1px solid var(--border-color); border-radius:0.5rem; background:var(--bg-tertiary); color:var(--text-primary);">
+                            </div>
+                            <div style="flex: 0 0 120px;">
+                                <label style="display:block; font-size:0.8rem; color:var(--text-secondary); margin-bottom:0.4rem;">Within (mi)</label>
+                                <input type="number" id="capRadius" min="0" placeholder="any" onkeydown="if(event.key==='Enter')runCapacitySearch()" style="width:100%; padding:0.6rem; border:1px solid var(--border-color); border-radius:0.5rem; background:var(--bg-tertiary); color:var(--text-primary);">
+                            </div>
+                            <div>
+                                <button class="btn-primary" onclick="runCapacitySearch()" style="padding:0.65rem 1.5rem;">Search</button>
+                            </div>
+                        </div>
+                        <div style="margin-top: 0.85rem; display:flex; gap:1.5rem; flex-wrap:wrap; align-items:center; font-size:0.85rem; color:var(--text-secondary);">
+                            <label style="cursor:pointer;"><input type="checkbox" id="capIncEquip" checked style="vertical-align:middle;"> Equipment ports</label>
+                            <label style="cursor:pointer;"><input type="checkbox" id="capIncFdp" checked style="vertical-align:middle;"> FDP ports</label>
+                            <span id="capSpeedNoteEl" style="color:var(--text-tertiary);"></span>
+                        </div>
+                        <div id="capSearchResults" style="margin-top: 1.25rem;"></div>
+                    </div>`;
+
                 content.innerHTML = `
                     <div style="max-width: 1600px; margin: 0 auto;">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
@@ -15035,6 +15296,8 @@ ${entityActionButtons('nni', `${n.id}`, true)}
                             </div>
                         </div>
                         
+                        ${capSearchHTML}
+
                         ${siteCapacityHTML}
                         
                         <!-- Summary Stats -->
