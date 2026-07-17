@@ -3357,7 +3357,7 @@
                         <div style="display: flex; gap: 1rem; align-items: center;">
                             <input type="text" id="sitesSearch" placeholder="🔍 Search sites..." style="padding: 0.5rem 1rem; border: 1px solid var(--border-color); border-radius: 4px; width: 250px;" oninput="filterSitesTable(this.value)">
                             <button class="btn-secondary" onclick="openGeocodeModal()" id="bulkGeocodeBtn" ${sitesNeedingGeocode === 0 ? 'disabled' : ''}>${geocodeBtnText}</button>
-                            <button class="btn-secondary" onclick="reviewPoPPhotos()" title="Find PoP sites with no photo in the last 3 months">📸 PoP Photo Review</button><button class="btn-secondary" onclick="backfillSiteCllis()" title="Fill blank site CLLIs from assigned equipment (preview first)">🏷️ Backfill CLLIs</button><button class="btn-secondary" onclick="exportEntityToExcel('sites', this)" title="Export Sites to Excel">⬇️ Export</button><button class="btn-primary" onclick="openAddSiteModal()">Add Site</button>
+                            <button class="btn-secondary" onclick="reviewPoPPhotos()" title="Find PoP sites with no photo in the last 3 months">📸 PoP Photo Review</button><button class="btn-secondary" onclick="openReadinessScorecard()" title="Per-site go-live readiness score">✅ Readiness</button><button class="btn-secondary" onclick="backfillSiteCllis()" title="Fill blank site CLLIs from assigned equipment (preview first)">🏷️ Backfill CLLIs</button><button class="btn-secondary" onclick="exportEntityToExcel('sites', this)" title="Export Sites to Excel">⬇️ Export</button><button class="btn-primary" onclick="openAddSiteModal()">Add Site</button>
                         </div>
                     </div>
                     <div class="table-container">
@@ -4529,8 +4529,8 @@
         
         async function renderSiteMapPage() {
             const content = document.getElementById('content');
-            const sites = await store.getSites();
-            
+            const [sites, mapCircuits, dfRoutes] = await Promise.all([store.getSites(), store.getCircuits(), store.getDarkFiberRoutes()]);
+
             // Filter sites with lat/long
             const sitesWithCoords = sites.filter(s => s.latitude && s.longitude);
             const sitesWithoutCoords = sites.filter(s => !s.latitude || !s.longitude);
@@ -4556,6 +4556,17 @@
                 document.head.appendChild(script);
             }
             
+            // Circuits whose path has >=2 sites with coordinates can be traced on the map
+            const _hasCoord = id => { const s = sites.find(x => x.id === id); return s && s.latitude && s.longitude; };
+            const _clabel = c => (c.circuitId || c.name || c.id) + (c.customer ? ' — ' + c.customer : '');
+            const mappableCircuits = mapCircuits
+                .filter(c => circuitPathSiteIds(c).filter(_hasCoord).length >= 2)
+                .sort((a, b) => _clabel(a).localeCompare(_clabel(b)));
+            const circuitTraceOptions = '<option value="">— none —</option>' + mappableCircuits
+                .map(c => `<option value="${c.id}">${_dvEsc(_clabel(c))}</option>`).join('');
+            // Dark-fiber routes with both endpoints located can be drawn on the map
+            const mappableRoutes = (dfRoutes || []).filter(r => _hasCoord(r.aLocationSiteId) && _hasCoord(r.zLocationSiteId));
+
             content.innerHTML = `
                 <div style="max-width: 1800px; margin: 0 auto;">
                     <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem;">
@@ -4584,6 +4595,13 @@
                                     <strong>Customer Sites</strong> (${customerSites.length})
                                 </span>
                             </label>
+                            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;" title="Draw dark-fiber routes between their endpoints">
+                                <input type="checkbox" id="showDarkFiber" onchange="toggleDarkFiberRoutes()" style="width: 18px; height: 18px; cursor: pointer;" ${mappableRoutes.length ? '' : 'disabled'}>
+                                <span style="display: flex; align-items: center; gap: 0.5rem;">
+                                    <span style="display: inline-block; width: 16px; height: 0; border-top: 3px dashed #06b6d4;"></span>
+                                    <strong>Dark-Fiber Routes</strong> (${mappableRoutes.length})
+                                </span>
+                            </label>
                         </div>
                     </div>
                     
@@ -4610,6 +4628,11 @@
                     <!-- Interactive Map -->
                     <div style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 0.75rem; padding: 1.5rem; margin-bottom: 2rem;">
                         <h2 style="margin: 0 0 1rem 0;">Interactive Map <span style="font-size: 0.9rem; font-weight: normal; color: var(--text-secondary);">(Powered by OpenStreetMap - 100% Free)</span></h2>
+                        <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 1rem;">
+                            <label style="font-size: 0.9rem; color: var(--text-secondary); font-weight: 600;">🔗 Trace circuit path:</label>
+                            <select id="circuitTraceSelect" onchange="drawCircuitPath(this.value)" style="min-width: 320px; padding: 0.55rem; border: 1px solid var(--border-color); border-radius: 0.5rem; background: var(--bg-tertiary); color: var(--text-primary);">${circuitTraceOptions}</select>
+                            <span style="font-size: 0.8rem; color: var(--text-tertiary);">${mappableCircuits.length} circuit${mappableCircuits.length === 1 ? '' : 's'} traceable (≥2 located sites) · <span style="color:#10b981;">━</span> active · <span style="color:#f59e0b;">╌</span> planned</span>
+                        </div>
                         <div id="siteMap" style="height: 600px; border-radius: 0.5rem; border: 1px solid var(--border-color);"></div>
                         <div style="margin-top: 1rem; padding: 1rem; background: var(--bg-tertiary); border-radius: 0.5rem; font-size: 0.9rem; color: var(--text-secondary);">
                             <strong>💡 Map Features:</strong> Click markers to see site details • Purple = Iris PoP Sites • Blue = Customer Sites • Zoom and pan to explore
@@ -4769,6 +4792,22 @@
                     
                     // Store markers globally for filter function
                     window.mapMarkers = { popMarkers, customerMarkers, map };
+
+                    // Context for the circuit path-trace control (drawCircuitPath)
+                    const sitesById = {};
+                    sites.forEach(s => { sitesById[s.id] = s; });
+                    window._siteMapCtx = { map, sitesById, circuits: mapCircuits, pathLayer: null };
+
+                    // Dark-fiber route overlay (built now, shown only when the toggle is on)
+                    const dfLayer = L.layerGroup();
+                    mappableRoutes.forEach(r => {
+                        const a = sitesById[r.aLocationSiteId], z = sitesById[r.zLocationSiteId];
+                        if (!a || !z) return;
+                        const line = L.polyline([[parseFloat(a.latitude), parseFloat(a.longitude)], [parseFloat(z.latitude), parseFloat(z.longitude)]], { color: '#06b6d4', weight: 3, opacity: 0.75, dashArray: '3,7' });
+                        line.bindPopup('<strong>' + (r.routeName || r.id) + '</strong><br>' + (a.name || '') + ' ↔ ' + (z.name || '') + (r.totalDistance ? '<br>' + r.totalDistance + ' mi' : '') + (r.status ? '<br>Status: ' + r.status : ''));
+                        line.addTo(dfLayer);
+                    });
+                    window._dfRouteLayer = dfLayer;
                     
                     // Fit map to show all markers
                     if (sitesWithCoords.length > 1) {
@@ -4817,7 +4856,16 @@
                 }
             }
         }
-        
+
+        // Toggle the dark-fiber route overlay on the Site Map
+        function toggleDarkFiberRoutes() {
+            const cb = document.getElementById('showDarkFiber');
+            const ctx = window._siteMapCtx;
+            if (!cb || !ctx || !window._dfRouteLayer) return;
+            if (cb.checked) window._dfRouteLayer.addTo(ctx.map);
+            else ctx.map.removeLayer(window._dfRouteLayer);
+        }
+
         async function renderRacksPage() {
             try {
                 const [racks, sites] = await Promise.all([store.getRacks(), store.getSites()]);
@@ -7860,6 +7908,7 @@
                             <input type="text" placeholder="🔍 Search circuits..." style="padding: 0.5rem 1rem; border: 1px solid var(--border-color); border-radius: 4px; width: 250px;" oninput="filterTable('circuit', this.value)">
                             <button class="btn-secondary" onclick="toggleDisconnected()" id="discoToggle" title="Toggle disconnected circuits">👻 Show disconnected</button>
                             <button class="btn-secondary" onclick="renderCircuitsSummary()">📊 Provider Summary</button>
+                            <button class="btn-secondary" onclick="openDiversityCheck()" title="Compare two circuits for shared equipment/FDP/NNI/fiber (path diversity)">🔀 Diversity</button>
                             <button class="btn-secondary" onclick="regenerateAllDlrs(this)" title="Generate + store the SF DLR for every circuit (fills the GeneratedSFDLR column the push-back flow reads)">🔄 Regenerate DLRs</button><button class="btn-secondary" onclick="exportEntityToExcel('circuits', this)" title="Export Circuits to Excel">⬇️ Export</button>
                             <button class="btn-primary" onclick="openAddCircuitModal()">Add Circuit</button>
                         </div>
@@ -10318,6 +10367,7 @@
                     { label: '👁️ View Details', fn: (id) => viewSiteDetails(id) },
                     { label: '📷 Photos', fn: (id) => viewSitePhotos(id) },
                     { label: '🏷️ QR Code', fn: (id) => printSiteQr(id) },
+                    { label: '💥 Failure Impact', fn: (id) => openImpactAnalysis('site', id) },
                     { label: '✏️ Edit', fn: (id) => editSiteById(id) }
                 ]
             },
@@ -10336,6 +10386,7 @@
                 actions: [
                     { label: '👁️ View Details', fn: (id) => viewEquipmentDetails(id) },
                     { label: '🔌 View Ports', fn: (id) => viewEquipmentPorts(id) },
+                    { label: '💥 Failure Impact', fn: (id) => openImpactAnalysis('equipment', id) },
                     { label: '✏️ Edit', fn: (id) => editEquipmentById(id) }
                 ]
             },
@@ -10345,6 +10396,7 @@
                 actions: [
                     { label: '👁️ View Details', fn: (id) => viewFdpDetails(id) },
                     { label: '🔌 Port Layout', fn: (id) => viewFdpLayout(id) },
+                    { label: '💥 Failure Impact', fn: (id) => openImpactAnalysis('fdp', id) },
                     { label: '✏️ Edit', fn: (id) => editFdpById(id) }
                 ]
             },
@@ -10370,6 +10422,7 @@
                 getName: async (id) => { const x = (await store.getDarkFiberRoutes()).find(i => i.id === id); return x ? (x.routeName || x.id) : null; },
                 actions: [
                     { label: '👁️ View Route & Segments', fn: (id) => viewDarkFiberRoute(id) },
+                    { label: '💥 Failure Impact', fn: (id) => openImpactAnalysis('dfroute', id) },
                     { label: '✏️ Edit', fn: (id) => editDarkFiberRoute(id) }
                 ]
             }
@@ -13711,6 +13764,451 @@ ${entityActionButtons('nni', `${n.id}`, true)}
                 '</tr></thead><tbody>' + rowsHtml + '</tbody></table></div>';
         }
 
+        // ============ Circuit path: diversity checker + map trace (shared helpers) ============
+        // Pure helpers below are unit-tested under node (scratchpad/diversity-path.test.mjs).
+        const CIRCUIT_PATH_LETTERS = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'z'];
+
+        // Ordered, de-duplicated site IDs along a circuit's path (A -> B..N -> Z).
+        function circuitPathSiteIds(c) {
+            const ids = [];
+            CIRCUIT_PATH_LETTERS.forEach(l => { const s = c[l + 'LocationSiteId']; if (s && !ids.includes(s)) ids.push(s); });
+            return ids;
+        }
+
+        // FDP-id -> [routeId] from dark-fiber segments (a circuit riding an FDP that a segment
+        // terminates on is inferred to ride that segment's route — the shared-fiber signal).
+        function buildFdpToRoutes(segments) {
+            const map = {};
+            (segments || []).forEach(seg => {
+                [seg.aEndFDP, seg.zEndFDP].forEach(f => {
+                    if (!f) return;
+                    map[f] = map[f] || [];
+                    if (seg.routeId && !map[f].includes(seg.routeId)) map[f].push(seg.routeId);
+                });
+            });
+            return map;
+        }
+
+        // Every physical resource a circuit traverses (all letters A-N + Z, both FDP families,
+        // CPE equipment, and inferred dark-fiber routes).
+        function circuitResources(c, fdpToRoutes) {
+            const sites = new Set(), equipment = new Set(), fdps = new Set(), nnis = new Set(), routes = new Set();
+            CIRCUIT_PATH_LETTERS.forEach(l => {
+                if (c[l + 'LocationSiteId']) sites.add(c[l + 'LocationSiteId']);
+                if (c[l + 'Equipment']) equipment.add(c[l + 'Equipment']);
+                if (c[l + 'Nni']) nnis.add(c[l + 'Nni']);
+                [c[l + 'Fdp'], c[l + 'EquipmentFdp']].forEach(f => { if (f) fdps.add(f); });
+            });
+            if (c.cpeEquipmentId) equipment.add(c.cpeEquipmentId);
+            if (fdpToRoutes) fdps.forEach(f => (fdpToRoutes[f] || []).forEach(r => routes.add(r)));
+            return { sites, equipment, fdps, nnis, routes };
+        }
+
+        // Shared resources between two circuits. Transport = equipment/FDP/NNI/route; sharing
+        // any of those means the pair is not path-diverse. Shared sites are reported but not a
+        // verdict trigger (common endpoints are expected).
+        function circuitDiversity(c1, c2, fdpToRoutes) {
+            const r1 = circuitResources(c1, fdpToRoutes), r2 = circuitResources(c2, fdpToRoutes);
+            const inter = (a, b) => [...a].filter(x => b.has(x));
+            const shared = {
+                sites: inter(r1.sites, r2.sites),
+                equipment: inter(r1.equipment, r2.equipment),
+                fdps: inter(r1.fdps, r2.fdps),
+                nnis: inter(r1.nnis, r2.nnis),
+                routes: inter(r1.routes, r2.routes)
+            };
+            const sharedTransport = shared.equipment.length + shared.fdps.length + shared.nnis.length + shared.routes.length;
+            return { shared, sharedTransport, diverse: sharedTransport === 0 };
+        }
+
+        const _dvEsc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+        // Open the diversity-check modal (two circuit pickers + verdict). preselectId optionally
+        // fixes Circuit A (e.g. launched from a specific circuit).
+        async function openDiversityCheck(preselectId) {
+            const [circuits, sites, equipment, fdps, nnis, routes, segments] = await Promise.all([
+                store.getCircuits(), store.getSites(), store.getEquipment(), store.getFdps(), store.getNnis(), store.getDarkFiberRoutes(), store.getDarkFiberSegments()
+            ]);
+            const nameMap = arr => { const m = {}; arr.forEach(x => m[x.id] = x.name || x.id); return m; };
+            window._diversityData = {
+                circuits,
+                fdpToRoutes: buildFdpToRoutes(segments),
+                names: {
+                    sites: nameMap(sites), equipment: nameMap(equipment), fdps: nameMap(fdps), nnis: nameMap(nnis),
+                    routes: (() => { const m = {}; routes.forEach(r => m[r.id] = r.routeName || r.name || r.id); return m; })()
+                }
+            };
+            const label = c => (c.circuitId || c.name || c.id) + (c.customer ? ' — ' + c.customer : '') + (c.status ? ' (' + c.status + ')' : '');
+            const sorted = [...circuits].sort((a, b) => label(a).localeCompare(label(b)));
+            const opts = sel => '<option value="">Select a circuit…</option>' + sorted.map(c => `<option value="${c.id}"${c.id === sel ? ' selected' : ''}>${_dvEsc(label(c))}</option>`).join('');
+            const overlay = document.createElement('div');
+            overlay.id = 'diversityOverlay';
+            overlay.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:10000; display:flex; align-items:flex-start; justify-content:center; padding:3rem 1rem; overflow:auto;';
+            overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
+            overlay.innerHTML = `
+                <div style="background:var(--bg-secondary); border:1px solid var(--border-color); border-radius:0.75rem; padding:1.5rem; width:100%; max-width:820px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
+                        <h2 style="margin:0; font-size:1.4rem;">🔀 Circuit Path Diversity</h2>
+                        <button class="btn-secondary" onclick="document.getElementById('diversityOverlay').remove()" style="padding:0.35rem 0.7rem;">✕</button>
+                    </div>
+                    <p style="color:var(--text-secondary); margin:0 0 1rem 0; font-size:0.9rem;">Compare two circuits for shared physical infrastructure — equipment, FDPs, NNIs, and (inferred) dark-fiber routes. Any shared transport means the pair is <strong>not</strong> path-diverse.</p>
+                    <div style="display:flex; gap:1rem; flex-wrap:wrap;">
+                        <div style="flex:1; min-width:260px;"><label style="display:block; font-size:0.8rem; color:var(--text-secondary); margin-bottom:0.35rem;">Circuit A</label><select id="dvCircuitA" onchange="runDiversityCheck()" style="width:100%; padding:0.6rem; border:1px solid var(--border-color); border-radius:0.5rem; background:var(--bg-tertiary); color:var(--text-primary);">${opts(preselectId || '')}</select></div>
+                        <div style="flex:1; min-width:260px;"><label style="display:block; font-size:0.8rem; color:var(--text-secondary); margin-bottom:0.35rem;">Circuit B</label><select id="dvCircuitB" onchange="runDiversityCheck()" style="width:100%; padding:0.6rem; border:1px solid var(--border-color); border-radius:0.5rem; background:var(--bg-tertiary); color:var(--text-primary);">${opts('')}</select></div>
+                    </div>
+                    <div id="dvResult" style="margin-top:1.25rem;"><div style="color:var(--text-tertiary);">Select two circuits to compare.</div></div>
+                </div>`;
+            document.body.appendChild(overlay);
+            if (preselectId) runDiversityCheck();
+        }
+
+        // Compute + render the diversity verdict for the two selected circuits.
+        function runDiversityCheck() {
+            const data = window._diversityData; if (!data) return;
+            const out = document.getElementById('dvResult'); if (!out) return;
+            const aId = document.getElementById('dvCircuitA').value, bId = document.getElementById('dvCircuitB').value;
+            if (!aId || !bId) { out.innerHTML = '<div style="color:var(--text-tertiary);">Select two circuits to compare.</div>'; return; }
+            if (aId === bId) { out.innerHTML = '<div style="color:var(--warning);">Pick two different circuits.</div>'; return; }
+            const c1 = data.circuits.find(c => c.id === aId), c2 = data.circuits.find(c => c.id === bId);
+            const d = circuitDiversity(c1, c2, data.fdpToRoutes);
+            const nm = (cat, id) => _dvEsc((data.names[cat] && data.names[cat][id]) || id);
+            const row = (label, cat, ids, concern) => {
+                const has = ids.length > 0;
+                const color = concern ? 'var(--danger)' : 'var(--warning)';
+                return `<div style="display:flex; gap:0.75rem; padding:0.6rem 0; border-bottom:1px solid var(--border-color);">
+                    <div style="width:1.5rem; flex:0 0 1.5rem;">${has ? (concern ? '⛔' : '📍') : '✅'}</div>
+                    <div style="flex:1;"><strong>${label}</strong>${has ? ': <span style="color:' + color + ';">' + ids.map(id => nm(cat, id)).join(', ') + '</span>' : ' <span style="color:var(--success);">none shared</span>'}</div>
+                </div>`;
+            };
+            const verdict = d.diverse
+                ? '<div style="background:rgba(16,185,129,0.12); border:1px solid var(--success); color:var(--success); border-radius:0.5rem; padding:0.9rem 1rem; font-weight:700;">✅ Path-diverse — no shared transport infrastructure.</div>'
+                : '<div style="background:rgba(239,68,68,0.12); border:1px solid var(--danger); color:var(--danger); border-radius:0.5rem; padding:0.9rem 1rem; font-weight:700;">⛔ NOT path-diverse — shares ' + d.sharedTransport + ' transport resource' + (d.sharedTransport === 1 ? '' : 's') + ' (below).</div>';
+            out.innerHTML = verdict +
+                '<div style="margin-top:1rem;">' +
+                row('Equipment', 'equipment', d.shared.equipment, true) +
+                row('FDPs', 'fdps', d.shared.fdps, true) +
+                row('NNIs', 'nnis', d.shared.nnis, true) +
+                row('Dark-fiber routes (inferred via shared FDP)', 'routes', d.shared.routes, true) +
+                row('Sites / locations', 'sites', d.shared.sites, false) +
+                '</div>' +
+                '<p style="color:var(--text-tertiary); font-size:0.8rem; margin-top:0.75rem;">Shared sites are expected where circuits meet common endpoints; a shared <em>intermediate</em> site or any shared transport resource is a single point of failure. Fiber-route sharing is inferred from FDPs the circuits terminate on.</p>';
+        }
+
+        // Site Map: draw a selected circuit's A->Z path (polyline + hop markers), colored by
+        // status. Reads window._siteMapCtx set up in renderSiteMapPage's map init.
+        function drawCircuitPath(circuitId) {
+            const ctx = window._siteMapCtx; if (!ctx || typeof L === 'undefined') return;
+            const { map, sitesById, circuits } = ctx;
+            if (ctx.pathLayer) { map.removeLayer(ctx.pathLayer); ctx.pathLayer = null; }
+            if (!circuitId) return;
+            const c = circuits.find(x => x.id === circuitId); if (!c) return;
+            const pts = circuitPathSiteIds(c)
+                .map(id => sitesById[id])
+                .filter(s => s && s.latitude && s.longitude)
+                .map(s => [parseFloat(s.latitude), parseFloat(s.longitude)]);
+            if (!pts.length) return;
+            const st = (c.status || '').toLowerCase();
+            const color = /active|complete|accounting|closed/.test(st) ? '#10b981' : /plan|pend|design|progress/.test(st) ? '#f59e0b' : '#8b5cf6';
+            const group = L.layerGroup();
+            if (pts.length >= 2) L.polyline(pts, { color, weight: 4, opacity: 0.85, dashArray: /plan|pend|design/.test(st) ? '8,8' : null }).addTo(group);
+            pts.forEach((p, i) => {
+                const tag = i === 0 ? 'A' : (i === pts.length - 1 ? 'Z' : String.fromCharCode(65 + i));
+                L.circleMarker(p, { radius: 7, color: '#fff', weight: 2, fillColor: color, fillOpacity: 1 })
+                    .bindTooltip(tag + ' · ' + (c.circuitId || c.name || c.id), { direction: 'top' })
+                    .addTo(group);
+            });
+            group.addTo(map);
+            ctx.pathLayer = group;
+            map.fitBounds(pts, { padding: [80, 80], maxZoom: 12 });
+        }
+
+        // ================= Blast-radius / failure-impact analyzer =================
+        // impactOfResource is pure (unit-tested: scratchpad/impact.test.mjs). Given a resource
+        // (equipment/FDP/site/dark-fiber route), returns every circuit + NNI that would drop.
+        function impactOfResource(type, id, data) {
+            const L = CIRCUIT_PATH_LETTERS;
+            if (type === 'equipment') {
+                return {
+                    circuits: data.circuits.filter(c => L.some(l => c[l + 'Equipment'] === id) || c.cpeEquipmentId === id),
+                    nnis: data.nnis.filter(n => n.equipmentID === id)
+                };
+            }
+            if (type === 'fdp') {
+                return {
+                    circuits: data.circuits.filter(c => circuitUsesFdp(c, id)),
+                    nnis: data.nnis.filter(n => n.fdpId === id)
+                };
+            }
+            if (type === 'site') {
+                return {
+                    circuits: data.circuits.filter(c => L.some(l => c[l + 'LocationSiteId'] === id)),
+                    nnis: data.nnis.filter(n => n.siteId === id),
+                    equipment: (data.equipment || []).filter(e => e.siteId === id),
+                    fdps: (data.fdps || []).filter(f => f.siteId === id)
+                };
+            }
+            if (type === 'dfroute') {
+                const endFdps = new Set();
+                (data.segments || []).filter(s => s.routeId === id).forEach(s => { if (s.aEndFDP) endFdps.add(s.aEndFDP); if (s.zEndFDP) endFdps.add(s.zEndFDP); });
+                return {
+                    circuits: data.circuits.filter(c => [...endFdps].some(f => circuitUsesFdp(c, f))),
+                    nnis: data.nnis.filter(n => endFdps.has(n.fdpId)),
+                    endFdps: [...endFdps]
+                };
+            }
+            return { circuits: [], nnis: [] };
+        }
+
+        // Modal: "what drops if we lose <resource>". Launched from the quick-actions popup /
+        // detail-view action bar for site/equipment/fdp/dfroute.
+        async function openImpactAnalysis(type, id) {
+            const [circuits, nnis, equipment, fdps, sites, routes, segments] = await Promise.all([
+                store.getCircuits(), store.getNnis(), store.getEquipment(), store.getFdps(), store.getSites(), store.getDarkFiberRoutes(), store.getDarkFiberSegments()
+            ]);
+            const nameOf = () => {
+                if (type === 'equipment') { const x = equipment.find(e => e.id === id); return x ? x.name : id; }
+                if (type === 'fdp') { const x = fdps.find(f => f.id === id); return x ? x.name : id; }
+                if (type === 'site') { const x = sites.find(s => s.id === id); return x ? x.name : id; }
+                if (type === 'dfroute') { const x = routes.find(r => r.id === id); return x ? (x.routeName || x.id) : id; }
+                return id;
+            };
+            const typeLabel = { equipment: 'Equipment', fdp: 'FDP', site: 'Site', dfroute: 'Dark-fiber route' }[type] || type;
+            const r = impactOfResource(type, id, { circuits, nnis, equipment, fdps, segments });
+            const custs = [...new Set(r.circuits.map(c => c.customer).filter(Boolean))];
+            const activeCount = r.circuits.filter(c => /active|complete|accounting|closed/i.test(c.status || '')).length;
+            const kill = "document.getElementById('impactOverlay').remove(); ";
+
+            const chip = (label, val, color) => `<div style="background:var(--bg-tertiary); border-radius:0.5rem; padding:0.75rem 1rem; min-width:100px;"><div style="font-size:1.6rem; font-weight:700; color:${color};">${val}</div><div style="font-size:0.72rem; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.03em;">${label}</div></div>`;
+
+            const circuitTable = r.circuits.length ? `
+                <h3 style="margin:1.25rem 0 0.5rem; font-size:1rem;">⚡ Affected circuits (${r.circuits.length})</h3>
+                <div class="table-container"><table><thead><tr><th>Circuit</th><th>Customer</th><th>Bandwidth</th><th>Status</th></tr></thead><tbody>
+                ${[...r.circuits].sort((a, b) => String(a.customer || '').localeCompare(String(b.customer || ''))).map(c => `<tr>
+                    <td><a href="javascript:void(0)" onclick="${kill}showQuickActions('circuit','${c.id}')" style="color:var(--accent-primary); text-decoration:none; font-weight:600;">${_dvEsc(c.circuitId || c.id)}</a></td>
+                    <td>${_dvEsc(c.customer || '—')}</td><td>${_dvEsc(c.bandwidth || '—')}</td><td>${_dvEsc(c.status || '—')}</td></tr>`).join('')}
+                </tbody></table></div>` : '';
+
+            const nniTable = r.nnis.length ? `
+                <h3 style="margin:1.25rem 0 0.5rem; font-size:1rem;">🔗 Affected NNIs (${r.nnis.length})</h3>
+                <div class="table-container"><table><thead><tr><th>NNI</th><th>Provider</th><th>Bandwidth</th></tr></thead><tbody>
+                ${r.nnis.map(n => `<tr>
+                    <td><a href="javascript:void(0)" onclick="${kill}showQuickActions('nni','${n.id}')" style="color:var(--accent-primary); text-decoration:none; font-weight:600;">${_dvEsc(n.name || n.id)}</a></td>
+                    <td>${_dvEsc(n.provider || '—')}</td><td>${_dvEsc(n.bandwidth || '—')}</td></tr>`).join('')}
+                </tbody></table></div>` : '';
+
+            const downstream = type === 'site' ? `<div style="color:var(--text-secondary); font-size:0.85rem; margin-top:0.75rem;">Also housed at this site: <strong>${r.equipment.length}</strong> equipment · <strong>${r.fdps.length}</strong> FDP${r.fdps.length === 1 ? '' : 's'} (their own dependents are included above).</div>` : '';
+            const routeNote = type === 'dfroute' ? `<div style="color:var(--text-tertiary); font-size:0.8rem; margin-top:0.75rem;">Inferred from ${r.endFdps.length} FDP${r.endFdps.length === 1 ? '' : 's'} this route's segments terminate on.</div>` : '';
+            const nothing = (!r.circuits.length && !r.nnis.length)
+                ? `<div style="background:rgba(16,185,129,0.12); border:1px solid var(--success); color:var(--success); border-radius:0.5rem; padding:0.9rem 1rem; font-weight:600; margin-top:1rem;">✅ No circuits or NNIs currently depend on this — safe to take out of service.</div>`
+                : '';
+
+            const overlay = document.createElement('div');
+            overlay.id = 'impactOverlay';
+            overlay.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:10000; display:flex; align-items:flex-start; justify-content:center; padding:3rem 1rem; overflow:auto;';
+            overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
+            overlay.innerHTML = `
+                <div style="background:var(--bg-secondary); border:1px solid var(--border-color); border-radius:0.75rem; padding:1.5rem; width:100%; max-width:860px;">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:0.75rem;">
+                        <div><h2 style="margin:0; font-size:1.4rem;">💥 Failure Impact</h2><div style="color:var(--text-secondary); font-size:0.9rem; margin-top:0.2rem;">If <strong>${_dvEsc(nameOf())}</strong> <span style="color:var(--text-tertiary);">(${typeLabel})</span> goes down:</div></div>
+                        <button class="btn-secondary" onclick="${kill.trim()}" style="padding:0.35rem 0.7rem;">✕</button>
+                    </div>
+                    <div style="display:flex; gap:0.75rem; flex-wrap:wrap;">
+                        ${chip('Circuits', r.circuits.length, r.circuits.length ? 'var(--danger)' : 'var(--success)')}
+                        ${chip('· of those active', activeCount, activeCount ? 'var(--danger)' : 'var(--text-secondary)')}
+                        ${chip('NNIs', r.nnis.length, r.nnis.length ? 'var(--warning)' : 'var(--success)')}
+                        ${chip('Customers', custs.length, custs.length ? 'var(--warning)' : 'var(--text-secondary)')}
+                    </div>
+                    ${downstream}${routeNote}${nothing}${circuitTable}${nniTable}
+                </div>`;
+            document.body.appendChild(overlay);
+        }
+
+        // ===================== Provisioning assistant =====================
+        // deviceFreePorts + pickPorts are pure (unit-tested: scratchpad/provision.test.mjs).
+        // Free port identifiers on a device. Equipment uses speed bands (optionally filtered);
+        // FDP is 1..portCount (speed-agnostic). Returns [{port, speeds?}].
+        function deviceFreePorts(device, kind, usedSet, speed) {
+            const out = [];
+            if (kind === 'equipment') {
+                parseEquipmentPortBands(device.portConfig).forEach(b => {
+                    if (speed && !b.speeds.includes(speed)) return;
+                    for (let p = b.start; p <= b.end; p++) if (!usedSet.has(String(p))) out.push({ port: String(p), speeds: b.speeds });
+                });
+            } else {
+                const total = parseInt(device.portCount || device.numPorts, 10) || 0;
+                for (let p = 1; p <= total; p++) if (!usedSet.has(String(p))) out.push({ port: String(p) });
+            }
+            return out;
+        }
+
+        // Recommend how to satisfy n ports from ranked candidates: prefer a single device,
+        // else combine greedily. Returns { satisfied, mode, picks:[{name,kind,use[]}], totalFree }.
+        function pickPorts(candidates, n) {
+            const totalFree = candidates.reduce((s, c) => s + c.free.length, 0);
+            const single = candidates.find(c => c.free.length >= n);
+            if (single) return { satisfied: true, mode: 'single', picks: [{ name: single.name, kind: single.kind, use: single.free.slice(0, n) }], totalFree };
+            const picks = []; let need = n;
+            for (const c of candidates) { if (need <= 0) break; if (!c.free.length) continue; const take = c.free.slice(0, need); picks.push({ name: c.name, kind: c.kind, use: take }); need -= take.length; }
+            return { satisfied: need <= 0, mode: 'combined', picks, totalFree };
+        }
+
+        // Candidate devices with free ports at a site (equipment always; FDPs only when no
+        // speed filter, since patch ports carry no speed). Ranked by free-port count.
+        function _provEndCandidates(siteId, speed) {
+            const { equipment, fdps, circuits, nnis } = window._provData;
+            const out = [];
+            equipment.filter(e => e.siteId === siteId).forEach(e => {
+                const free = deviceFreePorts(e, 'equipment', collectEquipmentUsedPorts(e.id, circuits, nnis), speed);
+                if (free.length) out.push({ kind: 'Equipment', id: e.id, name: e.name, free });
+            });
+            if (!speed) fdps.filter(f => f.siteId === siteId).forEach(f => {
+                const free = deviceFreePorts(f, 'fdp', collectFdpUsedPorts(f.id, circuits, nnis, true), null);
+                if (free.length) out.push({ kind: 'FDP', id: f.id, name: f.name, free });
+            });
+            out.sort((a, b) => b.free.length - a.free.length);
+            return out;
+        }
+
+        async function openProvisioningAssistant() {
+            const [sites, equipment, fdps, circuits, nnis] = await Promise.all([store.getSites(), store.getEquipment(), store.getFdps(), store.getCircuits(), store.getNnis()]);
+            window._provData = { sites, equipment, fdps, circuits, nnis };
+            const speedSet = new Set();
+            equipment.forEach(e => parseEquipmentPortBands(e.portConfig).forEach(b => b.speeds.forEach(s => speedSet.add(s))));
+            const speeds = [...speedSet].sort((a, b) => (parseFloat(a) || 0) - (parseFloat(b) || 0));
+            const speedOpts = '<option value="">Any speed</option>' + speeds.map(s => `<option value="${s}">${s}</option>`).join('');
+            const siteOpts = '<option value="">Select site…</option>' + [...sites].sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''))).map(s => `<option value="${s.id}">${_dvEsc(s.name || s.id)}</option>`).join('');
+            const overlay = document.createElement('div');
+            overlay.id = 'provOverlay';
+            overlay.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:10000; display:flex; align-items:flex-start; justify-content:center; padding:3rem 1rem; overflow:auto;';
+            overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
+            const fld = 'width:100%; padding:0.6rem; border:1px solid var(--border-color); border-radius:0.5rem; background:var(--bg-tertiary); color:var(--text-primary);';
+            const lbl = 'display:block; font-size:0.8rem; color:var(--text-secondary); margin-bottom:0.35rem;';
+            overlay.innerHTML = `
+                <div style="background:var(--bg-secondary); border:1px solid var(--border-color); border-radius:0.75rem; padding:1.5rem; width:100%; max-width:820px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
+                        <h2 style="margin:0; font-size:1.4rem;">🧰 Provisioning Assistant</h2>
+                        <button class="btn-secondary" onclick="document.getElementById('provOverlay').remove()" style="padding:0.35rem 0.7rem;">✕</button>
+                    </div>
+                    <p style="color:var(--text-secondary); margin:0 0 1rem 0; font-size:0.9rem;">Pick two endpoints, a speed, and how many ports — get specific free ports to reserve at each end.</p>
+                    <div style="display:flex; gap:1rem; flex-wrap:wrap; align-items:flex-end;">
+                        <div style="flex:1; min-width:220px;"><label style="${lbl}">A endpoint</label><select id="provASite" onchange="runProvisioning()" style="${fld}">${siteOpts}</select></div>
+                        <div style="flex:1; min-width:220px;"><label style="${lbl}">Z endpoint</label><select id="provZSite" onchange="runProvisioning()" style="${fld}">${siteOpts}</select></div>
+                        <div style="flex:0 0 150px;"><label style="${lbl}">Speed</label><select id="provSpeed" onchange="runProvisioning()" style="${fld}">${speedOpts}</select></div>
+                        <div style="flex:0 0 90px;"><label style="${lbl}">Ports</label><input type="number" id="provCount" min="1" value="1" onkeydown="if(event.key==='Enter')runProvisioning()" style="${fld}"></div>
+                    </div>
+                    <div id="provResult" style="margin-top:1.25rem;"><div style="color:var(--text-tertiary);">Pick both endpoints to see recommendations.</div></div>
+                </div>`;
+            document.body.appendChild(overlay);
+        }
+
+        function runProvisioning() {
+            const d = window._provData; if (!d) return;
+            const out = document.getElementById('provResult'); if (!out) return;
+            const aSite = document.getElementById('provASite').value;
+            const zSite = document.getElementById('provZSite').value;
+            const speed = document.getElementById('provSpeed').value;
+            const n = Math.max(1, parseInt(document.getElementById('provCount').value, 10) || 1);
+            if (!aSite || !zSite) { out.innerHTML = '<div style="color:var(--text-tertiary);">Pick both endpoints to see recommendations.</div>'; return; }
+            const siteName = id => { const s = d.sites.find(x => x.id === id); return _dvEsc(s ? (s.name || id) : id); };
+            const endCard = (label, siteId) => {
+                const rec = pickPorts(_provEndCandidates(siteId, speed), n);
+                const head = rec.satisfied
+                    ? `<div style="color:var(--success); font-weight:700;">✅ ${label}: ${siteName(siteId)}</div>`
+                    : `<div style="color:var(--danger); font-weight:700;">⚠️ ${label}: ${siteName(siteId)} — only ${rec.totalFree} free ${speed || ''} port${rec.totalFree === 1 ? '' : 's'} (need ${n})</div>`;
+                const picks = rec.picks.length
+                    ? rec.picks.map(p => `<div style="margin-top:0.45rem;"><strong>${_dvEsc(p.name)}</strong> <span style="color:var(--text-tertiary);">(${p.kind})</span><br>→ port${p.use.length === 1 ? '' : 's'} <span style="font-family:monospace; color:var(--accent-primary);">${p.use.map(u => u.port).join(', ')}</span></div>`).join('')
+                    : '<div style="color:var(--text-tertiary); margin-top:0.45rem;">No free ports' + (speed ? ' at ' + speed : '') + ' at this site.</div>';
+                const note = rec.mode === 'combined' && rec.satisfied ? '<div style="color:var(--text-tertiary); font-size:0.8rem; margin-top:0.4rem;">Spans multiple devices.</div>' : '';
+                return `<div style="flex:1; min-width:280px; background:var(--bg-tertiary); border-radius:0.5rem; padding:1rem;">${head}${picks}${note}</div>`;
+            };
+            const sameSite = aSite === zSite ? '<div style="color:var(--warning); font-size:0.85rem; margin-bottom:0.75rem;">⚠️ A and Z are the same site.</div>' : '';
+            out.innerHTML = sameSite + `<div style="display:flex; gap:1rem; flex-wrap:wrap;">${endCard('A end', aSite)}${endCard('Z end', zSite)}</div>`;
+        }
+
+        // ===================== Go-live readiness scorecard =====================
+        // siteReadiness is pure (unit-tested: scratchpad/readiness.test.mjs). Scores a site's
+        // operational completeness. Infra checks (rack/equipment/ports/power) apply to PoP
+        // sites or any site that already has infrastructure; other sites score on location only.
+        function siteReadiness(site, ctx) {
+            const { racks, equipment, fdps } = ctx;
+            const siteRacks = racks.filter(r => r.siteId === site.id);
+            const siteEquip = equipment.filter(e => e.siteId === site.id);
+            const hasInfra = (site.type === 'PoP') || siteRacks.length > 0 || siteEquip.length > 0 || fdps.some(f => f.siteId === site.id);
+            const equipWithPorts = siteEquip.filter(e => parsePortConfig(e.portConfig).total > 0);
+            const checks = [
+                { label: 'Coordinates', ok: !!(site.latitude && site.longitude), weight: 2 },
+                { label: 'Iris CLLI', ok: !!site.irisClli, weight: 1 },
+                { label: 'Address', ok: !!(site.address || (site.city && site.state)), weight: 1 }
+            ];
+            if (hasInfra) {
+                checks.push(
+                    { label: '≥1 rack', ok: siteRacks.length > 0, weight: 1 },
+                    { label: '≥1 equipment', ok: siteEquip.length > 0, weight: 2 },
+                    { label: 'All equipment has port config', ok: siteEquip.length > 0 && equipWithPorts.length === siteEquip.length, weight: 1 },
+                    { label: 'Rack power recorded', ok: siteRacks.length > 0 && siteRacks.some(r => r.purchasedPowerAC || r.purchasedPowerDC), weight: 1 }
+                );
+            }
+            const maxWeight = checks.reduce((s, c) => s + c.weight, 0);
+            const score = checks.filter(c => c.ok).reduce((s, c) => s + c.weight, 0);
+            return { siteId: site.id, name: site.name || site.id, type: site.type || '', hasInfra, checks, score, maxWeight, pct: maxWeight ? Math.round(score / maxWeight * 100) : 100 };
+        }
+
+        async function openReadinessScorecard() {
+            const [sites, racks, equipment, fdps] = await Promise.all([store.getSites(), store.getRacks(), store.getEquipment(), store.getFdps()]);
+            window._readinessData = sites.map(s => siteReadiness(s, { racks, equipment, fdps }));
+            const overlay = document.createElement('div');
+            overlay.id = 'readinessOverlay';
+            overlay.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:10000; display:flex; align-items:flex-start; justify-content:center; padding:3rem 1rem; overflow:auto;';
+            overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
+            overlay.innerHTML = `
+                <div style="background:var(--bg-secondary); border:1px solid var(--border-color); border-radius:0.75rem; padding:1.5rem; width:100%; max-width:900px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
+                        <h2 style="margin:0; font-size:1.4rem;">✅ Go-Live Readiness</h2>
+                        <button class="btn-secondary" onclick="document.getElementById('readinessOverlay').remove()" style="padding:0.35rem 0.7rem;">✕</button>
+                    </div>
+                    <div style="display:flex; gap:1rem; align-items:center; margin-bottom:1rem; flex-wrap:wrap;">
+                        <p style="color:var(--text-secondary); margin:0; font-size:0.9rem; flex:1; min-width:220px;">Per-site completeness for the build-out. Worst-scoring first — click a site to act on it.</p>
+                        <select id="readinessTypeFilter" onchange="renderReadinessList(this.value)" style="padding:0.5rem; border:1px solid var(--border-color); border-radius:0.5rem; background:var(--bg-tertiary); color:var(--text-primary);">
+                            <option value="pop">PoP sites</option>
+                            <option value="all">All sites</option>
+                        </select>
+                    </div>
+                    <div id="readinessResult"></div>
+                </div>`;
+            document.body.appendChild(overlay);
+            renderReadinessList('pop');
+        }
+
+        function renderReadinessList(typeFilter) {
+            const out = document.getElementById('readinessResult'); if (!out) return;
+            const rows = (window._readinessData || [])
+                .filter(r => typeFilter === 'all' ? true : (r.type || '').toLowerCase() === 'pop')
+                .sort((a, b) => a.pct - b.pct || a.name.localeCompare(b.name));
+            if (!rows.length) { out.innerHTML = '<div style="color:var(--text-tertiary); padding:1rem;">No matching sites.</div>'; return; }
+            const ready = rows.filter(r => r.pct === 100).length;
+            const avg = Math.round(rows.reduce((s, r) => s + r.pct, 0) / rows.length);
+            const barColor = p => p >= 90 ? 'var(--success)' : p >= 60 ? 'var(--warning)' : 'var(--danger)';
+            const summary = `<div style="display:flex; gap:1rem; margin-bottom:1rem; flex-wrap:wrap;">
+                <div style="background:var(--bg-tertiary); border-radius:0.5rem; padding:0.75rem 1rem;"><div style="font-size:1.5rem; font-weight:700; color:${barColor(avg)};">${avg}%</div><div style="font-size:0.72rem; color:var(--text-secondary); text-transform:uppercase;">Avg readiness</div></div>
+                <div style="background:var(--bg-tertiary); border-radius:0.5rem; padding:0.75rem 1rem;"><div style="font-size:1.5rem; font-weight:700; color:var(--success);">${ready}/${rows.length}</div><div style="font-size:0.72rem; color:var(--text-secondary); text-transform:uppercase;">Fully ready</div></div>
+            </div>`;
+            const body = rows.map(r => {
+                const failed = r.checks.filter(c => !c.ok);
+                const chips = failed.length
+                    ? failed.map(c => `<span style="background:rgba(239,68,68,0.14); color:var(--danger); border-radius:0.35rem; padding:0.12rem 0.5rem; font-size:0.75rem; margin:0 0.3rem 0.3rem 0; display:inline-block;">✕ ${c.label}</span>`).join('')
+                    : '<span style="color:var(--success); font-size:0.8rem;">All checks pass</span>';
+                return `<div style="padding:0.75rem 0; border-bottom:1px solid var(--border-color);">
+                    <div style="display:flex; align-items:center; gap:0.75rem; margin-bottom:0.4rem;">
+                        <a href="javascript:void(0)" onclick="document.getElementById('readinessOverlay').remove(); showQuickActions('site','${r.siteId}')" style="color:var(--accent-primary); text-decoration:none; font-weight:600; flex:1;">${_dvEsc(r.name)}${r.type ? ' <span style="color:var(--text-tertiary); font-weight:400; font-size:0.8rem;">' + _dvEsc(r.type) + '</span>' : ''}</a>
+                        <div style="width:140px; background:var(--bg-tertiary); border-radius:0.25rem; height:8px; overflow:hidden;"><div style="height:100%; width:${r.pct}%; background:${barColor(r.pct)};"></div></div>
+                        <span style="font-family:monospace; font-weight:700; color:${barColor(r.pct)}; min-width:44px; text-align:right;">${r.pct}%</span>
+                    </div>
+                    <div>${chips}</div>
+                </div>`;
+            }).join('');
+            out.innerHTML = summary + body;
+        }
+
         async function renderTemplatesPage() {
             console.log('📋 Loading templates page...');
             try {
@@ -15253,7 +15751,10 @@ ${entityActionButtons('nni', `${n.id}`, true)}
                 const capSpeedOptionsHtml = '<option value="">Any speed</option>' + _capSpeeds.map(sp => `<option value="${sp}">${sp}</option>`).join('');
                 const capSearchHTML = `
                     <div style="background: var(--bg-secondary); border: 1px solid var(--accent-primary); border-radius: 0.75rem; padding: 1.5rem; margin-bottom: 2.5rem;">
-                        <h2 style="font-size: 1.4rem; margin: 0 0 0.35rem 0;">🔎 Find Available Capacity</h2>
+                        <div style="display:flex; justify-content:space-between; align-items:center; gap:1rem; flex-wrap:wrap; margin-bottom:0.35rem;">
+                            <h2 style="font-size: 1.4rem; margin: 0;">🔎 Find Available Capacity</h2>
+                            <button class="btn-secondary" onclick="openProvisioningAssistant()" title="Recommend specific free ports to reserve for a new A↔Z circuit">🧰 Plan a build</button>
+                        </div>
                         <p style="color: var(--text-secondary); margin: 0 0 1.1rem 0; font-size: 0.9rem;">Rank sites by open ports — e.g. “≥ 4 free 100G ports near Nashville, TN”. Distance uses saved site coordinates.</p>
                         <div style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: flex-end;">
                             <div style="flex: 0 0 120px;">
