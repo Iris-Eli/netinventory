@@ -13864,9 +13864,10 @@ ${entityActionButtons('nni', `${n.id}`, true)}
         // Open the diversity-check modal (two circuit pickers + verdict). preselectId optionally
         // fixes Circuit A (e.g. launched from a specific circuit).
         async function openDiversityCheck(preselectId) {
-            const [circuits, sites, equipment, fdps, nnis, routes, segments] = await Promise.all([
-                store.getCircuits(), store.getSites(), store.getEquipment(), store.getFdps(), store.getNnis(), store.getDarkFiberRoutes(), store.getDarkFiberSegments()
-            ]);
+            let _dvd;
+            try { _dvd = await Promise.all([store.getCircuits(), store.getSites(), store.getEquipment(), store.getFdps(), store.getNnis(), store.getDarkFiberRoutes(), store.getDarkFiberSegments()]); }
+            catch (e) { alert('Could not load data for the diversity check: ' + (typeof friendlyError === 'function' ? friendlyError(e) : (e && e.message || e))); return; }
+            const [circuits, sites, equipment, fdps, nnis, routes, segments] = _dvd;
             const nameMap = arr => { const m = {}; arr.forEach(x => m[x.id] = x.name || x.id); return m; };
             window._diversityData = {
                 circuits,
@@ -14000,9 +14001,10 @@ ${entityActionButtons('nni', `${n.id}`, true)}
         // Modal: "what drops if we lose <resource>". Launched from the quick-actions popup /
         // detail-view action bar for site/equipment/fdp/dfroute.
         async function openImpactAnalysis(type, id) {
-            const [circuits, nnis, equipment, fdps, sites, routes, segments] = await Promise.all([
-                store.getCircuits(), store.getNnis(), store.getEquipment(), store.getFdps(), store.getSites(), store.getDarkFiberRoutes(), store.getDarkFiberSegments()
-            ]);
+            let _imd;
+            try { _imd = await Promise.all([store.getCircuits(), store.getNnis(), store.getEquipment(), store.getFdps(), store.getSites(), store.getDarkFiberRoutes(), store.getDarkFiberSegments()]); }
+            catch (e) { alert('Could not load data for the impact analysis: ' + (typeof friendlyError === 'function' ? friendlyError(e) : (e && e.message || e))); return; }
+            const [circuits, nnis, equipment, fdps, sites, routes, segments] = _imd;
             const nameOf = () => {
                 if (type === 'equipment') { const x = equipment.find(e => e.id === id); return x ? x.name : id; }
                 if (type === 'fdp') { const x = fdps.find(f => f.id === id); return x ? x.name : id; }
@@ -14108,7 +14110,10 @@ ${entityActionButtons('nni', `${n.id}`, true)}
         }
 
         async function openProvisioningAssistant() {
-            const [sites, equipment, fdps, circuits, nnis] = await Promise.all([store.getSites(), store.getEquipment(), store.getFdps(), store.getCircuits(), store.getNnis()]);
+            let _pvd;
+            try { _pvd = await Promise.all([store.getSites(), store.getEquipment(), store.getFdps(), store.getCircuits(), store.getNnis()]); }
+            catch (e) { alert('Could not load data for the provisioning assistant: ' + (typeof friendlyError === 'function' ? friendlyError(e) : (e && e.message || e))); return; }
+            const [sites, equipment, fdps, circuits, nnis] = _pvd;
             window._provData = { sites, equipment, fdps, circuits, nnis };
             const speedSet = new Set();
             equipment.forEach(e => parseEquipmentPortBands(e.portConfig).forEach(b => b.speeds.forEach(s => speedSet.add(s))));
@@ -14192,7 +14197,10 @@ ${entityActionButtons('nni', `${n.id}`, true)}
         }
 
         async function openReadinessScorecard() {
-            const [sites, racks, equipment, fdps] = await Promise.all([store.getSites(), store.getRacks(), store.getEquipment(), store.getFdps()]);
+            let _rsd;
+            try { _rsd = await Promise.all([store.getSites(), store.getRacks(), store.getEquipment(), store.getFdps()]); }
+            catch (e) { alert('Could not load data for the readiness scorecard: ' + (typeof friendlyError === 'function' ? friendlyError(e) : (e && e.message || e))); return; }
+            const [sites, racks, equipment, fdps] = _rsd;
             window._readinessData = sites.map(s => siteReadiness(s, { racks, equipment, fdps }));
             const overlay = document.createElement('div');
             overlay.id = 'readinessOverlay';
