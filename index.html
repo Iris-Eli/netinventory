@@ -11952,9 +11952,11 @@
 
             // Graphical DLR — connection diagram from the primary path (VLAN-1 fallback if top-level is empty)
             const _diagCtx = { sites: allSites, equipment: allEquipment, fdps: allFdps, nnis: allNnis, racks: allRacks };
-            let diagramModel = buildCircuitDiagramModel(circuit, _diagCtx);
-            if (!diagramModel.hops.length && vlans.length) diagramModel = buildCircuitDiagramModel({ ...vlans[0], circuitId: circuit.circuitId, bandwidth: circuit.bandwidth, status: circuit.status }, _diagCtx);
-            const diagramHTML = renderCircuitDiagramSVG(diagramModel);
+            // A/Z connection data often lives in VLAN-1 rather than the top-level columns —
+            // backfill the primary object from vlans[0] so NNIs/equipment aren't missed.
+            const _primary = { ...circuit };
+            if (vlans[0]) ['a', 'z'].forEach(end => ['LocationSiteId', 'ConnectionType', 'Fdp', 'Port', 'Equipment', 'EquipmentPort', 'EquipmentFdp', 'EquipmentFdpPorts', 'Nni', 'NniSubinterface'].forEach(k => { if (!_primary[end + k] && vlans[0][end + k]) _primary[end + k] = vlans[0][end + k]; }));
+            const diagramHTML = renderCircuitDiagramSVG(buildCircuitDiagramModel(_primary, _diagCtx));
             
             const generatedDate = new Date().toLocaleString();
             const directionLabel = circuit.direction === 'provider' ? 'Purchasing' : circuit.direction === 'customer' ? 'Providing' : 'Internal';
@@ -14359,25 +14361,36 @@ ${entityActionButtons('nni', `${n.id}`, true)}
             const hops = [];
             CIRCUIT_PATH_LETTERS.forEach(l => {
                 const siteId = circuit[l + 'LocationSiteId'];
-                const equipId = circuit[l + 'Equipment'];
-                const directFdp = circuit[l + 'Fdp'];
-                const equipFdp = circuit[l + 'EquipmentFdp'];
-                const fdpId = directFdp || equipFdp;
-                const fdpPort = directFdp ? circuit[l + 'Port'] : circuit[l + 'EquipmentFdpPorts'];
                 const nniId = circuit[l + 'Nni'];
+                const n = nniId ? byId(nnis, nniId) : null;
+                let equipId = circuit[l + 'Equipment'];
+                let equipPort = circuit[l + 'EquipmentPort'] || '';
+                const directFdp = circuit[l + 'Fdp'], equipFdp = circuit[l + 'EquipmentFdp'];
+                let fdpId = directFdp || equipFdp;
+                let fdpPort = directFdp ? circuit[l + 'Port'] : circuit[l + 'EquipmentFdpPorts'];
+                // NNI handoff: the equipment/FDP are linked on the NNI record, not the circuit
+                // column — resolve them so the hop shows its gear (matches generateVlanPathHTML).
+                if (n) {
+                    if (!equipId && n.equipmentID) { equipId = n.equipmentID; if (!equipPort) equipPort = n.equipmentPorts || ''; }
+                    if (!fdpId && n.fdpId) { fdpId = n.fdpId; if (!fdpPort) fdpPort = n.fdpPorts || ''; }
+                }
                 if (!siteId && !equipId && !fdpId && !nniId) return;
                 const e = equipId ? byId(equipment, equipId) : null;
                 const f = fdpId ? byId(fdps, fdpId) : null;
-                const n = nniId ? byId(nnis, nniId) : null;
                 hops.push({
                     letter: l.toUpperCase(),
                     siteId, siteName: siteName(siteId),
                     nni: nniId ? { name: (n && n.name) || nniId, port: (n && (n.equipmentPorts || n.fdpPorts)) || '' } : null,
                     fdp: fdpId ? dev(fdpId, f && f.name, fdpPort, f && f.rackId, f && f.rackPosition, f && f.rackUnits) : null,
-                    equipment: equipId ? dev(equipId, e && e.name, circuit[l + 'EquipmentPort'], e && e.rackId, e && e.rackPosition, e && e.rackUnits) : null
+                    equipment: equipId ? dev(equipId, e && e.name, equipPort, e && e.rackId, e && e.rackPosition, e && e.rackUnits) : null
                 });
             });
-            return { circuitId: circuit.circuitId || circuit.id, bandwidth: circuit.bandwidth || '', status: circuit.status || '', hops };
+            return {
+                circuitId: circuit.circuitId || circuit.id, bandwidth: circuit.bandwidth || '', status: circuit.status || '', hops,
+                offNet: String(circuit.networkType || '').toLowerCase() === 'off-net',
+                provider: circuit.provider || '',
+                typeIICid: circuit.typeIICircuitId || circuit.typeIICircuitID || ''
+            };
         }
 
         // Render the diagram as inline SVG rack elevations: one column per hop. Order top→bottom
@@ -14457,14 +14470,21 @@ ${entityActionButtons('nni', `${n.id}`, true)}
                 maxY = Math.max(maxY, y);
             });
 
-            // Fiber spans: equipment(hop i) → equipment(hop i+1)
+            // Spans between hops. The final span is the Type II / off-net last mile when the
+            // circuit is off-net — drawn solid amber and labeled with the provider + CID.
             let spans = '';
             for (let i = 0; i < hops.length - 1; i++) {
                 const a = spanAnchors[i], b = spanAnchors[i + 1];
                 if (!a || !b) continue;
                 const x1 = a.rightX, y1 = a.y, x2 = b.leftX, y2 = b.y, mid = (x1 + x2) / 2;
-                spans += `<path d="M ${x1} ${y1} C ${mid} ${y1}, ${mid} ${y2}, ${x2} ${y2}" fill="none" stroke="#06b6d4" stroke-width="2" stroke-dasharray="5,4"/>`;
-                spans += `<text x="${mid}" y="${Math.min(y1, y2) - 6}" text-anchor="middle" style="font-size:10px; fill:#06b6d4;">fiber span</text>`;
+                const isTypeII = model.offNet && i === hops.length - 2;
+                const stroke = isTypeII ? 'var(--warning)' : '#06b6d4';
+                const dash = isTypeII ? '' : 'stroke-dasharray="5,4"';
+                const label = isTypeII
+                    ? ('Type II' + (model.provider ? ' · ' + esc(clip(model.provider, 18)) : '') + ' · CID ' + esc(model.typeIICid || '—'))
+                    : 'fiber span';
+                spans += `<path d="M ${x1} ${y1} C ${mid} ${y1}, ${mid} ${y2}, ${x2} ${y2}" fill="none" stroke="${stroke}" stroke-width="2" ${dash}/>`;
+                spans += `<text x="${mid}" y="${Math.min(y1, y2) - 6}" text-anchor="middle" style="font-size:10px; fill:${stroke};">${label}</text>`;
             }
 
             const W = marginX * 2 + hops.length * colW, H = maxY + 20;
