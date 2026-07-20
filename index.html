@@ -11951,7 +11951,7 @@
             }
 
             // Graphical DLR — connection diagram from the primary path (VLAN-1 fallback if top-level is empty)
-            const _diagCtx = { sites: allSites, equipment: allEquipment, fdps: allFdps, nnis: allNnis };
+            const _diagCtx = { sites: allSites, equipment: allEquipment, fdps: allFdps, nnis: allNnis, racks: allRacks };
             let diagramModel = buildCircuitDiagramModel(circuit, _diagCtx);
             if (!diagramModel.hops.length && vlans.length) diagramModel = buildCircuitDiagramModel({ ...vlans[0], circuitId: circuit.circuitId, bandwidth: circuit.bandwidth, status: circuit.status }, _diagCtx);
             const diagramHTML = renderCircuitDiagramSVG(diagramModel);
@@ -14345,9 +14345,17 @@ ${entityActionButtons('nni', `${n.id}`, true)}
         // buildCircuitDiagramModel is pure (unit-tested: scratchpad/dlr-diagram.test.mjs).
         // Extracts the touched devices per hop (A..N,Z) with ports + rack position.
         function buildCircuitDiagramModel(circuit, ctx) {
-            const { sites, equipment, fdps, nnis } = ctx;
-            const siteName = id => { const s = sites.find(x => x.id === id); return s ? (s.name || id) : (id || '?'); };
-            const byId = (arr, id) => arr.find(x => x.id === id) || null;
+            const { sites, equipment, fdps, nnis, racks } = ctx;
+            const siteName = id => { const s = (sites || []).find(x => x.id === id); return s ? (s.name || id) : (id || '?'); };
+            const byId = (arr, id) => (arr || []).find(x => x.id === id) || null;
+            const rackOf = id => { const r = byId(racks, id); return { rackId: id || null, rackName: (r && r.name) || id || '', ruCap: (r && parseInt(r.ruCapacity, 10)) || 42 }; };
+            // Normalize a device (equipment/FDP) with resolved rack identity + capacity; rackPos
+            // is null when unset (→ rendered as a floating "position not set" box).
+            const dev = (id, name, port, rackId, pos, ru) => {
+                const meta = rackId ? rackOf(rackId) : { rackId: null, rackName: '', ruCap: 42 };
+                const p = parseInt(pos, 10);
+                return { id, name: name || id, port: port || '', rackId: meta.rackId, rackName: meta.rackName, ruCap: meta.ruCap, rackPos: isNaN(p) ? null : p, ru: parseInt(ru, 10) || 1 };
+            };
             const hops = [];
             CIRCUIT_PATH_LETTERS.forEach(l => {
                 const siteId = circuit[l + 'LocationSiteId'];
@@ -14364,58 +14372,105 @@ ${entityActionButtons('nni', `${n.id}`, true)}
                 hops.push({
                     letter: l.toUpperCase(),
                     siteId, siteName: siteName(siteId),
-                    equipment: equipId ? { id: equipId, name: (e && e.name) || equipId, port: circuit[l + 'EquipmentPort'] || '', rackPos: e && e.rackPosition, ru: e && e.rackUnits } : null,
-                    fdp: fdpId ? { id: fdpId, name: (f && f.name) || fdpId, port: fdpPort || '', rackPos: f && f.rackPosition } : null,
-                    nni: nniId ? { id: nniId, name: (n && n.name) || nniId, port: (n && (n.equipmentPorts || n.fdpPorts)) || '' } : null
+                    nni: nniId ? { name: (n && n.name) || nniId, port: (n && (n.equipmentPorts || n.fdpPorts)) || '' } : null,
+                    fdp: fdpId ? dev(fdpId, f && f.name, fdpPort, f && f.rackId, f && f.rackPosition, f && f.rackUnits) : null,
+                    equipment: equipId ? dev(equipId, e && e.name, circuit[l + 'EquipmentPort'], e && e.rackId, e && e.rackPosition, e && e.rackUnits) : null
                 });
             });
             return { circuitId: circuit.circuitId || circuit.id, bandwidth: circuit.bandwidth || '', status: circuit.status || '', hops };
         }
 
-        // Render the diagram model as inline SVG: one column per hop (equipment/FDP/NNI boxes
-        // wired with patch lines), dashed cyan fiber spans between hops. Rack U shown per box.
+        // Render the diagram as inline SVG rack elevations: one column per hop. Order top→bottom
+        // is NNI (handoff) → FDP → equipment; FDP/equipment sit in a scaled full-rack frame at
+        // their real U position (untouched slots faint). Devices with no rack position render as
+        // dashed "position not set" boxes. Dashed cyan spans join equipment across hops.
         function renderCircuitDiagramSVG(model) {
             const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+            const clip = (s, n) => { s = String(s || ''); return s.length > n ? s.slice(0, n - 1) + '…' : s; };
             const hops = model.hops || [];
             if (!hops.length) return '<div style="color:var(--text-secondary); padding:1rem;">No path/device data to diagram for this circuit.</div>';
-            // Signal order per hop, top → bottom: NNI (handoff) → FDP (patch) → Equipment.
-            // The fiber span joins one hop's equipment to the next hop's equipment.
-            const marginX = 24, headerY = 34, yNni = 64, boxW = 190, boxH = 52, rowGap = 36, colW = boxW + 56;
-            const yFdp = yNni + boxH + rowGap, yEquip = yFdp + boxH + rowGap;
-            const W = marginX * 2 + (hops.length - 1) * colW + boxW;
-            const H = yEquip + boxH + 30;
-            const bx = i => marginX + i * colW;
-            const anchorY = h => h.equipment ? yEquip : h.fdp ? yFdp : yNni; // outward span attaches here
-            const box = (x, y, type, title, sub, tag) => {
-                const stroke = type === 'equipment' ? 'var(--accent-primary)' : type === 'fdp' ? '#06b6d4' : 'var(--warning)';
-                const icon = type === 'equipment' ? '🖥️' : type === 'fdp' ? '🔆' : '🔗';
-                return `<rect x="${x}" y="${y}" width="${boxW}" height="${boxH}" rx="8" fill="var(--bg-tertiary)" stroke="${stroke}" stroke-width="2"/>`
-                    + `<text x="${x + 10}" y="${y + 21}" style="font-size:12px; font-weight:700; fill:var(--text-primary);">${icon} ${esc(title.length > 20 ? title.slice(0, 19) + '…' : title)}</text>`
-                    + `<text x="${x + 10}" y="${y + 40}" style="font-size:11px; fill:var(--text-secondary);">${esc(sub)}</text>`
-                    + (tag ? `<text x="${x + boxW - 8}" y="${y + 21}" text-anchor="end" style="font-size:10px; fill:var(--text-tertiary);">${esc(tag)}</text>` : '');
-            };
-            let svg = '';
-            for (let i = 0; i < hops.length - 1; i++) {
-                const a = hops[i], b = hops[i + 1];
-                const y1 = anchorY(a) + boxH / 2, y2 = anchorY(b) + boxH / 2;
-                const x1 = bx(i) + boxW, x2 = bx(i + 1), mid = (x1 + x2) / 2;
-                svg += `<path d="M ${x1} ${y1} C ${mid} ${y1}, ${mid} ${y2}, ${x2} ${y2}" fill="none" stroke="#06b6d4" stroke-width="2" stroke-dasharray="4,4"/>`;
-                svg += `<text x="${mid}" y="${Math.min(y1, y2) - 6}" text-anchor="middle" style="font-size:10px; fill:#06b6d4;">fiber span</text>`;
-            }
+            const marginX = 20, colW = 244, rackW = 46, rackX0 = 16, labelX0 = rackX0 + rackW + 12, topPad = 58, boxH = 40, laneGap = 20, floatGap = 12;
+            const colSvg = [];
+            const spanAnchors = []; // per hop: {leftX, rightX, y} of the outward (equipment) element
+            let maxY = 0;
+
             hops.forEach((h, i) => {
-                const x = bx(i), cx = x + boxW / 2;
-                svg += `<text x="${cx}" y="${headerY - 12}" text-anchor="middle" style="font-size:11px; font-weight:700; fill:var(--accent-primary);">${h.letter}</text>`;
-                svg += `<text x="${cx}" y="${headerY + 4}" text-anchor="middle" style="font-size:12px; fill:var(--text-primary);">${esc(h.siteName)}</text>`;
-                if (h.nni && h.fdp) svg += `<line x1="${cx}" y1="${yNni + boxH}" x2="${cx}" y2="${yFdp}" stroke="var(--text-tertiary)" stroke-width="2"/>`;
-                if (h.fdp && h.equipment) svg += `<line x1="${cx}" y1="${yFdp + boxH}" x2="${cx}" y2="${yEquip}" stroke="var(--text-tertiary)" stroke-width="2"/>`;
-                if (h.nni && h.equipment && !h.fdp) svg += `<line x1="${cx}" y1="${yNni + boxH}" x2="${cx}" y2="${yEquip}" stroke="var(--text-tertiary)" stroke-width="2" stroke-dasharray="2,3"/>`;
-                if (h.nni) svg += box(x, yNni, 'nni', h.nni.name, h.nni.port ? ('port ' + h.nni.port) : 'NNI', '');
-                if (h.fdp) svg += box(x, yFdp, 'fdp', h.fdp.name, h.fdp.port ? ('port ' + h.fdp.port) : '—', h.fdp.rackPos ? ('U' + h.fdp.rackPos) : '');
-                if (h.equipment) svg += box(x, yEquip, 'equipment', h.equipment.name, h.equipment.port ? ('port ' + h.equipment.port) : '—', h.equipment.rackPos ? ('U' + h.equipment.rackPos) : '');
+                const colX = marginX + i * colW, cx = colX + colW / 2;
+                let s = '';
+                s += `<text x="${cx}" y="24" text-anchor="middle" style="font-size:11px; font-weight:700; fill:var(--accent-primary);">${h.letter}</text>`;
+                s += `<text x="${cx}" y="42" text-anchor="middle" style="font-size:12px; fill:var(--text-primary);">${esc(clip(h.siteName, 26))}</text>`;
+                let y = topPad;
+                let equipAnchor = null, fdpAnchor = null, nniAnchor = null;
+
+                if (h.nni) {
+                    s += `<rect x="${colX + labelX0 - 6}" y="${y}" width="${colW - labelX0 - 4}" height="${boxH}" rx="6" fill="var(--bg-tertiary)" stroke="var(--warning)" stroke-width="2"/>`;
+                    s += `<text x="${colX + labelX0 + 4}" y="${y + 16}" style="font-size:11px; font-weight:700; fill:var(--text-primary);">🔗 ${esc(clip(h.nni.name, 18))}</text>`;
+                    s += `<text x="${colX + labelX0 + 4}" y="${y + 31}" style="font-size:10px; fill:var(--text-secondary);">${h.nni.port ? ('port ' + esc(h.nni.port)) : 'NNI handoff'}</text>`;
+                    nniAnchor = { y: y + boxH / 2 };
+                    y += boxH + laneGap;
+                }
+
+                // Group placed devices (rackId + rackPos) by rack; render a scaled elevation each.
+                const groups = {};
+                [[h.fdp, 'fdp'], [h.equipment, 'equipment']].forEach(([d, type]) => {
+                    if (!d || !d.rackId || d.rackPos == null) return;
+                    (groups[d.rackId] = groups[d.rackId] || { ruCap: d.ruCap, rackName: d.rackName, devs: [] }).devs.push([d, type]);
+                });
+                Object.keys(groups).forEach(rid => {
+                    const g = groups[rid];
+                    const uH = Math.max(4, Math.min(8, Math.round(300 / g.ruCap)));
+                    const frameTop = y + 12, frameH = g.ruCap * uH;
+                    s += `<text x="${colX + rackX0}" y="${frameTop - 4}" style="font-size:9px; fill:var(--text-tertiary);">${esc(clip(g.rackName, 22))} · ${g.ruCap}U</text>`;
+                    s += `<rect x="${colX + rackX0}" y="${frameTop}" width="${rackW}" height="${frameH}" fill="var(--bg-tertiary)" stroke="var(--border-color)" stroke-width="1"/>`;
+                    for (let u = 5; u <= g.ruCap; u += 5) { const ty = frameTop + (g.ruCap - u) * uH; s += `<line x1="${colX + rackX0 - 3}" y1="${ty}" x2="${colX + rackX0}" y2="${ty}" stroke="var(--text-tertiary)" stroke-width="1"/><text x="${colX + rackX0 - 5}" y="${ty + 3}" text-anchor="end" style="font-size:8px; fill:var(--text-tertiary);">${u}</text>`; }
+                    g.devs.forEach(([d, type]) => {
+                        const color = type === 'equipment' ? 'var(--accent-primary)' : '#06b6d4';
+                        const icon = type === 'equipment' ? '🖥️' : '🔆';
+                        const topU = Math.min(g.ruCap, d.rackPos + d.ru - 1);
+                        const dy = frameTop + (g.ruCap - topU) * uH, dh = Math.max(4, d.ru * uH);
+                        s += `<rect x="${colX + rackX0}" y="${dy}" width="${rackW}" height="${dh}" fill="${color}" fill-opacity="0.85" stroke="${color}" stroke-width="1"/>`;
+                        const lcy = dy + dh / 2;
+                        s += `<line x1="${colX + rackX0 + rackW}" y1="${lcy}" x2="${colX + labelX0 - 4}" y2="${lcy}" stroke="${color}" stroke-width="1"/>`;
+                        s += `<text x="${colX + labelX0}" y="${lcy - 1}" style="font-size:10px; font-weight:700; fill:var(--text-primary);">${icon} ${esc(clip(d.name, 16))}</text>`;
+                        s += `<text x="${colX + labelX0}" y="${lcy + 11}" style="font-size:9px; fill:var(--text-secondary);">${d.port ? ('port ' + esc(d.port) + ' · ') : ''}U${d.rackPos}</text>`;
+                        const anchor = { leftX: colX + rackX0, rightX: colX + colW - 6, y: lcy };
+                        if (type === 'equipment') equipAnchor = anchor; else fdpAnchor = anchor;
+                    });
+                    y = frameTop + frameH + laneGap;
+                });
+
+                // Unplaced devices → dashed flagged boxes
+                [[h.fdp, 'fdp'], [h.equipment, 'equipment']].forEach(([d, type]) => {
+                    if (!d || (d.rackId && d.rackPos != null)) return;
+                    const color = type === 'equipment' ? 'var(--accent-primary)' : '#06b6d4';
+                    const icon = type === 'equipment' ? '🖥️' : '🔆';
+                    s += `<rect x="${colX + labelX0 - 6}" y="${y}" width="${colW - labelX0 - 4}" height="${boxH}" rx="6" fill="var(--bg-tertiary)" stroke="${color}" stroke-width="2" stroke-dasharray="4,3"/>`;
+                    s += `<text x="${colX + labelX0 + 4}" y="${y + 15}" style="font-size:11px; font-weight:700; fill:var(--text-primary);">${icon} ${esc(clip(d.name, 16))}</text>`;
+                    s += `<text x="${colX + labelX0 + 4}" y="${y + 29}" style="font-size:9px; fill:var(--warning);">${d.port ? ('port ' + esc(d.port) + ' · ') : ''}⚠ rack position not set</text>`;
+                    const anchor = { leftX: colX + labelX0 - 6, rightX: colX + colW - 6, y: y + boxH / 2 };
+                    if (type === 'equipment') equipAnchor = anchor; else fdpAnchor = anchor;
+                    y += boxH + floatGap;
+                });
+
+                spanAnchors.push(equipAnchor || fdpAnchor || (nniAnchor ? { leftX: colX + labelX0 - 6, rightX: colX + colW - 6, y: nniAnchor.y } : null));
+                colSvg.push(s);
+                maxY = Math.max(maxY, y);
             });
+
+            // Fiber spans: equipment(hop i) → equipment(hop i+1)
+            let spans = '';
+            for (let i = 0; i < hops.length - 1; i++) {
+                const a = spanAnchors[i], b = spanAnchors[i + 1];
+                if (!a || !b) continue;
+                const x1 = a.rightX, y1 = a.y, x2 = b.leftX, y2 = b.y, mid = (x1 + x2) / 2;
+                spans += `<path d="M ${x1} ${y1} C ${mid} ${y1}, ${mid} ${y2}, ${x2} ${y2}" fill="none" stroke="#06b6d4" stroke-width="2" stroke-dasharray="5,4"/>`;
+                spans += `<text x="${mid}" y="${Math.min(y1, y2) - 6}" text-anchor="middle" style="font-size:10px; fill:#06b6d4;">fiber span</text>`;
+            }
+
+            const W = marginX * 2 + hops.length * colW, H = maxY + 20;
             return `<div style="overflow-x:auto; background:var(--bg-secondary); border:1px solid var(--border-color); border-radius:8px; padding:1rem;">
-                <svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" style="max-width:100%; height:auto; font-family:inherit;">${svg}</svg>
-                <div style="font-size:0.75rem; color:var(--text-tertiary); margin-top:0.5rem;">🖥️ equipment · 🔆 FDP · 🔗 NNI · vertical lines = intra-site patch · dashed cyan = fiber span · U# = rack position</div>
+                <svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" style="max-width:100%; height:auto; font-family:inherit;">${spans}${colSvg.join('')}</svg>
+                <div style="font-size:0.75rem; color:var(--text-tertiary); margin-top:0.5rem;">🔗 NNI handoff · 🔆 FDP · 🖥️ equipment · blocks placed at real rack U (scaled) · dashed cyan = fiber span · dashed box = rack position not set</div>
             </div>`;
         }
 
