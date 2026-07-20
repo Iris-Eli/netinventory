@@ -9712,12 +9712,10 @@
                             
                             // Circuit object needs circuitVlans as array for DLR generation
                             const circuitForDlr = { ...circuit };
-                            try {
-                                const vlansStr = circuit.circuitVlans;
-                                circuitForDlr.circuitVLANs = vlansStr ? JSON.parse(vlansStr) : [];
-                            } catch {
-                                circuitForDlr.circuitVLANs = [];
-                            }
+                            // circuit.circuitVlans was just JSON.stringify'd above (a clean string, not
+                            // the HTML-wrapped stored value), so this parse was already safe — using
+                            // safeParseJson keeps VLAN parsing consistent with every other read.
+                            circuitForDlr.circuitVLANs = safeParseJson(circuit.circuitVlans, []);
                             
                             circuit.generatedSFDLR = await generateDlrText(circuitForDlr, sites, nnis, equipment, fdps);
                             console.log('Generated SF DLR for circuit', circuit.circuitId);
