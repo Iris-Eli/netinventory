@@ -2926,6 +2926,56 @@
             return [...byKey.values()].filter(x => x.circuits.size > 1).map(x => ({ nniId: x.nniId, subif: x.subif, circuitIds: [...x.circuits.values()] }));
         }
 
+        // Equipment sharing a management IP — a real ops footgun. Normalizes CIDR
+        // (10.0.0.1/24 == 10.0.0.1) and ignores blanks. Returns [{ip, items:[{id,name}]}].
+        function findMgmtIpConflicts(equipment) {
+            const byIp = {};
+            equipment.forEach(e => {
+                const raw = String(e.mgmtIp || '').trim();
+                if (!raw) return;
+                const ip = raw.split('/')[0].trim().toLowerCase();
+                if (!ip) return;
+                (byIp[ip] = byIp[ip] || []).push({ id: e.id, name: e.name || e.id });
+            });
+            return Object.keys(byIp).filter(ip => byIp[ip].length > 1).map(ip => ({ ip, items: byIp[ip] }));
+        }
+
+        // Planned/pending circuits that have gone stale: past their due date, or no change in
+        // >staleDays. Pure (nowMs injected). Returns newest-staleness-first.
+        function findStaleCircuits(circuits, nowMs, staleDays) {
+            const activeRe = /active|complete|accounting|closed|cancel|disconnect/i;
+            const out = [];
+            circuits.forEach(c => {
+                const status = String(c.status || '');
+                if (!status.trim() || activeRe.test(status)) return;
+                let stale = false, reason = '', ageDays = null;
+                const due = c.dueDate ? Date.parse(c.dueDate) : NaN;
+                if (!isNaN(due) && due < nowMs) { stale = true; ageDays = Math.floor((nowMs - due) / 86400000); reason = 'past due (' + ageDays + 'd)'; }
+                else {
+                    const mod = c._modified ? Date.parse(c._modified) : NaN;
+                    if (!isNaN(mod)) { const d = Math.floor((nowMs - mod) / 86400000); if (d > staleDays) { stale = true; ageDays = d; reason = 'no change in ' + d + 'd'; } }
+                }
+                if (stale) out.push({ id: c.id, circuitId: c.circuitId || c.id, status, customer: c.customer || '', reason, ageDays });
+            });
+            return out.sort((a, b) => (b.ageDays || 0) - (a.ageDays || 0));
+        }
+
+        // Provisioned assets with capacity but zero usage (no circuits, no NNIs) — reclaim
+        // candidates or a data gap. Skips gear with no ports configured. Reuses impactOfResource.
+        function findIdleAssets(equipment, fdps, circuits, nnis) {
+            const idleEquip = equipment.filter(e => {
+                if ((parsePortConfig(e.portConfig).total || 0) === 0) return false;
+                const imp = impactOfResource('equipment', e.id, { circuits, nnis });
+                return imp.circuits.length === 0 && imp.nnis.length === 0;
+            });
+            const idleFdps = fdps.filter(f => {
+                if ((parseInt(f.portCount || f.numPorts, 10) || 0) === 0) return false;
+                const imp = impactOfResource('fdp', f.id, { circuits, nnis });
+                return imp.circuits.length === 0 && imp.nnis.length === 0;
+            });
+            return { equipment: idleEquip, fdps: idleFdps };
+        }
+
         async function renderHealthPage() {
             try {
                 const [sites, racks, equipment, fdps, circuits, nnis] = await Promise.all([
@@ -2933,6 +2983,7 @@
                 ]);
                 const [orphans, duplicates] = await Promise.all([findOrphans(), findDuplicates()]);
                 const nniConflicts = findNniSubinterfaceConflicts(circuits);
+                const mgmtIpConflicts = findMgmtIpConflicts(equipment);
                 const nniName = id => { const n = nnis.find(x => x.id === id); return n ? (n.name || id) : id; };
 
                 // Integrity — port oversubscription via the canonical collectors
@@ -2943,6 +2994,8 @@
                 const sitesNoGeo = sites.filter(s => (!s.latitude || !s.longitude) && (s.address || s.city));
                 const activeNoDlr = circuits.filter(c => String(c.status || '').toLowerCase() === 'active' && !String(c.generatedSFDLR || '').trim());
                 const circNoBw = circuits.filter(c => !String(c.bandwidth || '').trim());
+                const staleCircuits = findStaleCircuits(circuits, Date.now(), 30);
+                const idle = findIdleAssets(equipment, fdps, circuits, nnis);
 
                 const cName = c => (c.circuitId || c.id);
                 // Make any finding clickable → opens that record's quick-action menu (View / Edit / ports / etc.)
@@ -2964,9 +3017,9 @@
                     ${note ? `<div style="color: var(--text-tertiary); font-size: 0.85rem; margin-bottom: 0.6rem;">${note}</div>` : ''}
                     ${groups.map(g => dupGroup(entity, g, mergeable)).join('')}` : '';
 
-                const critCount = fdpOver.length + equipOver.length + orphans.circDangling.length + orphans.nniDangling.length + nniConflicts.length + orphans.equipDanglingSite.length + orphans.equipDanglingRack.length + orphans.cardsDanglingParent.length + orphans.fdpNoSite.length + orphans.racksDanglingSite.length;
+                const critCount = fdpOver.length + equipOver.length + mgmtIpConflicts.length + orphans.circDangling.length + orphans.nniDangling.length + nniConflicts.length + orphans.equipDanglingSite.length + orphans.equipDanglingRack.length + orphans.cardsDanglingParent.length + orphans.fdpNoSite.length + orphans.racksDanglingSite.length;
                 const dupCount = duplicates.circuits.length + duplicates.equipment.length + duplicates.fdps.length + duplicates.racks.length + duplicates.darkFibers.length + duplicates.sites.length;
-                const warnCount = activeNoDlr.length + orphans.circNoAConnectivity.length + orphans.circFdpPortsNoFdp.length + orphans.equipNoSite.length + sitesNoGeo.length + circNoBw.length;
+                const warnCount = activeNoDlr.length + orphans.circNoAConnectivity.length + orphans.circFdpPortsNoFdp.length + orphans.equipNoSite.length + sitesNoGeo.length + circNoBw.length + staleCircuits.length + idle.equipment.length + idle.fdps.length;
 
                 content.innerHTML = `
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
@@ -2986,6 +3039,7 @@
                     ${listBox('Circuits with dangling references', '🧩', orphans.circDangling, r => `<li>${qa('circuit', r.c.id, cName(r.c))} — ${r.issues.join('; ')}</li>`)}
                     ${listBox('NNIs with dangling references', '🧩', orphans.nniDangling, r => `<li>${qa('nni', r.n.id, r.n.name || r.n.id)} — ${r.issues.join('; ')}</li>`)}
                     ${listBox('NNI subinterface conflicts', '🧩', nniConflicts, x => `<li>${qa('nni', x.nniId, nniName(x.nniId))} · subint <strong>${x.subif}</strong> — used by ${x.circuitIds.join(', ')}</li>`)}
+                    ${listBox('Duplicate management IPs', '🌐', mgmtIpConflicts, x => `<li><strong>${x.ip}</strong> — shared by ${x.items.map(i => qa('equipment', i.id, i.name)).join(', ')}</li>`)}
                     ${listBox('Equipment pointing at a missing site', '🧩', orphans.equipDanglingSite, e => `<li>${qa('equipment', e.id, e.name)}</li>`)}
                     ${listBox('Equipment pointing at a missing rack', '🧩', orphans.equipDanglingRack, e => `<li>${qa('equipment', e.id, e.name)}</li>`)}
                     ${listBox('Line cards pointing at a missing chassis', '🧩', orphans.cardsDanglingParent, e => `<li>${qa('equipment', e.id, e.name)}</li>`)}
@@ -3009,6 +3063,9 @@
                     ${listBox('Equipment with no site assigned', '⚠️', orphans.equipNoSite, e => `<li>${qa('equipment', e.id, e.name)}</li>`)}
                     ${listBox('Sites missing map coordinates', '📍', sitesNoGeo, s => `<li>${qa('site', s.id, s.name || s.address)}</li>`)}
                     ${listBox('Circuits missing bandwidth', '⚠️', circNoBw, c => `<li>${qa('circuit', c.id, cName(c))}</li>`)}
+                    ${listBox('Stale planned/pending circuits', '⏰', staleCircuits, c => `<li>${qa('circuit', c.id, c.circuitId)}${c.customer ? ' — ' + c.customer : ''} <span style="color: var(--text-tertiary);">(${c.status}, ${c.reason})</span></li>`)}
+                    ${listBox('Idle equipment (capacity, zero usage)', '💤', idle.equipment, e => `<li>${qa('equipment', e.id, e.name)}</li>`)}
+                    ${listBox('Idle FDPs (ports, zero usage)', '💤', idle.fdps, f => `<li>${qa('fdp', f.id, f.name)}</li>`)}
                 `;
             } catch (err) {
                 content.innerHTML = `<div style="padding: 2rem; color: var(--danger);">Health scan failed: ${(typeof friendlyError === 'function' ? friendlyError(err) : (err && err.message || err))}</div>`;
@@ -5482,47 +5539,6 @@
             }
         }
         
-        async function updateEquipmentRackDropdown() {
-            const siteSelect = document.getElementById('equipmentSiteSelect');
-            const rackSelect = document.getElementById('equipmentRackSelect');
-            const selectedSiteId = siteSelect.value;
-            
-            // Clear and reset rack dropdown
-            rackSelect.innerHTML = '<option value="">Select Rack...</option>';
-            
-            if (selectedSiteId) {
-                const racks = await store.getRacks();
-                const siteRacks = racks.filter(r => r.siteId === selectedSiteId);
-                
-                siteRacks.forEach(rack => {
-                    const option = document.createElement('option');
-                    option.value = rack.id;
-                    option.textContent = rack.name;
-                    rackSelect.appendChild(option);
-                });
-            }
-            
-            // Reset rack position when rack changes
-            updateAvailableRackPositions(editingEquipmentId);
-        }
-        
-        function toggleRackRequirement() {
-            const functionSelect = document.getElementById('equipmentFunction');
-            const isCPE = functionSelect.value === 'CPE';
-            
-            // Update UI hints
-            const ruOptionalNote = document.getElementById('ruOptionalNote');
-            const ruPositionOptionalNote = document.getElementById('ruPositionOptionalNote');
-            
-            if (isCPE) {
-                ruOptionalNote.textContent = '(Optional for CPE)';
-                ruPositionOptionalNote.textContent = '(Optional for CPE)';
-            } else {
-                ruOptionalNote.textContent = '*';
-                ruPositionOptionalNote.textContent = '*';
-            }
-        }
-        
         function toggleRackRequirement() {
             const functionSelect = document.getElementById('equipmentFunction');
             const isCPE = functionSelect.value === 'CPE';
@@ -5545,11 +5561,14 @@
             const rackSelect = document.getElementById('equipmentRackSelect');
             if (!siteId) {
                 rackSelect.innerHTML = '<option value="">Select Rack...</option>';
+                updateAvailableRackPositions(editingEquipmentId);
                 return;
             }
             const racks = await store.getRacks();
             const siteRacks = racks.filter(r => r.siteId === siteId);
             rackSelect.innerHTML = '<option value="">Select Rack...</option>' + siteRacks.map(rack => `<option value="${rack.id}">${rack.name}</option>`).join('');
+            // Reset rack position when the site/rack set changes (restored from the pre-dedupe version)
+            updateAvailableRackPositions(editingEquipmentId);
         }
         
         async function editEquipment(equip) {
@@ -7908,6 +7927,7 @@
                             <input type="text" placeholder="🔍 Search circuits..." style="padding: 0.5rem 1rem; border: 1px solid var(--border-color); border-radius: 4px; width: 250px;" oninput="filterTable('circuit', this.value)">
                             <button class="btn-secondary" onclick="toggleDisconnected()" id="discoToggle" title="Toggle disconnected circuits">👻 Show disconnected</button>
                             <button class="btn-secondary" onclick="renderCircuitsSummary()">📊 Provider Summary</button>
+                            <button class="btn-secondary" onclick="renderCustomerPortfolio()" title="Per-customer circuits, bandwidth and path-diversity">👥 Customer Portfolio</button>
                             <button class="btn-secondary" onclick="openDiversityCheck()" title="Compare two circuits for shared equipment/FDP/NNI/fiber (path diversity)">🔀 Diversity</button>
                             <button class="btn-secondary" onclick="regenerateAllDlrs(this)" title="Generate + store the SF DLR for every circuit (fills the GeneratedSFDLR column the push-back flow reads)">🔄 Regenerate DLRs</button><button class="btn-secondary" onclick="exportEntityToExcel('circuits', this)" title="Export Circuits to Excel">⬇️ Export</button>
                             <button class="btn-primary" onclick="openAddCircuitModal()">Add Circuit</button>
@@ -9505,8 +9525,7 @@
                 if (editingCircuitId) {
                     const prevCircuit = (await store.getCircuits()).find(c => c.id === editingCircuitId);
                     if (prevCircuit && prevCircuit.circuitVlans) {
-                        let prevVlans = [];
-                        try { prevVlans = JSON.parse(prevCircuit.circuitVlans); } catch {}
+                        let prevVlans = safeParseJson(prevCircuit.circuitVlans, []);
                         if (Array.isArray(prevVlans) && prevVlans.length > vlans.length) {
                             const dropped = prevVlans.length - vlans.length;
                             const confirmDrop = confirm(
@@ -9561,7 +9580,7 @@
                         // Try to find a matching template (by name match like "Ciena 3924 DC") and link it
                         let cpeTemplateId = '';
                         try {
-                            const tmpls = await store.getEquipmentTemplates();
+                            const tmpls = await store.getTemplates();
                             // Prefer exact match on the model name, then partial match on "3924 DC", then "3924"
                             const match = tmpls.find(t => String(t.name||'').toLowerCase() === cpeModel.toLowerCase())
                                        || tmpls.find(t => String(t.model||'').toLowerCase() === cpeModel.toLowerCase())
@@ -13679,13 +13698,20 @@ ${entityActionButtons('nni', `${n.id}`, true)}
         }
 
         // Geocode a free-text city/address via Nominatim (same endpoint as geocodeAddress).
+        // Session cache (incl. null "not found") so repeat searches don't re-hit Nominatim —
+        // its usage policy is ~1 req/sec and repeated identical queries risk throttling.
+        const _geocodeCache = {};
         async function geocodeCity(q) {
+            const key = String(q || '').trim().toLowerCase();
+            if (!key) return null;
+            if (Object.prototype.hasOwnProperty.call(_geocodeCache, key)) return _geocodeCache[key];
             const url = 'https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=' + encodeURIComponent(q);
             const r = await fetch(url, { method: 'GET', headers: { 'User-Agent': 'NetInventory/1.0', 'Accept': 'application/json' } });
-            if (!r.ok) throw new Error('HTTP ' + r.status);
+            if (!r.ok) throw new Error('HTTP ' + r.status); // transient — not cached
             const d = await r.json();
-            if (!d || !d.length) return null;
-            return { lat: parseFloat(d[0].lat), lon: parseFloat(d[0].lon), label: d[0].display_name };
+            const result = (d && d.length) ? { lat: parseFloat(d[0].lat), lon: parseFloat(d[0].lon), label: d[0].display_name } : null;
+            _geocodeCache[key] = result;
+            return result;
         }
 
         // On a speed-specific query, FDP patch ports don't apply — reflect that in the UI.
@@ -14209,6 +14235,102 @@ ${entityActionButtons('nni', `${n.id}`, true)}
             out.innerHTML = summary + body;
         }
 
+        // ===================== Customer portfolio + NNI usage =====================
+        // Per-customer roll-up incl. path-diversity across the customer's circuit pairs.
+        // Pure (unit-tested: scratchpad/portfolio-nni.test.mjs). Reuses circuitPathSiteIds +
+        // circuitDiversity. Pairwise diversity is skipped for >20 circuits (O(n²) guard).
+        function buildCustomerPortfolio(circuits, fdpToRoutes) {
+            const groups = {};
+            circuits.forEach(c => {
+                const st = String(c.status || '').toLowerCase();
+                if (st === 'disconnected' || st === 'disconnect-ordered') return;
+                const key = (c.customer || '').trim() || '(no customer)';
+                (groups[key] = groups[key] || []).push(c);
+            });
+            return Object.keys(groups).map(name => {
+                const list = groups[name];
+                let active = 0, planned = 0, bwTotal = 0; const sites = new Set();
+                list.forEach(c => {
+                    const st = String(c.status || '').toLowerCase();
+                    if (st === 'active') active++; if (st === 'planned') planned++;
+                    const m = String(c.bandwidth || '').match(/(\d+(?:\.\d+)?)/);
+                    const unit = /T(?:bps|GbE)/i.test(c.bandwidth || '') ? 1000 : 1;
+                    if (m) bwTotal += parseFloat(m[1]) * unit;
+                    circuitPathSiteIds(c).forEach(s => sites.add(s));
+                });
+                let pairs = 0, sharedPairs = 0, diversityEvaluated = false;
+                if (list.length >= 2 && list.length <= 20) {
+                    diversityEvaluated = true;
+                    for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) { pairs++; if (!circuitDiversity(list[i], list[j], fdpToRoutes).diverse) sharedPairs++; }
+                }
+                return { name, count: list.length, active, planned, bwTotal, siteCount: sites.size, pairs, sharedPairs, diversityEvaluated };
+            }).sort((a, b) => b.count - a.count);
+        }
+
+        // Per-NNI usage: distinct subinterfaces + circuits consuming it (top-level {a,z}Nni +
+        // per-VLAN circuitVlans). Mirrors findNniSubinterfaceConflicts' extraction. Pure.
+        function nniUsageMap(circuits) {
+            const map = {};
+            const add = (nniId, subifRaw, c) => {
+                if (!nniId) return;
+                map[nniId] = map[nniId] || { subifs: new Set(), circuits: new Set() };
+                map[nniId].circuits.add(c.id);
+                const subif = normalizeSubinterface(subifRaw || '');
+                if (subif && subif !== '-') map[nniId].subifs.add(subif);
+            };
+            circuits.forEach(c => {
+                add(c.aNni, c.aNniSubinterface, c);
+                add(c.zNni, c.zNniSubinterface, c);
+                (safeParseJson(c.circuitVlans, []) || []).forEach(v => {
+                    add(v.aNni, v.aNniSubinterface || c.aNniSubinterface, c);
+                    add(v.zNni, v.zNniSubinterface || c.zNniSubinterface, c);
+                });
+            });
+            return map;
+        }
+
+        async function renderCustomerPortfolio() {
+            const content = document.getElementById('content');
+            try {
+                const [circuits, segments] = await Promise.all([store.getCircuits(), store.getDarkFiberSegments()]);
+                const portfolio = buildCustomerPortfolio(circuits, buildFdpToRoutes(segments));
+                const totalCust = portfolio.length;
+                const totalCirc = portfolio.reduce((s, p) => s + p.count, 0);
+                const atRisk = portfolio.filter(p => p.sharedPairs > 0).length;
+                const fmtBw = g => g >= 1000 ? (Math.round(g / 100) / 10) + ' Tbps' : g + ' Gbps';
+                content.innerHTML = `
+                    <div style="margin-bottom: 2rem;">
+                        <button class="btn-secondary" onclick="renderCircuitsPage()" style="margin-bottom: 1rem;">← Back to Circuits</button>
+                        <h1 style="font-size: 2rem; margin: 0;">👥 Customer Portfolio</h1>
+                        <p style="color: var(--text-secondary); margin: 0.5rem 0 0;">Circuits, bandwidth and path-diversity per customer. A customer's "redundant" circuits sharing equipment/FDP/NNI/fiber are flagged.</p>
+                    </div>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+                        <div class="stat-card"><div class="stat-value">${totalCust}</div><div class="stat-label">Customers</div></div>
+                        <div class="stat-card"><div class="stat-value">${totalCirc}</div><div class="stat-label">Circuits</div></div>
+                        <div class="stat-card"><div class="stat-value" style="color: ${atRisk ? 'var(--danger)' : 'var(--success)'};">${atRisk}</div><div class="stat-label">With shared-infra pairs</div></div>
+                    </div>
+                    ${portfolio.length === 0 ? `<div style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 0.75rem; padding: 3rem; text-align: center; color: var(--text-secondary);">No circuits.</div>` : portfolio.map(p => {
+                        const divBadge = !p.diversityEvaluated
+                            ? (p.count < 2 ? '<span style="color: var(--text-tertiary);">single circuit</span>' : '<span style="color: var(--text-tertiary);">too many to auto-check</span>')
+                            : (p.sharedPairs > 0
+                                ? `<span style="color: var(--danger);">⚠️ ${p.sharedPairs}/${p.pairs} pair${p.pairs === 1 ? '' : 's'} share infra</span>`
+                                : `<span style="color: var(--success);">✓ all ${p.pairs} pair${p.pairs === 1 ? '' : 's'} diverse</span>`);
+                        return `
+                        <div style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 0.75rem; padding: 1.1rem 1.5rem; margin-bottom: 0.9rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+                            <h2 style="margin: 0; font-size: 1.2rem;">${_dvEsc(p.name)}</h2>
+                            <div style="display: flex; gap: 1.25rem; font-size: 0.9rem; color: var(--text-secondary); flex-wrap: wrap; align-items: center;">
+                                <span><strong style="color: var(--text-primary);">${p.count}</strong> circuit${p.count === 1 ? '' : 's'}</span>
+                                ${p.active ? `<span>✅ ${p.active}</span>` : ''}${p.planned ? `<span>📋 ${p.planned}</span>` : ''}
+                                <span>${fmtBw(p.bwTotal)}</span>
+                                <span>${p.siteCount} site${p.siteCount === 1 ? '' : 's'}</span>
+                                <span>${divBadge}</span>
+                                ${p.sharedPairs > 0 ? `<button class="btn-secondary" onclick="openDiversityCheck()" style="padding: 0.3rem 0.7rem; font-size: 0.8rem;" title="Open the diversity checker to inspect pairs">🔀 Check</button>` : ''}
+                            </div>
+                        </div>`;
+                    }).join('')}`;
+            } catch (error) { alert('Error loading customer portfolio: ' + (typeof friendlyError === 'function' ? friendlyError(error) : error.message)); }
+        }
+
         async function renderTemplatesPage() {
             console.log('📋 Loading templates page...');
             try {
@@ -14587,6 +14709,7 @@ ${entityActionButtons('nni', `${n.id}`, true)}
                 const fdpById = Object.fromEntries(fdps.map(f => [f.id, f]));
                 const circuitsByNni = {};
                 circuits.forEach(c => { [c.aNni, c.zNni].filter(Boolean).forEach(n => { (circuitsByNni[n] = circuitsByNni[n] || []).push(c); }); });
+                const nniUsage = nniUsageMap(circuits);
                 const filtered = nnis.filter(n => {
                     if (nnisSummaryFilter === 'all') return true;
                     if (nnisSummaryFilter === 'customer') return n.direction === 'customer';
@@ -14640,13 +14763,14 @@ ${entityActionButtons('nni', `${n.id}`, true)}
                             </div>
                             <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
                                 <thead><tr style="border-bottom: 1px solid var(--border-color); text-align: left; color: var(--text-secondary);">
-                                    <th style="padding: 0.5rem;">NNI Name</th><th style="padding: 0.5rem;">Direction</th><th style="padding: 0.5rem;">Site</th><th style="padding: 0.5rem;">Equipment</th><th style="padding: 0.5rem;">Bandwidth</th><th style="padding: 0.5rem;">Status</th><th style="padding: 0.5rem;">Circuits</th>
+                                    <th style="padding: 0.5rem;">NNI Name</th><th style="padding: 0.5rem;">Direction</th><th style="padding: 0.5rem;">Site</th><th style="padding: 0.5rem;">Equipment</th><th style="padding: 0.5rem;">Bandwidth</th><th style="padding: 0.5rem;">Status</th><th style="padding: 0.5rem;">Circuits</th><th style="padding: 0.5rem;">Subints</th>
                                 </tr></thead>
                                 <tbody>${g.nnis.sort((a,b) => String(a.name||'').localeCompare(String(b.name||''))).map(n => {
                                     const site = siteById[n.siteId];
                                     const eq = equipById[n.equipmentID];
                                     const dirLabel = n.direction === 'customer' ? '👤 Customer' : n.direction === 'type-ii-provider' ? '🤝 Type II' : '🏠 Internal';
                                     const usedBy = (circuitsByNni[n.id] || []).length;
+                                    const subints = (nniUsage[n.id] && nniUsage[n.id].subifs.size) || 0;
                                     return `<tr style="border-bottom: 1px solid var(--border-color);">
                                         <td style="padding: 0.5rem;"><a href="javascript:void(0)" onclick="viewNniDetails('${n.id}')" style="color: var(--accent-primary); text-decoration: none;">${n.name || '-'}</a></td>
                                         <td style="padding: 0.5rem;">${dirLabel}</td>
@@ -14655,6 +14779,7 @@ ${entityActionButtons('nni', `${n.id}`, true)}
                                         <td style="padding: 0.5rem;">${n.bandwidth || '-'}</td>
                                         <td style="padding: 0.5rem;">${n.nniStatus || '-'}</td>
                                         <td style="padding: 0.5rem;">${usedBy}</td>
+                                        <td style="padding: 0.5rem;">${subints}</td>
                                     </tr>`;
                                 }).join('')}</tbody>
                             </table>
@@ -14967,16 +15092,9 @@ ${entityActionButtons('nni', `${n.id}`, true)}
         }
 
         async function openKmzFolder() {
-            try {
-                const sp = await store.config();
-                const siteUrl = sp.spConfig?.routeMaps?.siteUrl || sp.spConfig?.siteUrl;
-                if (!siteUrl) { alert('SharePoint URL not configured.'); return; }
-                const lib = sp.spConfig?.routeMaps?.libraryName || 'NetInventoryRouteMaps';
-                window.open(`${siteUrl}/${lib}`, '_blank');
-            } catch (e) {
-                // Fallback: derive from any known URL on the page
-                window.open('https://iristransport.sharepoint.com/sites/EngineeringPriorities/NetInventoryRouteMaps', '_blank');
-            }
+            // store.config() never existed, so this always fell through to the fallback URL —
+            // open the route-maps library directly.
+            window.open('https://iristransport.sharepoint.com/sites/EngineeringPriorities/NetInventoryRouteMaps', '_blank');
         }
 
         // ============ KMZ/KML: upload to SharePoint + generate KML from route data ============
@@ -15924,7 +16042,7 @@ ${entityActionButtons('nni', `${n.id}`, true)}
                                                     </td>
                                                     <td>
                                                         <div style="display: flex; gap: 0.5rem;">
-                                                            <button onclick="viewFdpPorts('${stat.id}')" class="btn-sm" style="font-size: 0.75rem; padding: 0.4rem 0.75rem;" title="View port map">🔌 Ports</button>
+                                                            <button onclick="viewFdpLayout('${stat.id}')" class="btn-sm" style="font-size: 0.75rem; padding: 0.4rem 0.75rem;" title="View port map">🔌 Ports</button>
                                                             ${stat.siteId ? `
                                                                 <button onclick="viewSiteDetails('${stat.siteId}')" class="btn-sm" style="font-size: 0.75rem; padding: 0.4rem 0.75rem;" title="View site">👁️</button>
                                                             ` : ''}
