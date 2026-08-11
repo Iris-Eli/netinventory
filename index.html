@@ -9763,15 +9763,36 @@
                         } else { throw saveErr; }
                     }
                 } else {
+                    // Dedupe guard (never silently create a duplicate): if a circuit with the same
+                    // CircuitID or SalesforceID already exists, UPDATE it instead of inserting a 2nd row.
+                    // Guards the lost-editing-id case (e.g. flow-created rows keyed by Title = SF Id).
+                    let dup = null;
                     try {
-                        await store.addCircuit(circuit);
-                        alert('Circuit added successfully!');
-                    } catch (e) {
-                        if (String(e.message || e).includes('VlanCount')) {
-                            delete circuit.vlanCount;
+                        const _all = await store.getCircuits();
+                        const _cid = String(circuit.circuitId || '').trim().toLowerCase();
+                        const _sfid = String(circuit.salesforceId || '').trim().toLowerCase();
+                        dup = _all.find(c => (_cid && String(c.circuitId || '').trim().toLowerCase() === _cid)
+                                          || (_sfid && String(c.salesforceId || '').trim().toLowerCase() === _sfid));
+                    } catch (dupErr) { console.warn('dedupe check failed (non-fatal):', dupErr); }
+                    if (dup) {
+                        // Preserve fields the form doesn't own so the survivor keeps its synced values
+                        ['cfaSourceText','salesforceModifiedDate','salesforceId','syncStatus','syncSource','irisUni','irisEvc1','irisEvc2','assignedEngineer','dueDate','generatedSFDLR'].forEach(f => {
+                            if ((circuit[f] === '' || circuit[f] === undefined || circuit[f] === null) && dup[f]) circuit[f] = dup[f];
+                        });
+                        console.warn('Save matched existing circuit', dup.id, '- updating instead of creating a duplicate.');
+                        await store.updateCircuit(dup.id, circuit);
+                        alert('Circuit updated - matched existing ' + (circuit.circuitId || dup.id) + ', no duplicate created.');
+                    } else {
+                        try {
                             await store.addCircuit(circuit);
-                            alert('Circuit added. (vlanCount column missing — running without it.)');
-                        } else { throw e; }
+                            alert('Circuit added successfully!');
+                        } catch (e) {
+                            if (String(e.message || e).includes('VlanCount')) {
+                                delete circuit.vlanCount;
+                                await store.addCircuit(circuit);
+                                alert('Circuit added. (vlanCount column missing — running without it.)');
+                            } else { throw e; }
+                        }
                     }
                 }
                 closeCircuitModal();
