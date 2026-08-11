@@ -6812,7 +6812,7 @@
         // Per-VLAN intermediate location helpers (Phase 1: JSON storage in AdditionalLocations)
         const vlanIntermediateCounter = {}; // {vlanNum: counterValue}
         
-        function addVlanIntermediateLocation(vlanNum, prefill) {
+        async function addVlanIntermediateLocation(vlanNum, prefill) {
             const container = document.getElementById(`vlan${vlanNum}_intermediateContainer`);
             if (!container) { console.warn(`Container for VLAN ${vlanNum} intermediates not found`); return; }
             vlanIntermediateCounter[vlanNum] = (vlanIntermediateCounter[vlanNum] || 0) + 1;
@@ -6911,21 +6911,29 @@
             // Attach combobox
             if (siteSel) attachSiteCombobox(siteSel.id);
             
-            // Apply prefill
+            // Apply prefill — ORDER MATTERS. The fdp/equipment/nni <select>s are populated
+            // asynchronously by updateIntermediateDropdowns; if we set their .value before that
+            // resolves, the rebuild wipes it (bug: intermediate NNI/FDP came back empty on reload).
+            // So: set connectionType (sync) + seed the hidden port carrier, AWAIT the dropdowns,
+            // THEN set the select values, THEN build+preselect the FDP ports.
             if (prefill) {
-                if (siteSel && prefill.siteId) { 
-                    siteSel.value = prefill.siteId; 
-                    syncSiteComboInput(siteSel.id);
-                    updateIntermediateDropdowns(vlanNum, idx);
-                }
                 if (prefill.connectionType) {
                     const r = card.querySelector(`input[name="vlan${vlanNum}_int${idx}_connectionType"][value="${prefill.connectionType}"]`);
                     if (r) { r.checked = true; toggleIntermediateConnFields(vlanNum, idx); }
                 }
-                ['fdp', 'fdpPort', 'equipment', 'equipmentPort', 'nni', 'subinterface', 'wavelengthUpstream', 'wavelengthDownstream'].forEach(f => {
+                // seed the hidden FDP-port carrier first so updateIntermediateFdpPorts can pre-select
+                const hidPort = card.querySelector(`[name="vlan${vlanNum}_int${idx}_fdpPort"]`);
+                if (hidPort && prefill.fdpPort != null) hidPort.value = prefill.fdpPort;
+                if (siteSel && prefill.siteId) {
+                    siteSel.value = prefill.siteId;
+                    syncSiteComboInput(siteSel.id);
+                    await updateIntermediateDropdowns(vlanNum, idx);   // AWAIT: options must exist first
+                }
+                ['fdp', 'equipment', 'equipmentPort', 'nni', 'subinterface', 'wavelengthUpstream', 'wavelengthDownstream'].forEach(f => {
                     const el = card.querySelector(`[name="vlan${vlanNum}_int${idx}_${f}"]`);
                     if (el && prefill[f] != null) el.value = prefill[f];
                 });
+                if (prefill.fdp) await updateIntermediateFdpPorts(vlanNum, idx);  // now the FDP <select> holds its value
                 ['tunableUpstream', 'tunableDownstream'].forEach(f => {
                     const el = card.querySelector(`[name="vlan${vlanNum}_int${idx}_${f}"]`);
                     if (el && prefill[f]) el.checked = !!prefill[f];
