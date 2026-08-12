@@ -7072,7 +7072,7 @@
                 const posIdx = idx - 1;
                 if (posIdx < 0 || posIdx >= LETTERS.length) return;
                 if (!positions[posIdx]) positions[posIdx] = {};
-                const get = field => { const el = card.querySelector(`[name="vlan${vNum}_int${idx}_${field}"]`); return el ? (el.type === 'checkbox' ? el.checked : el.value) : ''; };
+                const get = field => { const nl = card.querySelectorAll(`[name="vlan${vNum}_int${idx}_${field}"]`); if (nl.length > 1 && nl[0].type === 'radio') { const c = card.querySelector(`[name="vlan${vNum}_int${idx}_${field}"]:checked`); return c ? c.value : ''; } const el = nl[0]; return el ? (el.type === 'checkbox' ? el.checked : el.value) : ''; };
                 const siteEl = document.getElementById(`vlan${vNum}_int${idx}_siteSelect`);
                 positions[posIdx][vNum] = {
                     siteId: siteEl ? siteEl.value : '',
@@ -7267,7 +7267,7 @@
             document.querySelectorAll('.vlan-intermediate-card').forEach(card => {
                 const vNum = card.dataset.vlanNum;
                 const idx = card.dataset.locIdx;
-                const get = field => { const el = card.querySelector(`[name="vlan${vNum}_int${idx}_${field}"]`); return el ? (el.type === 'checkbox' ? el.checked : el.value) : ''; };
+                const get = field => { const nl = card.querySelectorAll(`[name="vlan${vNum}_int${idx}_${field}"]`); if (nl.length > 1 && nl[0].type === 'radio') { const c = card.querySelector(`[name="vlan${vNum}_int${idx}_${field}"]:checked`); return c ? c.value : ''; } const el = nl[0]; return el ? (el.type === 'checkbox' ? el.checked : el.value) : ''; };
                 const siteEl = document.getElementById(`vlan${vNum}_int${idx}_siteSelect`);
                 const entry = {
                     siteId: siteEl ? siteEl.value : '',
@@ -8461,6 +8461,11 @@
             window._equipmentCache = await store.getEquipment();
             editingCircuitId = null;
             additionalLocationCounter = 0;
+            // vlan1's intermediate container is static (never regenerated) and form.reset() can't
+            // remove appended cards — clear stale intermediate cards + reset the counter so they
+            // don't accumulate across opens (fixes "extra intermediate locations" duplication).
+            document.querySelectorAll('.vlan-intermediate-card').forEach(c => c.remove());
+            Object.keys(vlanIntermediateCounter).forEach(k => delete vlanIntermediateCounter[k]);
             const _addForm = document.getElementById('circuitForm');
             if (_addForm) delete _addForm.dataset.editingCircuitId;
             document.getElementById('circuitModalTitle').textContent = 'Add Circuit';
@@ -8905,6 +8910,10 @@
                 }
             }
             
+            // Clear stale intermediate cards + reset the counter so loaded waypoints start at idx 1
+            // (vlan1's container is static and isn't regenerated; otherwise cards accumulate + drift).
+            document.querySelectorAll('.vlan-intermediate-card').forEach(c => c.remove());
+            Object.keys(vlanIntermediateCounter).forEach(k => delete vlanIntermediateCounter[k]);
             // Load per-VLAN waypoints + tunable (deferred until AFTER VLAN sections spawn so vlan{N}_intermediateContainer exists)
             const vlanCountForLoad = parseInt(circuit.vlanCount) || (circuit.circuitVlans ? (safeParseJson(circuit.circuitVlans, []).length || 1) : 1);
             const hasDelimitedWaypoints = circuit.bLocationSiteId || circuit.cLocationSiteId || circuit.dLocationSiteId;
