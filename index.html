@@ -1011,6 +1011,18 @@
             msalInstance.logoutRedirect();
         });
 
+        // Click outside any open modal (on the backdrop) closes it — mirrors Net Provisioner.
+        // Uses mousedown ON the .modal backdrop (target === the modal element, not a child) so a
+        // drag-select started inside the content doesn't close it. Runs the modal's own close-btn
+        // cleanup (closeCircuitModal/closeNniModal/etc.); falls back to removing .active.
+        document.addEventListener('mousedown', (e) => {
+            const m = e.target;
+            if (m && m.classList && m.classList.contains('modal') && m.classList.contains('active')) {
+                const btn = m.querySelector('.close-btn');
+                if (btn) btn.click(); else m.classList.remove('active');
+            }
+        });
+
         // Graph API Client
         class GraphAPIClient {
             // Binary file upload (KMZ/KML etc). Files must be < 4MB for single-PUT.
