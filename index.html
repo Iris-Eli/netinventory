@@ -11713,27 +11713,34 @@
                 if (aEq && aNniRec.equipmentPorts) {
                     nativeLines.push(`${aEq.name} ${aNniRec.equipmentPorts} (Collector NNI: ${aNniRec.name || vlan.aNni})`);
                 }
-                // B-N intermediates from per-VLAN fields if populated
-                for (let locLetter = 66; locLetter <= 78; locLetter++) {
-                    const loc = String.fromCharCode(locLetter);
-                    if (vlan[loc + 'Equipment'] && vlan[loc + 'EquipmentPort']) {
-                        const bEq = allEquipment?.find(e => e.id === vlan[loc + 'Equipment']);
-                        if (bEq) nativeLines.push(`${bEq.name} ${vlan[loc + 'EquipmentPort']}`);
+                // ---- B-N intermediate hops (incl. Type-II meetpoint) ----
+                // These live in the circuit's per-position columns (bLocationSiteId/bConnectionType/
+                // bNni/bFdp/bEquipment..), per-VLAN encoded — NOT in the circuitVLANs objects.
+                const _vc = circuit.circuitVLANs.length || 1;
+                const _wp = col => parseDelimitedPerVlan(circuit[col], _vc)[i + 1] || '';  // keyed by 1-based VLAN section
+                for (let lc = 66; lc <= 78; lc++) {          // B..N
+                    const lo = String.fromCharCode(lc).toLowerCase();
+                    if (!_wp(lo + 'LocationSiteId')) continue;
+                    const ct = _wp(lo + 'ConnectionType');
+                    if (ct === 'nni') {
+                        const raw = (_wp(lo + 'Nni') || '').split(':')[0];
+                        const rec = findNniRec(raw);
+                        const eq = eqOf(rec);
+                        nativeLines.push(`${eq ? eq.name + ' ' : ''}${rec ? (rec.equipmentPorts || '') : ''} (Meetpoint NNI: ${(rec && rec.name) || raw})`.replace(/\s+/g, ' ').trim());
+                    } else if (ct === 'equipment') {
+                        const eq = allEquipment?.find(e => e.id === _wp(lo + 'Equipment'));
+                        if (eq) nativeLines.push(`${eq.name} ${_wp(lo + 'EquipmentPort')}`.trim());
+                    } else if (ct === 'fdp') {
+                        const fdp = allFdps?.find(f => f.id === _wp(lo + 'Fdp'));
+                        nativeLines.push(`${(fdp && fdp.name) || _wp(lo + 'Fdp')} FDP ${_wp(lo + 'Port')}`.trim());
                     }
-                }
-                // meetpoint (Type II) end via vlan.bNni
-                const bNniRec = findNniRec(vlan.bNni);
-                const bEq = eqOf(bNniRec);
-                if (bEq && bNniRec.equipmentPorts) {
-                    nativeLines.push('VPWS');
-                    nativeLines.push(`${bEq.name} ${bNniRec.equipmentPorts}`);
                 }
                 // direct Z NNI / CPE end
                 const zNniRec = findNniRec(vlan.zNni);
                 const zEq = eqOf(zNniRec);
                 if (zEq && zNniRec.equipmentPorts) {
                     nativeLines.push(`${zEq.name} ${zNniRec.equipmentPorts}`);
-                } else if (vlan.connectionType === 'cpe' && !bEq) {
+                } else if ((vlan.zConnectionType || circuit.zConnectionType) === 'cpe') {
                     nativeLines.push('CPE');
                 }
                 
