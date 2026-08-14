@@ -11813,8 +11813,9 @@
                 lines.push('');
                 if (circuit.cpeUplinkPorts || circuit.cpeDownlinkPorts || srcCpeLines.length === 0) {
                     if (circuit.cpeType) lines.push(circuit.cpeType);
-                    if (circuit.cpeUplinkPorts) lines.push(`Uplink: ${circuit.cpeUplinkPorts}`);
-                    if (circuit.cpeDownlinkPorts) lines.push(`Downlink: ${circuit.cpeDownlinkPorts}`);
+                    // "Port <n> Uplink" / "Port <n> Downlink" (port number before the label), one per port
+                    String(circuit.cpeUplinkPorts || '').split(',').map(p => p.trim()).filter(Boolean).forEach(p => lines.push(`Port ${p} Uplink`));
+                    String(circuit.cpeDownlinkPorts || '').split(',').map(p => p.trim()).filter(Boolean).forEach(p => lines.push(`Port ${p} Downlink`));
                 } else {
                     const skipIp = !!circuit.cpeMgmtIp;
                     lines.push(...srcCpeLines.filter(l => !(skipIp && /^MGMT\s+(IP|GW|Subnet):/i.test(l))));
