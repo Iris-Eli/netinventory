@@ -11715,7 +11715,9 @@
                 return allNnis?.find(n => norm(n.id) === norm(ref)) || allNnis?.find(n => norm(n.name) === norm(ref)) || null;
             };
             const eqOf = nni => (nni && nni.equipmentID) ? allEquipment?.find(e => e.id === nni.equipmentID) : null;
-            
+            // DLR port: drop the trailing "(100G)" speed so only the port number shows (subinterface is appended after).
+            const dlrPort = p => String(p || '').replace(/\s*\([^)]*\)\s*$/, '').trim();
+
             const lines = [];
             let nativePathLines = 0;
             
@@ -11730,7 +11732,7 @@
                 const aEq = eqOf(aNniRec);
                 if (aEq && aNniRec.equipmentPorts) {
                     const aSub = vlan.aNniSubinterface ? `.${vlan.aNniSubinterface}` : '';
-                    nativeLines.push(`${aEq.name} ${aNniRec.equipmentPorts}${aSub} (Collector NNI: ${aNniRec.name || vlan.aNni})`);
+                    nativeLines.push(`${aEq.name} ${dlrPort(aNniRec.equipmentPorts)}${aSub} (Collector NNI: ${aNniRec.name || vlan.aNni})`);
                 }
                 // ---- B-N intermediate hops (incl. Type-II meetpoint) ----
                 // These live in the circuit's per-position columns (bLocationSiteId/bConnectionType/
@@ -11747,7 +11749,7 @@
                         const sub = nniRaw.split(':')[1];
                         const rec = findNniRec(raw);
                         const eq = eqOf(rec);
-                        const port = (rec ? (rec.equipmentPorts || '') : '') + (sub ? `.${sub}` : '');
+                        const port = dlrPort(rec ? (rec.equipmentPorts || '') : '') + (sub ? `.${sub}` : '');
                         nativeLines.push(`${eq ? eq.name + ' ' : ''}${port} (Meetpoint NNI: ${(rec && rec.name) || raw})`.replace(/\s+/g, ' ').trim());
                     } else if (ct === 'equipment') {
                         const eq = allEquipment?.find(e => e.id === _wp(lo + 'Equipment'));
@@ -11762,7 +11764,7 @@
                 const zEq = eqOf(zNniRec);
                 if (zEq && zNniRec.equipmentPorts) {
                     const zSub = vlan.zNniSubinterface ? `.${vlan.zNniSubinterface}` : '';
-                    nativeLines.push(`${zEq.name} ${zNniRec.equipmentPorts}${zSub}`);
+                    nativeLines.push(`${zEq.name} ${dlrPort(zNniRec.equipmentPorts)}${zSub}`);
                 } else if ((vlan.zConnectionType || circuit.zConnectionType) === 'cpe') {
                     nativeLines.push('CPE');
                 }
