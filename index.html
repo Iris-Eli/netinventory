@@ -11615,6 +11615,39 @@
                 circuit.aFdp ? store.getFdps().then(f => f.find(fdp => fdp.id === circuit.aFdp)) : Promise.resolve(null),
                 circuit.zFdp ? store.getFdps().then(f => f.find(fdp => fdp.id === circuit.zFdp)) : Promise.resolve(null)
             ]);
+
+            // Human-readable text for the JSON-blob columns (VLANs + waypoints/meetpoint) — used in the
+            // view AND the Excel export, resolving NNI/site/FDP ids to their names.
+            const [_allSites, _allNnis, _allFdps] = await Promise.all([store.getSites(), store.getNnis(), store.getFdps()]);
+            const _siteNm = id => { const s = _allSites.find(x => x.id === id); return s ? (s.name || s.id) : (id || ''); };
+            const _nniNm  = id => { const n = _allNnis.find(x => x.id === id); return n ? (n.name || n.id) : (id || ''); };
+            const _fdpNm  = id => { const f = _allFdps.find(x => x.id === id); return f ? (f.name || f.id) : (id || ''); };
+            const _endTxt = (ct, ids, sub, siteId) => {
+                let conn;
+                if (ct === 'nni') conn = `NNI ${_nniNm(ids.nni)}${sub ? ' (.' + sub + ')' : ''}`;
+                else if (ct === 'fdp') conn = `FDP ${_fdpNm(ids.fdp)}${sub ? ' p' + sub : ''}`;
+                else if (ct === 'equipment') conn = `Equip ${ids.equipment || ''}${sub ? ' p' + sub : ''}`.trim();
+                else if (ct === 'cpe') conn = 'CPE';
+                else conn = ct || '(unspecified)';
+                const st = _siteNm(siteId);
+                return `${conn}${st ? ' @ ' + st : ''}`;
+            };
+            const _vlanArr = safeParseJson(stripHtmlWrap(circuit.circuitVlans), []);
+            const _vlansText = _vlanArr.length ? _vlanArr.map(v =>
+                `VLAN ${v.vlanId || '?'} — A: ${_endTxt(v.aConnectionType, {nni:v.aNni,fdp:v.aFdp,equipment:v.aEquipment}, v.aNniSubinterface || v.aPort, v.aLocationSiteId)}  →  Z: ${_endTxt(v.zConnectionType, {nni:v.zNni,fdp:v.zFdp,equipment:v.zEquipment}, v.zNniSubinterface || v.zPort, v.zLocationSiteId)}`
+            ).join('\n') : '-';
+            const _wpObj = safeParseJson(stripHtmlWrap(circuit.additionalLocations), null);
+            let _wpText = '-';
+            if (_wpObj && _wpObj.waypoints) {
+                const _lines = [];
+                Object.entries(_wpObj.waypoints).forEach(([vn, list]) => {
+                    const vid = (_vlanArr[parseInt(vn) - 1] || {}).vlanId || vn;
+                    (list || []).forEach((w, i) => {
+                        _lines.push(`VLAN ${vid} ${String.fromCharCode(66 + i)}: ${_endTxt(w.connectionType, {nni:w.nni,fdp:w.fdp,equipment:w.equipment}, w.subinterface || w.fdpPort, w.siteId)}`);
+                    });
+                });
+                _wpText = _lines.length ? _lines.join('\n') : '-';
+            }
             
             showViewModal({
                 title: `Circuit Details: ${circuit.circuitId}`,
@@ -11630,11 +11663,11 @@
                             { label: 'Status', value: circuit.status || '-' },
                             { label: 'Provider', value: circuit.provider || '-' },
                             { label: 'Bandwidth', value: circuit.bandwidth || '-' },
-                            { label: 'VLANs', value: stripHtmlWrap(circuit.circuitVlans) || '-' },
+                            { label: 'VLANs', value: _vlansText },
                             { label: 'MTU', value: circuit.mtu || '-' },
                             { label: 'Customer', value: circuit.customer || '-' },
                             { label: 'SO Number', value: circuit.soNumber || '-' },
-                            { label: 'Meetpoint', value: circuit.additionalLocations || '-' },
+                            { label: 'Meetpoint', value: _wpText },
                             { label: 'Fiber Type', value: circuit.fiberType || '-' },
                             { label: 'Install Date', value: circuit.installDate || '-' },
                             { label: 'Activation Date', value: circuit.activationDate || '-' },
