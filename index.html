@@ -7237,12 +7237,14 @@
         // Load B-N waypoints from circuit columns and re-render cards
         async function loadWaypointsFromColumns(circuit, vlanCount) {
             const LETTERS = ['B','C','D','E','F','G','H','I','J','K','L','M','N'];
+            // NNIs needed to anchor an NNI waypoint to its OWN site (see below).
+            const allNnis = await store.getNnis();
             for (let posIdx = 0; posIdx < LETTERS.length; posIdx++) {
                 const L = LETTERS[posIdx];
                 const lo = L.toLowerCase();
                 const siteRaw = circuit[`${lo}LocationSiteId`];
                 if (!siteRaw) continue;  // no waypoint at this position
-                
+
                 const siteMap = parseDelimitedPerVlan(siteRaw, vlanCount);
                 const ctMap = parseDelimitedPerVlan(circuit[`${lo}ConnectionType`], vlanCount);
                 const fdpMap = parseDelimitedPerVlan(circuit[`${lo}Fdp`], vlanCount);
@@ -7250,26 +7252,41 @@
                 const eqMap = parseDelimitedPerVlan(circuit[`${lo}Equipment`], vlanCount);
                 const eqPortMap = parseDelimitedPerVlan(circuit[`${lo}EquipmentPort`], vlanCount);
                 const nniRawMap = parseDelimitedPerVlan(circuit[`${lo}Nni`], vlanCount);
-                
-                // For each VLAN that has data at this position, create a waypoint card
-                Object.entries(siteMap).forEach(([vNum, siteId]) => {
-                    if (!siteId) return;
+
+                // For each VLAN that has data at this position, create a waypoint card.
+                // AWAIT each so its site→NNI/FDP dropdowns fully populate and the value sticks
+                // before the next card (and before the user can hit Save — otherwise a not-yet-
+                // applied NNI value serializes back as empty).
+                for (const [vNum, siteId] of Object.entries(siteMap)) {
+                    if (!siteId) continue;
                     const v = parseInt(vNum);
                     // Decode NNI:subinterface
                     const nniRaw = nniRawMap[vNum] || '';
                     const nniParts = nniRaw.split(':');
+                    const nniId = nniParts[0] || '';
+                    // The meetpoint site column is frequently a SINGLE (primary) value — or a
+                    // "meetpoint-<SOId>" placeholder — broadcast to every VLAN, but the per-VLAN NNI
+                    // (e.g. the SECONDARY Type-II meetpoint on VLAN 2) can live at a DIFFERENT site.
+                    // Anchor an NNI waypoint to the NNI's own site so the site-filtered NNI dropdown
+                    // actually contains it and the value sticks; otherwise Save re-encodes bNni
+                    // WITHOUT the v2= half and the VLAN-2 B location silently disappears.
+                    let resolvedSite = siteId;
+                    if (nniId) {
+                        const nrec = allNnis.find(n => n.id === nniId);
+                        if (nrec && nrec.siteId) resolvedSite = nrec.siteId;
+                    }
                     const prefill = {
-                        siteId,
-                        connectionType: ctMap[vNum] || '',
+                        siteId: resolvedSite,
+                        connectionType: ctMap[vNum] || (nniId ? 'nni' : ''),
                         fdp: fdpMap[vNum] || '',
                         fdpPort: portMap[vNum] || '',
                         equipment: eqMap[vNum] || '',
                         equipmentPort: eqPortMap[vNum] || '',
-                        nni: nniParts[0] || '',
+                        nni: nniId,
                         subinterface: nniParts[1] || '',
                     };
-                    addVlanIntermediateLocation(v, prefill);
-                });
+                    await addVlanIntermediateLocation(v, prefill);
+                }
             }
         }
         
