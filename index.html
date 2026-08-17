@@ -1398,7 +1398,7 @@
                         await writeFn();
                         if (!window._warnedNoDlrColumn) {
                             window._warnedNoDlrColumn = true;
-                            alert('\u26a0\ufe0f Circuit saved, but the GeneratedSFDLR column does not exist in SharePoint yet, so the DLR text was NOT stored.\n\nCreate the column with PnP PowerShell:\nAdd-PnPField -List "NetInventory_Circuits" -DisplayName "GeneratedSFDLR" -InternalName "GeneratedSFDLR" -Type Note -AddToDefaultView\n\nThen use \ud83d\udd04 Regenerate DLRs on the Circuits page to backfill it.');
+                            alert('\u26a0\ufe0f Circuit saved, but the GeneratedSFDLR column does not exist in SharePoint yet, so the DLR text was NOT stored.\n\nCreate the column with PnP PowerShell:\nAdd-PnPField -List "NetInventory_Circuits" -DisplayName "GeneratedSFDLR" -InternalName "GeneratedSFDLR" -Type Note -AddToDefaultView\n\nThen open the circuit\u2019s DLR page and use \ud83d\udd04 Regenerate DLR to store it.');
                         }
                     } else {
                         throw err;
@@ -7968,7 +7968,7 @@
                             <button class="btn-secondary" onclick="renderCircuitsSummary()">📊 Provider Summary</button>
                             <button class="btn-secondary" onclick="renderCustomerPortfolio()" title="Per-customer circuits, bandwidth and path-diversity">👥 Customer Portfolio</button>
                             <button class="btn-secondary" onclick="openDiversityCheck()" title="Compare two circuits for shared equipment/FDP/NNI/fiber (path diversity)">🔀 Diversity</button>
-                            <button class="btn-secondary" onclick="regenerateAllDlrs(this)" title="Generate + store the SF DLR for every circuit (fills the GeneratedSFDLR column the push-back flow reads)">🔄 Regenerate DLRs</button><button class="btn-secondary" onclick="exportEntityToExcel('circuits', this)" title="Export Circuits to Excel">⬇️ Export</button>
+                            <button class="btn-secondary" onclick="exportEntityToExcel('circuits', this)" title="Export Circuits to Excel">⬇️ Export</button>
                             <button class="btn-primary" onclick="openAddCircuitModal()">Add Circuit</button>
                         </div>
                     </div>
@@ -8487,6 +8487,9 @@
             // Show the modal shell immediately - a data/auth failure must never make the button feel dead
             document.getElementById('circuitModalTitle').textContent = 'Add Circuit';
             document.getElementById('circuitModal').classList.add('active');
+            // New circuits are always editable — clear any lock left by a prior active-circuit edit
+            removeCircuitLockBanner();
+            setCircuitFormDisabled(false);
             try {
             // Perf: warm every list in one parallel batch so the sequential loads below are cache hits.
             try { await Promise.all([store.getEquipment(), store.getSites(), store.getFdps(), store.getCircuits(), store.getNnis()]); } catch (e) {}
@@ -8990,10 +8993,13 @@
                     });
                 }
             }
-            
+
             document.getElementById('circuitModal').classList.add('active');
+            // Active circuits open read-only (view freely; unlock to change). Runs last so it disables
+            // every field the loaders just populated, incl. the async intermediate cards.
+            applyCircuitLock(circuit);
         }
-        
+
         // Helper: Display or hide Generated DLR section
         function updateDlrDisplay(circuit) {
             const dlrSection = document.getElementById('dlrDisplaySection');
@@ -9026,6 +9032,46 @@
             additionalLocationCounter = 0;
             const _form = document.getElementById('circuitForm');
             if (_form) delete _form.dataset.editingCircuitId;
+            // Always leave the form unlocked/clean so the next open (esp. Add Circuit) starts editable
+            removeCircuitLockBanner();
+            setCircuitFormDisabled(false);
+        }
+
+        // ---- Active-circuit lock (view-only until explicitly unlocked) ----------------------------
+        // An 'active' circuit opens read-only so historical/live data isn't changed by accident
+        // ("once active it only changes deliberately"). "Unlock to edit" re-enables the form for this
+        // session; saveCircuit refuses a locked save as a backstop. Derived from status — no column.
+        function setCircuitFormDisabled(disabled) {
+            const form = document.getElementById('circuitForm');
+            if (!form) return;
+            form.querySelectorAll('input, select, textarea, button').forEach(el => {
+                if (el.dataset && el.dataset.lockExempt === '1') return;   // unlock button stays clickable
+                el.disabled = !!disabled;
+            });
+            form.dataset.locked = disabled ? '1' : '';
+        }
+        function removeCircuitLockBanner() {
+            const b = document.getElementById('circuitLockBanner');
+            if (b) b.remove();
+        }
+        function applyCircuitLock(circuit) {
+            const form = document.getElementById('circuitForm');
+            if (!form) return;
+            removeCircuitLockBanner();
+            const isActive = String((circuit && circuit.status) || '').toLowerCase() === 'active';
+            if (!isActive) { setCircuitFormDisabled(false); return; }   // planned/pending stay editable
+            setCircuitFormDisabled(true);
+            const banner = document.createElement('div');
+            banner.id = 'circuitLockBanner';
+            banner.style.cssText = 'display:flex;align-items:center;gap:0.75rem;background:rgba(139,92,246,0.10);border:1px solid var(--accent-secondary);border-radius:8px;padding:0.6rem 0.9rem;margin-bottom:1rem;font-size:0.9em;';
+            banner.innerHTML = '<span>🔒 This circuit is <strong>Active</strong> and locked to protect its stored data. Editing is disabled until you unlock.</span>'
+                + '<button type="button" data-lock-exempt="1" class="btn-secondary" style="margin-left:auto;white-space:nowrap;" onclick="unlockCircuitForm()">🔓 Unlock to edit</button>';
+            form.prepend(banner);
+        }
+        function unlockCircuitForm() {
+            setCircuitFormDisabled(false);
+            const b = document.getElementById('circuitLockBanner');
+            if (b) b.innerHTML = '<span>🔓 <strong>Unlocked</strong> — changes to this Active circuit will be saved when you click Update.</span>';
         }
         
         // ===== CFA/DLR path grid =====
@@ -9438,6 +9484,12 @@
         async function saveCircuit(event) {
             event.preventDefault();
             const form = event.target;
+            // Lock backstop: an Active circuit opens read-only; refuse a save until explicitly unlocked
+            // (the submit button is disabled while locked — this also blocks Enter-key / programmatic submit).
+            if (form && form.dataset.locked === '1') {
+                alert('🔒 This Active circuit is locked. Click "🔓 Unlock to edit" at the top of the form before saving changes.');
+                return;
+            }
             const formData = new FormData(form);
             
             // Get equipment ports from multi-select (handle multiple selections)
@@ -9744,7 +9796,10 @@
                 if (formEditId) {
                     // Preserve fields that the form has no inputs for (synced/computed values must survive an edit)
                     const prev = (await store.getCircuits()).find(c => c.id === formEditId) || {};
-                    const FIELDS_THE_FORM_DOES_NOT_OWN = ['cfaSourceText', 'salesforceModifiedDate', 'salesforceId', 'syncStatus', 'syncSource', 'irisUni', 'irisEvc1', 'irisEvc2', 'assignedEngineer', 'dueDate'];
+                    // generatedSFDLR + netProvRows are computed, not form-owned: preserve them from the
+                    // stored row so a re-save of an already-active circuit can't blank OR silently rewrite
+                    // them (they only refresh on the planned->active transition or an explicit regen).
+                    const FIELDS_THE_FORM_DOES_NOT_OWN = ['cfaSourceText', 'salesforceModifiedDate', 'salesforceId', 'syncStatus', 'syncSource', 'irisUni', 'irisEvc1', 'irisEvc2', 'assignedEngineer', 'dueDate', 'generatedSFDLR', 'netProvRows'];
                     FIELDS_THE_FORM_DOES_NOT_OWN.forEach(field => {
                         // Only preserve from prev if the form didn't explicitly populate this field
                         // (form returns '' or undefined when there's no input element for that name)
@@ -9753,8 +9808,12 @@
                         }
                     });
                     
-                    // Generate DLR for Salesforce when status changes to 'active'
-                    if (circuit.status === 'active') {
+                    // Regen gate: generate the SF DLR + NetProvRows ONLY on the pending/planned -> active
+                    // TRANSITION. Re-saving an already-active circuit preserves the stored values (above)
+                    // so historical/partially-loaded circuits are never silently overwritten. A deliberate
+                    // refresh is the "Regenerate DLR" button on the DLR page.
+                    const _wasActive = String(prev.status || '').toLowerCase() === 'active';
+                    if (circuit.status === 'active' && !_wasActive) {
                         try {
                             // Need all reference data for DLR generation
                             const [sites, nnis, equipment, fdps] = await Promise.all([
@@ -12318,7 +12377,10 @@
                         </div>
                         <div style="padding: 1rem 1.5rem; border-top: 1px solid var(--border-color); display: flex; justify-content: space-between; gap: 1rem;">
                             <button onclick="printDlrModal()" class="btn-secondary">🖨️ Print DLR</button>
-                            <button onclick="closeDLRModal()" class="btn-primary">Close</button>
+                            <div style="display:flex; gap:0.75rem;">
+                                <button onclick="regenerateSingleDlr('${circuit.id}', this)" class="btn-secondary" title="Rebuild this circuit's SF DLR from current inventory and overwrite ONLY the stored GeneratedSFDLR field (topology / NetProvRows untouched)">🔄 Regenerate DLR</button>
+                                <button onclick="closeDLRModal()" class="btn-primary">Close</button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -12335,6 +12397,36 @@
             const modal = document.getElementById('dlrModal');
             if (modal) modal.remove();
             if ((location.hash || '').endsWith('/dlr')) setRouteHash('#/' + (currentPage || 'circuits'));
+        }
+
+        // Deliberate, single-circuit DLR refresh from the DLR page. Overwrites ONLY the stored
+        // GeneratedSFDLR field — never NetProvRows or topology. Replaces the removed bulk regen button;
+        // the save path no longer auto-regenerates an already-active circuit (regen gate), so this is
+        // the explicit way to refresh a DLR after an intentional edit / NNI relink.
+        async function regenerateSingleDlr(circuitId, btn) {
+            if (!confirm('Regenerate the SF DLR for this circuit from current inventory?\n\nThis overwrites ONLY the stored GeneratedSFDLR field — topology, NetProvRows and everything else are left untouched.')) return;
+            const orig = btn ? btn.textContent : '';
+            if (btn) { btn.disabled = true; btn.textContent = '🔄 Regenerating...'; }
+            try {
+                const [circuits, allSites, allNnis, allEquipment, allFdps] = await Promise.all([
+                    store.getCircuits(), store.getSites(), store.getNnis(), store.getEquipment(), store.getFdps()
+                ]);
+                const c = circuits.find(x => x.id === circuitId);
+                if (!c) { alert('Circuit not found.'); return; }
+                const circuitForDlr = { ...c, circuitVLANs: safeParseJson(c.circuitVlans, []) };
+                const dlrText = await generateDlrText(circuitForDlr, allSites, allNnis, allEquipment, allFdps);
+                if (!dlrText) { alert('No DLR could be generated — no VLAN/path data resolved for this circuit.'); return; }
+                if (!c._spItemId) { alert('This circuit has no SharePoint record id, so the DLR cannot be stored.'); return; }
+                await graphClient.updateListItem('circuits', c._spItemId, { GeneratedSFDLR: dlrText });
+                store.clearCache('circuits');
+                closeDLRModal();
+                await viewDLR(circuitId);   // reopen with the freshly-stored DLR
+            } catch (e) {
+                console.error('Single DLR regen failed:', e);
+                alert('Error regenerating DLR: ' + friendlyError(e));
+            } finally {
+                if (btn) { btn.disabled = false; btn.textContent = orig || '🔄 Regenerate DLR'; }
+            }
         }
         
         // FDP Port Layout - Visual port usage map
@@ -16853,7 +16945,7 @@ ${entityActionButtons('nni', `${n.id}`, true)}
                     resultsDiv.scrollTop = resultsDiv.scrollHeight;
                 }
                 store.clearCache('nnis');
-                status.innerHTML = '<strong>Complete!</strong><br>\u2713 ' + linked + ' NNIs linked \u00b7 ' + portsFixed + ' ports fixed \u00b7 ' + created + ' equipment created' + (failed ? '<br>\u2717 ' + failed + ' failed' : '') + '<br><span style="font-size:0.85em">Run \ud83d\udd04 Regenerate DLRs next so stored DLRs use the new native paths.</span>';
+                status.innerHTML = '<strong>Complete!</strong><br>\u2713 ' + linked + ' NNIs linked \u00b7 ' + portsFixed + ' ports fixed \u00b7 ' + created + ' equipment created' + (failed ? '<br>\u2717 ' + failed + ' failed' : '') + '<br><span style="font-size:0.85em">Open a circuit\u2019s DLR page and use \ud83d\udd04 Regenerate DLR to refresh its stored DLR with the new native path.</span>';
                 progressModal.querySelector('.modal-content').innerHTML += `
                     <div style="padding: 0 2rem 2rem 2rem;">
                         <button class="btn-primary" onclick="this.closest('.modal').remove(); render('nnis');" style="width: 100%;">Close & Refresh</button>
