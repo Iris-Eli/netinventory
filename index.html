@@ -11852,11 +11852,13 @@
                 
                 // ---- native path from inventory (post NNI->equipment linking) ----
                 const nativeLines = [];
+                let hasA = false, hasZ = false, hasMeet = false;   // ends/meetpoint resolved => native path is authoritative
                 const aNniRec = findNniRec(vlan.aNni);
                 const aEq = eqOf(aNniRec);
                 if (aEq && aNniRec.equipmentPorts) {
                     const aSub = vlan.aNniSubinterface ? `.${vlan.aNniSubinterface}` : '';
                     nativeLines.push(`${aEq.name} ${dlrPort(aNniRec.equipmentPorts)}${aSub} (Collector NNI: ${aNniRec.name || vlan.aNni})`);
+                    hasA = true;
                 }
                 // ---- B-N intermediate hops (incl. Type-II meetpoint) ----
                 // These live in the circuit's per-position columns (bLocationSiteId/bConnectionType/
@@ -11875,12 +11877,14 @@
                         const eq = eqOf(rec);
                         const port = dlrPort(rec ? (rec.equipmentPorts || '') : '') + (sub ? `.${sub}` : '');
                         nativeLines.push(`${eq ? eq.name + ' ' : ''}${port} (Meetpoint NNI: ${(rec && rec.name) || raw})`.replace(/\s+/g, ' ').trim());
+                        hasMeet = true;
                     } else if (ct === 'equipment') {
                         const eq = allEquipment?.find(e => e.id === _wp(lo + 'Equipment'));
-                        if (eq) nativeLines.push(`${eq.name} ${_wp(lo + 'EquipmentPort')}`.trim());
+                        if (eq) { nativeLines.push(`${eq.name} ${_wp(lo + 'EquipmentPort')}`.trim()); hasMeet = true; }
                     } else if (ct === 'fdp') {
                         const fdp = allFdps?.find(f => f.id === _wp(lo + 'Fdp'));
                         nativeLines.push(`${(fdp && fdp.name) || _wp(lo + 'Fdp')} FDP ${_wp(lo + 'Port')}`.trim());
+                        hasMeet = true;
                     }
                 }
                 // direct Z NNI / CPE end
@@ -11889,13 +11893,27 @@
                 if (zEq && zNniRec.equipmentPorts) {
                     const zSub = vlan.zNniSubinterface ? `.${vlan.zNniSubinterface}` : '';
                     nativeLines.push(`${zEq.name} ${dlrPort(zNniRec.equipmentPorts)}${zSub}`);
+                    hasZ = true;
                 } else if ((vlan.zConnectionType || circuit.zConnectionType) === 'cpe') {
                     nativeLines.push('CPE');
+                    hasZ = true;
                 }
-                
-                // ---- choose the richer narrative: full CFA block wins until inventory has more detail ----
+
+                // ---- choose the narrative ----
+                // The CFA block (circuit.cfaSourceText) is pulled from Salesforce's CFA_DLR_SOA_Notes__c —
+                // the SAME field this app PUSHES its generated DLR back into. So once we've pushed, the pull
+                // round-trips our own output back as "source", and a stale/verbose block would otherwise beat
+                // the corrected inventory path. Rule: when BOTH ends resolve from inventory the native path is
+                // authoritative (inventory now has the detail); only fall back to the CFA block when the native
+                // path is incomplete. (Was: "longer block always wins", which let round-tripped text stick.)
                 const blk = srcVlanBlocks[String(vlanNum)];
-                if (blk && blk.length > nativeLines.length) {
+                // Complete when A resolves AND either a Z end or a meetpoint hop resolves
+                // (Type-II circuits terminate at the meetpoint, with no separate Z-NNI).
+                const nativeComplete = hasA && (hasZ || hasMeet);
+                if (nativeComplete) {
+                    lines.push(...nativeLines);
+                    nativePathLines += nativeLines.length;
+                } else if (blk && blk.length > nativeLines.length) {
                     lines.push(...blk);
                 } else if (nativeLines.length) {
                     lines.push(...nativeLines);
