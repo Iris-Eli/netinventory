@@ -894,6 +894,7 @@
                 fdps: 'NetInventory_FDPs',
                 circuits: 'NetInventory_Circuits',
                 nnis: 'NetInventory_NNIs',
+                aristaDevices: 'Arista Devices',
                 templates: 'NetInventory_Templates',
                 darkfiberroutes: 'NetInventory_DarkFiberRoutes',
                 darkfibersegments: 'NetInventory_DarkFiberSegments'
@@ -904,7 +905,7 @@
                 racks: { id: 'Title', name: 'RackID', siteId: 'SiteID', location: 'RackLocation', rackUnits: 'RackUnits', hasAC: 'HasAC', purchasedPowerAC: 'PurchasedPowerAC', hasDC: 'HasDC', purchasedPowerDC: 'PurchasedPowerDC', notes: 'Notes', soNumber: 'SONumber' },
                 equipment: { id: 'Title', name: 'EquipmentID', siteId: 'SiteID', rackId: 'RackID', manufacturer: 'Manufacturer', model: 'Model', type: 'EquipmentType', serialNumber: 'SerialNumber', rackUnits: 'RackUnits', rackPosition: 'RackPosition', powerType: 'PowerType', powerDraw: 'PowerDraw', maxPowerDraw: 'MaxPowerDraw', voltage: 'Voltage', weight: 'Weight', portConfig: 'PortConfig', installDate: 'InstallDate', notes: 'Notes', linePorts: 'LinePorts', lineCapacity: 'LineCapacity', lineWavelength: 'LineWavelength', parentEquipmentID: 'ParentEquipmentID', slotNumber: 'SlotNumber', mgmtIp: 'MgmtIP', mgmtSubnet: 'MgmtSubnet', mgmtGateway: 'MgmtGateway', soNumber: 'SONumber', irisClli: 'IrisCLLI' },
                 fdps: { id: 'Title', name: 'FdpID', siteId: 'SiteID', mountingType: 'MountingType', rackId: 'RackID', location: 'FdpLocation', portCount: 'PortCount', connectorType: 'ConnectorType', type: 'FdpType', rackUnits: 'RackUnits', rackPosition: 'RackPosition', notes: 'Notes', soNumber: 'SONumber' },
-                circuits: { id: 'Title', circuitId: 'CircuitID', previousCircuitId: 'PreviousCircuitID', type: 'CircuitType', direction: 'Direction', networkType: 'NetworkType', provider: 'Provider', customer: 'Customer', bandwidth: 'Bandwidth', status: 'Status', circuitVlans: 'CircuitVLANs', aLocationSiteId: 'ALocationSiteID', aConnectionType: 'AConnectionType', aFdp: 'AFdp', aPort: 'APort', aEquipment: 'AEquipment', aEquipmentPort: 'AEquipmentPort', aEquipmentFdp: 'AEquipmentFdp', aEquipmentFdpPorts: 'AEquipmentFdpPorts', aNni: 'ANni', aNniSubinterface: 'ANniSubinterface', bLocationSiteId: 'BLocationSiteID', bConnectionType: 'BConnectionType', bFdp: 'BFdp', bPort: 'BPort', bEquipment: 'BEquipment', bEquipmentPort: 'BEquipmentPort', bEquipmentFdp: 'BEquipmentFdp', bEquipmentFdpPorts: 'BEquipmentFdpPorts', bNni: 'BNni', cLocationSiteId: 'CLocationSiteID', cConnectionType: 'CConnectionType', cFdp: 'CFdp', cPort: 'CPort', cEquipment: 'CEquipment', cEquipmentPort: 'CEquipmentPort', cEquipmentFdp: 'CEquipmentFdp', cEquipmentFdpPorts: 'CEquipmentFdpPorts', cNni: 'CNni', dLocationSiteId: 'DLocationSiteID', dConnectionType: 'DConnectionType', dFdp: 'DFdp', dPort: 'DPort', dEquipment: 'DEquipment', dEquipmentPort: 'DEquipmentPort', dEquipmentFdp: 'DEquipmentFdp', dEquipmentFdpPorts: 'DEquipmentFdpPorts', dNni: 'DNni', eLocationSiteId: 'ELocationSiteID', eConnectionType: 'EConnectionType', eFdp: 'EFdp', ePort: 'EPort', eEquipment: 'EEquipment', eEquipmentPort: 'EEquipmentPort', eEquipmentFdp: 'EEquipmentFdp', eEquipmentFdpPorts: 'EEquipmentFdpPorts', eNni: 'ENni', fLocationSiteId: 'FLocationSiteID', fConnectionType: 'FConnectionType', fFdp: 'FFdp', fPort: 'FPort', fEquipment: 'FEquipment', fEquipmentPort: 'FEquipmentPort', fEquipmentFdp: 'FEquipmentFdp', fEquipmentFdpPorts: 'FEquipmentFdpPorts', fNni: 'FNni', gLocationSiteId: 'GLocationSiteID', gConnectionType: 'GConnectionType', gFdp: 'GFdp', gPort: 'GPort', gEquipment: 'GEquipment', gEquipmentPort: 'GEquipmentPort', gEquipmentFdp: 'GEquipmentFdp', gEquipmentFdpPorts: 'GEquipmentFdpPorts', gNni: 'GNni', hLocationSiteId: 'HLocationSiteID', hConnectionType: 'HConnectionType', hFdp: 'HFdp', hPort: 'HPort', hEquipment: 'HEquipment', hEquipmentPort: 'HEquipmentPort', hEquipmentFdp: 'HEquipmentFdp', hEquipmentFdpPorts: 'HEquipmentFdpPorts', hNni: 'HNni', iLocationSiteId: 'ILocationSiteID', iConnectionType: 'IConnectionType', iFdp: 'IFdp', iPort: 'IPort', iEquipment: 'IEquipment', iEquipmentPort: 'IEquipmentPort', iEquipmentFdp: 'IEquipmentFdp', iEquipmentFdpPorts: 'IEquipmentFdpPorts', iNni: 'INni', jLocationSiteId: 'JLocationSiteID', jConnectionType: 'JConnectionType', jFdp: 'JFdp', jPort: 'JPort', jEquipment: 'JEquipment', jEquipmentPort: 'JEquipmentPort', jEquipmentFdp: 'JEquipmentFdp', jEquipmentFdpPorts: 'JEquipmentFdpPorts', jNni: 'JNni', kLocationSiteId: 'KLocationSiteID', kConnectionType: 'KConnectionType', kFdp: 'KFdp', kPort: 'KPort', kEquipment: 'KEquipment', kEquipmentPort: 'KEquipmentPort', kEquipmentFdp: 'KEquipmentFdp', kEquipmentFdpPorts: 'KEquipmentFdpPorts', kNni: 'KNni', lLocationSiteId: 'LLocationSiteID', lConnectionType: 'LConnectionType', lFdp: 'LFdp', lPort: 'LPort', lEquipment: 'LEquipment', lEquipmentPort: 'LEquipmentPort', lEquipmentFdp: 'LEquipmentFdp', lEquipmentFdpPorts: 'LEquipmentFdpPorts', lNni: 'LNni', mLocationSiteId: 'MLocationSiteID', mConnectionType: 'MConnectionType', mFdp: 'MFdp', mPort: 'MPort', mEquipment: 'MEquipment', mEquipmentPort: 'MEquipmentPort', mEquipmentFdp: 'MEquipmentFdp', mEquipmentFdpPorts: 'MEquipmentFdpPorts', mNni: 'MNni', nLocationSiteId: 'NLocationSiteID', nConnectionType: 'NConnectionType', nFdp: 'NFdp', nPort: 'NPort', nEquipment: 'NEquipment', nEquipmentPort: 'NEquipmentPort', nEquipmentFdp: 'NEquipmentFdp', nEquipmentFdpPorts: 'NEquipmentFdpPorts', nNni: 'NNni', zLocationSiteId: 'ZLocationSiteID', zConnectionType: 'ZConnectionType', zFdp: 'ZFdp', zPort: 'ZPort', zEquipment: 'ZEquipment', zEquipmentPort: 'ZEquipmentPort', zEquipmentFdp: 'ZEquipmentFdp', zEquipmentFdpPorts: 'ZEquipmentFdpPorts', zNni: 'ZNni', zNniSubinterface: 'ZNniSubinterface', hasCpe: 'HasCpe', cpeType: 'CpeType', cpeMgmtIp: 'CpeMgmtIp', cpeMgmtSubnet: 'CpeMgmtSubnet', cpeMgmtGateway: 'CpeMgmtGateway', cpeMgmtVlan: 'CpeMgmtVLAN', additionalLocations: 'AdditionalLocations', notes: 'Notes', tunable: 'Tunable', wavelength: 'Wavelength', soNumber: 'SONumber', cpeEquipmentId: 'CpeEquipmentID', cpeUplinkPorts: 'CpeUplinkPorts', cpeDownlinkPorts: 'CpeDownlinkPorts', salesforceId: 'SalesforceID', syncStatus: 'SyncStatus', syncSource: 'SyncSource', mtu: 'MTU', vlanCount: 'VlanCount', irisUni: 'IrisUNI', irisEvc1: 'IrisEVC1', irisEvc2: 'IrisEVC2', assignedEngineer: 'AssignedEngineer', dueDate: 'DueDate', cfaPaths: 'CfaPaths', dlrText: 'DLRText', cfaSourceText: 'CfaSourceText', salesforceModifiedDate: 'SalesforceModifiedDate', generatedSFDLR: 'GeneratedSFDLR' },
+                circuits: { id: 'Title', circuitId: 'CircuitID', previousCircuitId: 'PreviousCircuitID', type: 'CircuitType', direction: 'Direction', networkType: 'NetworkType', provider: 'Provider', customer: 'Customer', bandwidth: 'Bandwidth', status: 'Status', circuitVlans: 'CircuitVLANs', aLocationSiteId: 'ALocationSiteID', aConnectionType: 'AConnectionType', aFdp: 'AFdp', aPort: 'APort', aEquipment: 'AEquipment', aEquipmentPort: 'AEquipmentPort', aEquipmentFdp: 'AEquipmentFdp', aEquipmentFdpPorts: 'AEquipmentFdpPorts', aNni: 'ANni', aNniSubinterface: 'ANniSubinterface', bLocationSiteId: 'BLocationSiteID', bConnectionType: 'BConnectionType', bFdp: 'BFdp', bPort: 'BPort', bEquipment: 'BEquipment', bEquipmentPort: 'BEquipmentPort', bEquipmentFdp: 'BEquipmentFdp', bEquipmentFdpPorts: 'BEquipmentFdpPorts', bNni: 'BNni', cLocationSiteId: 'CLocationSiteID', cConnectionType: 'CConnectionType', cFdp: 'CFdp', cPort: 'CPort', cEquipment: 'CEquipment', cEquipmentPort: 'CEquipmentPort', cEquipmentFdp: 'CEquipmentFdp', cEquipmentFdpPorts: 'CEquipmentFdpPorts', cNni: 'CNni', dLocationSiteId: 'DLocationSiteID', dConnectionType: 'DConnectionType', dFdp: 'DFdp', dPort: 'DPort', dEquipment: 'DEquipment', dEquipmentPort: 'DEquipmentPort', dEquipmentFdp: 'DEquipmentFdp', dEquipmentFdpPorts: 'DEquipmentFdpPorts', dNni: 'DNni', eLocationSiteId: 'ELocationSiteID', eConnectionType: 'EConnectionType', eFdp: 'EFdp', ePort: 'EPort', eEquipment: 'EEquipment', eEquipmentPort: 'EEquipmentPort', eEquipmentFdp: 'EEquipmentFdp', eEquipmentFdpPorts: 'EEquipmentFdpPorts', eNni: 'ENni', fLocationSiteId: 'FLocationSiteID', fConnectionType: 'FConnectionType', fFdp: 'FFdp', fPort: 'FPort', fEquipment: 'FEquipment', fEquipmentPort: 'FEquipmentPort', fEquipmentFdp: 'FEquipmentFdp', fEquipmentFdpPorts: 'FEquipmentFdpPorts', fNni: 'FNni', gLocationSiteId: 'GLocationSiteID', gConnectionType: 'GConnectionType', gFdp: 'GFdp', gPort: 'GPort', gEquipment: 'GEquipment', gEquipmentPort: 'GEquipmentPort', gEquipmentFdp: 'GEquipmentFdp', gEquipmentFdpPorts: 'GEquipmentFdpPorts', gNni: 'GNni', hLocationSiteId: 'HLocationSiteID', hConnectionType: 'HConnectionType', hFdp: 'HFdp', hPort: 'HPort', hEquipment: 'HEquipment', hEquipmentPort: 'HEquipmentPort', hEquipmentFdp: 'HEquipmentFdp', hEquipmentFdpPorts: 'HEquipmentFdpPorts', hNni: 'HNni', iLocationSiteId: 'ILocationSiteID', iConnectionType: 'IConnectionType', iFdp: 'IFdp', iPort: 'IPort', iEquipment: 'IEquipment', iEquipmentPort: 'IEquipmentPort', iEquipmentFdp: 'IEquipmentFdp', iEquipmentFdpPorts: 'IEquipmentFdpPorts', iNni: 'INni', jLocationSiteId: 'JLocationSiteID', jConnectionType: 'JConnectionType', jFdp: 'JFdp', jPort: 'JPort', jEquipment: 'JEquipment', jEquipmentPort: 'JEquipmentPort', jEquipmentFdp: 'JEquipmentFdp', jEquipmentFdpPorts: 'JEquipmentFdpPorts', jNni: 'JNni', kLocationSiteId: 'KLocationSiteID', kConnectionType: 'KConnectionType', kFdp: 'KFdp', kPort: 'KPort', kEquipment: 'KEquipment', kEquipmentPort: 'KEquipmentPort', kEquipmentFdp: 'KEquipmentFdp', kEquipmentFdpPorts: 'KEquipmentFdpPorts', kNni: 'KNni', lLocationSiteId: 'LLocationSiteID', lConnectionType: 'LConnectionType', lFdp: 'LFdp', lPort: 'LPort', lEquipment: 'LEquipment', lEquipmentPort: 'LEquipmentPort', lEquipmentFdp: 'LEquipmentFdp', lEquipmentFdpPorts: 'LEquipmentFdpPorts', lNni: 'LNni', mLocationSiteId: 'MLocationSiteID', mConnectionType: 'MConnectionType', mFdp: 'MFdp', mPort: 'MPort', mEquipment: 'MEquipment', mEquipmentPort: 'MEquipmentPort', mEquipmentFdp: 'MEquipmentFdp', mEquipmentFdpPorts: 'MEquipmentFdpPorts', mNni: 'MNni', nLocationSiteId: 'NLocationSiteID', nConnectionType: 'NConnectionType', nFdp: 'NFdp', nPort: 'NPort', nEquipment: 'NEquipment', nEquipmentPort: 'NEquipmentPort', nEquipmentFdp: 'NEquipmentFdp', nEquipmentFdpPorts: 'NEquipmentFdpPorts', nNni: 'NNni', zLocationSiteId: 'ZLocationSiteID', zConnectionType: 'ZConnectionType', zFdp: 'ZFdp', zPort: 'ZPort', zEquipment: 'ZEquipment', zEquipmentPort: 'ZEquipmentPort', zEquipmentFdp: 'ZEquipmentFdp', zEquipmentFdpPorts: 'ZEquipmentFdpPorts', zNni: 'ZNni', zNniSubinterface: 'ZNniSubinterface', hasCpe: 'HasCpe', cpeType: 'CpeType', cpeMgmtIp: 'CpeMgmtIp', cpeMgmtSubnet: 'CpeMgmtSubnet', cpeMgmtGateway: 'CpeMgmtGateway', cpeMgmtVlan: 'CpeMgmtVLAN', additionalLocations: 'AdditionalLocations', notes: 'Notes', tunable: 'Tunable', wavelength: 'Wavelength', soNumber: 'SONumber', cpeEquipmentId: 'CpeEquipmentID', cpeUplinkPorts: 'CpeUplinkPorts', cpeDownlinkPorts: 'CpeDownlinkPorts', salesforceId: 'SalesforceID', syncStatus: 'SyncStatus', syncSource: 'SyncSource', mtu: 'MTU', vlanCount: 'VlanCount', irisUni: 'IrisUNI', irisEvc1: 'IrisEVC1', irisEvc2: 'IrisEVC2', assignedEngineer: 'AssignedEngineer', dueDate: 'DueDate', cfaPaths: 'CfaPaths', dlrText: 'DLRText', cfaSourceText: 'CfaSourceText', salesforceModifiedDate: 'SalesforceModifiedDate', generatedSFDLR: 'GeneratedSFDLR', netProvRows: 'NetProvRows' },
                 nnis: { id: 'Title', name: 'NniID', siteId: 'SiteID', equipmentID: 'EquipmentID', equipmentPorts: 'EquipmentPorts', fdpId: 'FdpID', fdpPorts: 'FdpPorts', direction: 'Direction', contact: 'Contact', description: 'Description', notes: 'Notes', soNumber: 'SONumber', salesforceId: 'SalesforceID', syncStatus: 'SyncStatus', syncSource: 'SyncSource', provider: 'Provider', nniStatus: 'NniStatus', bandwidth: 'Bandwidth' },
                 templates: { id: 'Title', name: 'TemplateName', manufacturer: 'Manufacturer', model: 'Model', type: 'EquipmentType', rackUnits: 'RackUnits', powerType: 'PowerType', powerDraw: 'PowerDraw', maxPowerDraw: 'MaxPowerDraw', voltage: 'Voltage', weight: 'Weight', portConfig: 'PortConfig', notes: 'Notes', linePorts: 'LinePorts', lineCapacity: 'LineCapacity' },
                 darkfiberroutes: { id: 'Title', routeName: 'RouteName', aLocationSiteId: 'ALocationSiteID', zLocationSiteId: 'ZLocationSiteID', totalDistance: 'TotalDistance', purpose: 'Purpose', equipmentType: 'EquipmentType', aEndEquipment: 'AEndEquipment', zEndEquipment: 'ZEndEquipment', status: 'Status', routeMapURL: 'RouteMapURL', installDate: 'InstallDate', lastVerified: 'LastVerified', notes: 'Notes', soNumber: 'SONumber' },
@@ -9755,6 +9756,17 @@
                             
                             circuit.generatedSFDLR = await generateDlrText(circuitForDlr, sites, nnis, equipment, fdps);
                             console.log('Generated SF DLR for circuit', circuit.circuitId);
+
+                            // Compute the Net Provisioner rows (Arista hops per VLAN) for the SF→netprov
+                            // flow to create as Planned circuits — resolved here where the data is loaded.
+                            try {
+                                const aristaItems = await graphClient.getListItems('aristaDevices');
+                                const aristaSerials = new Set((aristaItems || [])
+                                    .map(it => String((it.fields || {}).Title || '').trim()).filter(Boolean));
+                                circuit.netProvRows = JSON.stringify(
+                                    computeNetProvRows(circuit, nnis, equipment, sites, aristaSerials));
+                                console.log('Computed NetProvRows for', circuit.circuitId, '—', safeParseJson(circuit.netProvRows, []).length, 'row(s)');
+                            } catch (npErr) { console.warn('NetProvRows compute failed (non-fatal):', npErr); }
                         } catch (dlrErr) {
                             console.warn('DLR generation failed (non-fatal):', dlrErr);
                             // Continue with save even if DLR generation fails
@@ -11717,6 +11729,68 @@
         
         // Helper: Generate SF DLR text from structured circuit data (Salesforce CFA_DLR_SOA_Notes__c format)
         // Format matches the narrative style engineers use: VLAN blocks with equipment names and ports
+        // Resolve a circuit's Arista hops into Net Provisioner rows (one per VLAN) — computed on
+        // activation and stored in NetProvRows for the SF→netprov flow to create as Planned circuits.
+        // Mirrors push_circuit_to_netprov.py: two distinct Arista devices -> VPWS (A->B); both ports
+        // on the same Arista -> Local Patch. An end counts only if its NNI resolves to equipment whose
+        // serial is in the Arista Devices list. VlanTag/SubInt = the VLAN. Engineer reviews before deploy.
+        function computeNetProvRows(circuit, allNnis, allEquipment, allSites, aristaSerials) {
+            const nniById = id => allNnis.find(n => n.id === id);
+            const eqById  = id => allEquipment.find(e => e.id === id);
+            const toIface = port => {
+                const p = String(port || '').trim();
+                if (!p) return '';
+                let m = p.match(/^(?:ET|Ethernet)\s*(\d+(?:\/\d+)*)$/i); if (m) return 'Ethernet' + m[1];
+                m = p.match(/^Port\s+(\d+)\s*\(([^)]*)\)/i); if (m) return 'Ethernet' + m[1] + (/(100|400|800)\s*G/i.test(m[2]) ? '/1' : '');
+                m = p.match(/^(\d+(?:\/\d+)*)$/); if (m) return 'Ethernet' + m[1];
+                return p;
+            };
+            const aristaHop = nniId => {
+                const rec = nniById(nniId); if (!rec) return null;
+                const eq = eqById(rec.equipmentID); if (!eq) return null;
+                const serial = String(eq.serialNumber || '').trim();
+                if (!serial || !aristaSerials.has(serial)) return null;
+                return { serial, iface: toIface(rec.equipmentPorts) };
+            };
+            const alpha = cid => String(cid || '').split(/[._\-]/).filter(t => /^[A-Za-z]+$/.test(t));
+            const cidCustomer    = cid => { const a = alpha(cid); return a.length ? a[a.length - 1].toUpperCase() : ''; };
+            const cidServiceType = cid => { const a = alpha(cid); return a.length >= 2 ? a[a.length - 2].toUpperCase() : ''; };
+            const nniSiteCode = nniId => {
+                const rec = nniById(nniId); if (!rec) return '';
+                const site = allSites.find(s => s.id === rec.siteId);
+                return String(site ? (site.irisClli || '') : '').substring(0, 4).toUpperCase();
+            };
+            const cid = circuit.circuitId || '';
+            const svctype = cidServiceType(cid);
+            const vlans = safeParseJson(stripHtmlWrap(circuit.circuitVlans), []);
+            const vcount = vlans.length || parseInt(circuit.vlanCount) || 1;
+            const bmap = parseDelimitedPerVlan(circuit.bNni, vcount);   // per-VLAN meetpoint
+            const rows = [];
+            vlans.forEach((v, i) => {
+                const vnum = String(v.vlanId || v.vlanNumber || (i + 1));
+                const a = aristaHop(v.aNni);
+                const bRaw = String(bmap[i + 1] || '').split(':')[0];
+                const b = aristaHop(bRaw) || aristaHop(v.zNni);
+                if (!a || !b) return;                                   // need 2 Arista hops
+                const custCode = cidCustomer(cid), siteCode = nniSiteCode(v.aNni);
+                const base = {
+                    CID: `${cid}_VLAN_${vnum}`,
+                    Customer: (custCode && siteCode) ? `${custCode}_${siteCode}` : custCode,
+                    ServiceType: svctype, Status: 'Planned', NeedsDeploy: 'No'
+                };
+                if (a.serial === b.serial) {                            // same Arista -> Local Patch
+                    rows.push({ ...base, type: 'localpatch', Device: a.serial,
+                        A_Interface: a.iface, A_SubInt: vnum, A_VlanTag: vnum, A_Encap: 'dot1q',
+                        B_Interface: b.iface, B_SubInt: vnum, B_VlanTag: vnum, B_Encap: 'dot1q' });
+                } else {                                                // two Aristas -> VPWS
+                    rows.push({ ...base, type: 'vpws',
+                        A_Device: a.serial, A_Interface: a.iface, A_SubInt: vnum, A_VlanTag: vnum, A_Encap: 'dot1q',
+                        B_Device: b.serial, B_Interface: b.iface, B_SubInt: vnum, B_VlanTag: vnum, B_Encap: 'dot1q' });
+                }
+            });
+            return rows;
+        }
+
         async function generateDlrText(circuit, allSites, allNnis, allEquipment, allFdps) {
             if (!circuit || !circuit.circuitVLANs || circuit.circuitVLANs.length === 0) return '';
             
