@@ -7968,6 +7968,7 @@
                             <button class="btn-secondary" onclick="renderCircuitsSummary()">📊 Provider Summary</button>
                             <button class="btn-secondary" onclick="renderCustomerPortfolio()" title="Per-customer circuits, bandwidth and path-diversity">👥 Customer Portfolio</button>
                             <button class="btn-secondary" onclick="openDiversityCheck()" title="Compare two circuits for shared equipment/FDP/NNI/fiber (path diversity)">🔀 Diversity</button>
+                            <button class="btn-secondary" onclick="openDlrRegenPicker()" title="Pick specific circuits (search + multiselect) and rebuild only their stored DLR text">🔄 Regenerate DLRs…</button>
                             <button class="btn-secondary" onclick="exportEntityToExcel('circuits', this)" title="Export Circuits to Excel">⬇️ Export</button>
                             <button class="btn-primary" onclick="openAddCircuitModal()">Add Circuit</button>
                         </div>
@@ -11722,9 +11723,11 @@
                 return `${conn}${st ? ' @ ' + st : ''}`;
             };
             const _vlanArr = safeParseJson(stripHtmlWrap(circuit.circuitVlans), []);
-            const _vlansText = _vlanArr.length ? _vlanArr.map(v =>
-                `VLAN ${v.vlanId || '?'} — A: ${_endTxt(v.aConnectionType, {nni:v.aNni,fdp:v.aFdp,equipment:v.aEquipment}, v.aNniSubinterface || v.aPort, v.aLocationSiteId)}  →  Z: ${_endTxt(v.zConnectionType, {nni:v.zNni,fdp:v.zFdp,equipment:v.zEquipment}, v.zNniSubinterface || v.zPort, v.zLocationSiteId)}`
-            ).join('\n') : '-';
+            // Clean summary: just the actual VLAN numbers (the full A→Z path lives in the DLR / diagram views).
+            const _vlanNums = _vlanArr.map(v => v.vlanId || v.vlanNumber).filter(x => x != null && x !== '');
+            const _vlansText = _vlanNums.length
+                ? `${_vlanNums.join(', ')}${_vlanNums.length > 1 ? `  (${_vlanNums.length} VLANs)` : ''}`
+                : '-';
             const _wpObj = safeParseJson(stripHtmlWrap(circuit.additionalLocations), null);
             let _wpText = '-';
             if (_wpObj && _wpObj.waypoints) {
@@ -17003,6 +17006,102 @@ ${entityActionButtons('nni', `${n.id}`, true)}
             } finally {
                 if (btn) { btn.disabled = false; btn.textContent = '\ud83d\udd04 Regenerate DLRs'; }
             }
+        }
+
+        // ---- Scoped DLR regen: pick specific circuits (search + multiselect) --------------------
+        // Replaces the old all-circuits bulk button. Rebuilds ONLY GeneratedSFDLR for the chosen
+        // circuits, and only writes where the text actually changed \u2014 NetProvRows/topology untouched.
+        async function openDlrRegenPicker() {
+            let circuits;
+            try { circuits = await store.getCircuits(); }
+            catch (e) { alert('Could not load circuits: ' + friendlyError(e)); return; }
+            const rows = circuits.filter(c => c._spItemId)
+                .sort((a, b) => String(a.circuitId || a.id).localeCompare(String(b.circuitId || b.id)));
+            document.getElementById('dlrRegenPickerModal')?.remove();
+            const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));
+            const modal = document.createElement('div');
+            modal.className = 'modal active';
+            modal.id = 'dlrRegenPickerModal';
+            modal.onclick = e => { if (e.target === modal) modal.remove(); };
+            modal.innerHTML = `
+                <div class="modal-content" style="max-width: 720px; max-height: 88vh; display:flex; flex-direction:column;">
+                    <div class="modal-header">
+                        <h2>\ud83d\udd04 Regenerate DLRs</h2>
+                        <button class="close-btn" onclick="document.getElementById('dlrRegenPickerModal').remove()">&times;</button>
+                    </div>
+                    <div style="padding: 0 1.5rem;">
+                        <p style="color: var(--text-secondary); font-size: 0.9em;">Rebuild the stored <strong>GeneratedSFDLR</strong> for the circuits you select, from current inventory. Only that field changes \u2014 topology and NetProvRows are untouched, and only DLRs whose text actually differs get written.</p>
+                        <input type="text" id="dlrRegenSearch" placeholder="\ud83d\udd0d Filter by Circuit ID or customer..." oninput="filterDlrRegenList()" style="width:100%; padding:0.5rem 0.75rem; margin-bottom:0.5rem; border:1px solid var(--border-color); border-radius:4px; background:var(--bg-primary); color:var(--text-primary);">
+                        <div style="display:flex; gap:1rem; align-items:center; margin-bottom:0.5rem; font-size:0.85em;">
+                            <label style="cursor:pointer;"><input type="checkbox" id="dlrRegenSelectAll" onchange="toggleAllDlrRegen(this.checked)"> Select all (filtered)</label>
+                            <span id="dlrRegenCount" style="color: var(--text-secondary);">0 selected</span>
+                        </div>
+                    </div>
+                    <div id="dlrRegenList" style="overflow-y:auto; padding:0 1.5rem; flex:1; border-top:1px solid var(--border-color);">
+                        ${rows.map(c => `
+                            <label class="dlr-regen-row" data-search="${esc((String(c.circuitId || '') + ' ' + String(c.customer || '')).toLowerCase())}" style="display:flex; align-items:center; gap:0.6rem; padding:0.45rem 0; border-bottom:1px solid var(--border-color); font-size:0.9em; cursor:pointer;">
+                                <input type="checkbox" class="dlr-regen-cb" value="${esc(c.id)}" onchange="updateDlrRegenCount()">
+                                <span style="flex:1;">${esc(c.circuitId || c.id)}${c.customer ? ' <span style="color:var(--text-secondary);">\u00b7 ' + esc(c.customer) + '</span>' : ''}</span>
+                                <span class="badge" style="background:var(--bg-secondary); font-size:0.72em;">${esc(c.status || '-')}</span>
+                            </label>`).join('')}
+                    </div>
+                    <div style="padding:1rem 1.5rem; border-top:1px solid var(--border-color); display:flex; justify-content:space-between; gap:1rem;">
+                        <button class="btn-secondary" onclick="document.getElementById('dlrRegenPickerModal').remove()">Cancel</button>
+                        <button class="btn-primary" id="dlrRegenRunBtn" onclick="runSelectedDlrRegen(this)">Regenerate selected</button>
+                    </div>
+                </div>`;
+            document.body.appendChild(modal);
+        }
+        function filterDlrRegenList() {
+            const q = (document.getElementById('dlrRegenSearch').value || '').toLowerCase().trim();
+            document.querySelectorAll('#dlrRegenList .dlr-regen-row').forEach(row => {
+                row.style.display = (!q || (row.dataset.search || '').includes(q)) ? 'flex' : 'none';
+            });
+            const sa = document.getElementById('dlrRegenSelectAll'); if (sa) sa.checked = false;
+        }
+        function toggleAllDlrRegen(checked) {
+            document.querySelectorAll('#dlrRegenList .dlr-regen-row').forEach(row => {
+                if (row.style.display === 'none') return;   // only the currently-filtered rows
+                const cb = row.querySelector('.dlr-regen-cb'); if (cb) cb.checked = checked;
+            });
+            updateDlrRegenCount();
+        }
+        function updateDlrRegenCount() {
+            const n = document.querySelectorAll('#dlrRegenList .dlr-regen-cb:checked').length;
+            const el = document.getElementById('dlrRegenCount'); if (el) el.textContent = n + ' selected';
+        }
+        async function runSelectedDlrRegen(btn) {
+            const ids = Array.from(document.querySelectorAll('#dlrRegenList .dlr-regen-cb:checked')).map(cb => cb.value);
+            if (!ids.length) { alert('Select at least one circuit first.'); return; }
+            if (!confirm('Regenerate the SF DLR for ' + ids.length + ' selected circuit(s)?\n\nOnly the GeneratedSFDLR field changes, and only where the text actually differs.')) return;
+            const orig = btn.textContent; btn.disabled = true; btn.textContent = 'Regenerating\u2026';
+            try {
+                const [circuits, allSites, allNnis, allEquipment, allFdps] = await Promise.all([
+                    store.getCircuits(), store.getSites(), store.getNnis(), store.getEquipment(), store.getFdps()
+                ]);
+                const byId = new Map(circuits.map(c => [c.id, c]));
+                let updated = 0, unchanged = 0, empty = 0, failed = 0;
+                for (let i = 0; i < ids.length; i++) {
+                    if (i > 0 && i % 50 === 0) { try { await ensureValidToken(); } catch (e) {} }
+                    const c = byId.get(ids[i]);
+                    if (!c) { failed++; continue; }
+                    try {
+                        const circuitForDlr = { ...c, circuitVLANs: safeParseJson(c.circuitVlans, []) };
+                        const dlrText = await generateDlrText(circuitForDlr, allSites, allNnis, allEquipment, allFdps);
+                        if (!dlrText) empty++;
+                        else if (dlrText === c.generatedSFDLR) unchanged++;
+                        else if (c._spItemId) { await graphClient.updateListItem('circuits', c._spItemId, { GeneratedSFDLR: dlrText }); updated++; }
+                        else failed++;
+                        btn.textContent = 'Regenerating\u2026 ' + (i + 1) + '/' + ids.length;
+                    } catch (e) { failed++; console.error('DLR regen', ids[i], e); }
+                }
+                store.clearCache('circuits');
+                alert('Done.\n\n\u2713 ' + updated + ' updated\n\u00b7 ' + unchanged + ' already current\n\u00b7 ' + empty + ' no VLAN/path data' + (failed ? '\n\u2717 ' + failed + ' failed' : ''));
+                document.getElementById('dlrRegenPickerModal')?.remove();
+                render('circuits');
+            } catch (e) {
+                alert('Error regenerating DLRs: ' + friendlyError(e));
+            } finally { btn.disabled = false; btn.textContent = orig; }
         }
         // ==================================================================
 
