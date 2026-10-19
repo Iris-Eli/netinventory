@@ -4699,6 +4699,13 @@
                     <!-- Interactive Map -->
                     <div style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 0.75rem; padding: 1.5rem; margin-bottom: 2rem;">
                         <h2 style="margin: 0 0 1rem 0;">Interactive Map <span style="font-size: 0.9rem; font-weight: normal; color: var(--text-secondary);">(Powered by OpenStreetMap - 100% Free)</span></h2>
+                        <div style="display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin-bottom: 1rem;">
+                            <label style="font-size: 0.9rem; color: var(--text-secondary); font-weight: 600;">🔍 Find address:</label>
+                            <input type="text" id="mapSearchInput" placeholder="e.g. 123 Main St, Nashville, TN" onkeydown="if(event.key==='Enter')searchMapAddress()" style="flex: 1; min-width: 300px; max-width: 460px; padding: 0.55rem; border: 1px solid var(--border-color); border-radius: 0.5rem; background: var(--bg-tertiary); color: var(--text-primary);">
+                            <button class="btn-primary" onclick="searchMapAddress()" style="padding: 0.5rem 1.1rem;">Search</button>
+                            <button class="btn-secondary" onclick="clearMapSearch()" style="padding: 0.5rem 0.8rem;" title="Clear search">✕</button>
+                            <span id="mapSearchStatus" style="font-size: 0.82rem; color: var(--text-tertiary);"></span>
+                        </div>
                         <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 1rem;">
                             <label style="font-size: 0.9rem; color: var(--text-secondary); font-weight: 600;">🔗 Trace circuit path:</label>
                             <select id="circuitTraceSelect" onchange="drawCircuitPath(this.value)" style="min-width: 320px; padding: 0.55rem; border: 1px solid var(--border-color); border-radius: 0.5rem; background: var(--bg-tertiary); color: var(--text-primary);">${circuitTraceOptions}</select>
@@ -4867,7 +4874,7 @@
                     // Context for the circuit path-trace control (drawCircuitPath)
                     const sitesById = {};
                     sites.forEach(s => { sitesById[s.id] = s; });
-                    window._siteMapCtx = { map, sitesById, circuits: mapCircuits, pathLayer: null };
+                    window._siteMapCtx = { map, sitesById, circuits: mapCircuits, pathLayer: null, searchLayer: null };
 
                     // Dark-fiber route overlay (built now, shown only when the toggle is on)
                     const dfLayer = L.layerGroup();
@@ -4935,6 +4942,51 @@
             if (!cb || !ctx || !window._dfRouteLayer) return;
             if (cb.checked) window._dfRouteLayer.addTo(ctx.map);
             else ctx.map.removeLayer(window._dfRouteLayer);
+        }
+
+        // Site Map address search: geocode the typed address (cached Nominatim), drop a pin +
+        // radius ring, zoom to it, and report how many site dots fall within the radius.
+        const MAP_SEARCH_RADIUS_MI = 10;
+        async function searchMapAddress() {
+            const ctx = window._siteMapCtx;
+            const input = document.getElementById('mapSearchInput');
+            const status = document.getElementById('mapSearchStatus');
+            if (!ctx || typeof L === 'undefined' || !input) return;
+            const q = input.value.trim();
+            if (!q) { if (status) status.textContent = ''; return; }
+            if (status) status.textContent = '🔄 Searching…';
+            let loc = null;
+            try { loc = await geocodeCity(q); } catch (e) { loc = null; }
+            if (!loc) { if (status) status.innerHTML = '<span style="color:var(--warning);">❌ Address not found — try adding city/state.</span>'; return; }
+            if (ctx.searchLayer) { ctx.map.removeLayer(ctx.searchLayer); ctx.searchLayer = null; }
+            const group = L.layerGroup();
+            const pin = L.divIcon({ className: 'map-search-pin', html: '<div style="background:#ef4444; width:22px; height:22px; border-radius:50% 50% 50% 0; transform:rotate(-45deg); border:3px solid white; box-shadow:0 2px 5px rgba(0,0,0,0.4);"></div>', iconSize: [22, 22], iconAnchor: [11, 22], popupAnchor: [0, -20] });
+            L.marker([loc.lat, loc.lon], { icon: pin }).bindPopup('<strong>📍 ' + _dvEsc(loc.label || q) + '</strong>').addTo(group);
+            L.circle([loc.lat, loc.lon], { radius: MAP_SEARCH_RADIUS_MI * 1609.34, color: '#ef4444', weight: 1, fillColor: '#ef4444', fillOpacity: 0.07 }).addTo(group);
+            group.addTo(ctx.map);
+            ctx.searchLayer = group;
+            // Sites within the radius, nearest first
+            const near = Object.values(ctx.sitesById)
+                .filter(s => s.latitude && s.longitude)
+                .map(s => ({ s, d: haversineMiles(loc.lat, loc.lon, parseFloat(s.latitude), parseFloat(s.longitude)) }))
+                .filter(x => isFinite(x.d) && x.d <= MAP_SEARCH_RADIUS_MI)
+                .sort((a, b) => a.d - b.d);
+            const pts = [[loc.lat, loc.lon], ...near.map(x => [parseFloat(x.s.latitude), parseFloat(x.s.longitude)])];
+            if (pts.length > 1) ctx.map.fitBounds(pts, { padding: [60, 60], maxZoom: 13 });
+            else ctx.map.setView([loc.lat, loc.lon], 11);
+            const label = loc.label ? (loc.label.length > 48 ? loc.label.slice(0, 48) + '…' : loc.label) : q;
+            if (status) status.innerHTML = '📍 ' + _dvEsc(label) + ' — <strong>' + near.length + '</strong> site' + (near.length === 1 ? '' : 's') + ' within ' + MAP_SEARCH_RADIUS_MI + ' mi'
+                + (near.length ? ' · nearest <strong>' + _dvEsc(near[0].s.name || near[0].s.id) + '</strong> (' + near[0].d.toFixed(1) + ' mi)' : '');
+            input.blur();
+        }
+
+        function clearMapSearch() {
+            const ctx = window._siteMapCtx;
+            const input = document.getElementById('mapSearchInput');
+            const status = document.getElementById('mapSearchStatus');
+            if (input) input.value = '';
+            if (status) status.textContent = '';
+            if (ctx && ctx.searchLayer) { ctx.map.removeLayer(ctx.searchLayer); ctx.searchLayer = null; }
         }
 
         async function renderRacksPage() {
