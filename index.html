@@ -795,6 +795,9 @@
             <div class="nav-item" onclick="navigateTo('nnis')">
                 <span>🔗</span> NNIs
             </div>
+            <div class="nav-item" onclick="navigateTo('mopBuilder')">
+                <span>📋</span> MoP Builder
+            </div>
             <div class="nav-item" onclick="navigateTo('search')">
                 <span>🔍</span> Search
             </div>
@@ -13616,6 +13619,222 @@
 
 
 
+        // ========================= MoP Builder =========================
+        // Build a Method of Procedure from a circuit. Per-location Cable Install / Equipment
+        // Install / BOM toggles + editable lists; Preview renders a standalone HTML doc styled
+        // identically to the 3924/3922 MoP template (minus the config block). Pure helpers
+        // buildMopModel + renderMopHtml are node-tested (scratchpad/mop.test.mjs).
+        const MOP_LOGO = 'https://iristransport.sharepoint.com/sites/EngineeringPriorities/MoP%20Templates/IRIS_logo.svg';
+
+        function buildMopModel(circuit, ctx) {
+            const { sites, equipment, fdps, nnis } = ctx;
+            const by = (arr, id) => (arr || []).find(x => x.id === id);
+            const locations = [];
+            CIRCUIT_PATH_LETTERS.forEach(l => {
+                const siteId = circuit[l + 'LocationSiteId'];
+                const nniId = circuit[l + 'Nni'];
+                const n = nniId ? by(nnis, nniId) : null;
+                let equipId = circuit[l + 'Equipment'], equipPort = circuit[l + 'EquipmentPort'] || '';
+                const directFdp = circuit[l + 'Fdp'], equipFdp = circuit[l + 'EquipmentFdp'];
+                let fdpId = directFdp || equipFdp;
+                let fdpPort = directFdp ? circuit[l + 'Port'] : circuit[l + 'EquipmentFdpPorts'];
+                if (n) {
+                    if (!equipId && n.equipmentID) { equipId = n.equipmentID; if (!equipPort) equipPort = n.equipmentPorts || ''; }
+                    if (!fdpId && n.fdpId) { fdpId = n.fdpId; if (!fdpPort) fdpPort = n.fdpPorts || ''; }
+                }
+                if (!siteId && !equipId && !fdpId && !nniId) return;
+                const s = by(sites, siteId), e = equipId ? by(equipment, equipId) : null, f = fdpId ? by(fdps, fdpId) : null;
+                const eqName = (e && e.name) || equipId;
+                const equip = [], cable = [], bom = [];
+                if (equipId) {
+                    equip.push({ action: 'INSTALL', qty: '1', desc: ((e && e.model) ? e.model + ' — ' : '') + eqName });
+                    bom.push({ qty: '1', part: (e && e.model) || '', desc: eqName, postk: 'Stock', manuf: (e && e.manufacturer) || '' });
+                }
+                if (equipId && fdpId) cable.push({ cable: 'FIBER', from: eqName + (equipPort ? ' Port ' + equipPort : ''), to: ((f && f.name) || fdpId) + (fdpPort ? ' Port ' + fdpPort : ''), term: 'LC/LC' });
+                if (n) cable.push({ cable: 'FIBER', from: eqName + (equipPort ? ' Port ' + equipPort : ''), to: (n.name || nniId) + ' (provider handoff)', term: 'LC/LC' });
+                locations.push({
+                    letter: l.toUpperCase(),
+                    siteName: (s && s.name) || siteId || '?',
+                    clli: (s && s.irisClli) || '',
+                    address: (s && [s.address, s.city, s.state].filter(Boolean).join(', ')) || '',
+                    equipmentInstall: { enabled: equip.length > 0, items: equip },
+                    cableInstall: { enabled: cable.length > 0, items: cable },
+                    bom: { enabled: bom.length > 0, items: bom }
+                });
+            });
+            return {
+                circuitId: circuit.circuitId || circuit.id, customer: circuit.customer || '', bandwidth: circuit.bandwidth || '',
+                soNumber: circuit.soNumber || '', salesforceId: circuit.salesforceId || '',
+                mgmtIp: circuit.cpeMgmtIp || '', mgmtVlan: circuit.cpeMgmtVlan || '', mgmtGateway: circuit.cpeMgmtGateway || '',
+                engineer: '', date: '', notes: '', locations
+            };
+        }
+
+        function renderMopHtml(model, topologyHtml) {
+            const esc = _dvEsc;
+            const row = cells => '<tr>' + cells.map(c => '<td>' + esc(c) + '</td>').join('') + '</tr>';
+            const hdrRow = cells => '<tr>' + cells.map(c => '<td class="hdr">' + esc(c) + '</td>').join('') + '</tr>';
+            const kv = (k, v) => '<tr><td class="lbl">' + esc(k) + '</td><td>' + esc(v) + '</td></tr>';
+            const CATS = [
+                ['bom', 'BILL OF MATERIALS', ['Qty', 'Part #', 'Description', 'PO/Stk', 'Manuf.', 'Location'], (it, loc) => [it.qty, it.part, it.desc, it.postk, it.manuf, loc]],
+                ['equipmentInstall', 'EQUIPMENT INSTALL', ['Item', 'Action', 'Qty', 'Description', 'Location'], (it, loc, i) => [String(i + 1), it.action, it.qty, it.desc, loc]],
+                ['cableInstall', 'CABLE RUNNING LIST', ['Run', 'Cable', 'From', 'To', 'Location', 'Term'], (it, loc, i) => [String(i + 1), it.cable, it.from, it.to, loc, it.term]]
+            ];
+            const locHtml = model.locations.map(loc => {
+                const locName = loc.letter + ' Location';
+                const header = '<h2>' + esc(loc.letter) + ' LOCATION &mdash; ' + esc(loc.siteName) + (loc.clli ? ' (' + esc(loc.clli) + ')' : '') + '</h2>'
+                    + (loc.address ? '<p style="color:#666;margin:0 0 8px 0;font-size:10pt;">' + esc(loc.address) + '</p>' : '');
+                const tables = CATS.filter(([key]) => loc[key].enabled).map(([key, title, headers, cells]) => {
+                    const items = loc[key].items;
+                    return '<h2>' + esc(title) + ' &mdash; ' + esc(locName) + '</h2><table>' + hdrRow(headers)
+                        + (items.length ? items.map((it, i) => row(cells(it, locName, i))).join('') : row(headers.map(() => ''))) + '</table>';
+                }).join('');
+                return header + (tables || '<p style="color:#666;">No tasks selected for this location.</p>');
+            }).join('');
+            return '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>'
+                + 'body{font-family:Arial;font-size:11pt;margin:40px}'
+                + '.mop-header{display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #5B2D8E;padding-bottom:12px;margin-bottom:16px}'
+                + '.mop-header-left h1{font-size:16pt;color:#1F1F1F;margin:0 0 4px 0}.mop-header-left p{font-size:10pt;color:#666;margin:0}.mop-header img{height:52px;width:auto}'
+                + 'h2{font-size:12pt;color:#5B2D8E;border-bottom:2px solid #5B2D8E;margin-top:24px;padding-bottom:4px}'
+                + 'table{width:100%;border-collapse:collapse;margin-bottom:12px}td{border:1px solid #C8BFD8;padding:5px 8px;font-size:10pt;vertical-align:top}'
+                + '.lbl{background:#F4F1F8;font-weight:bold;width:40%}.hdr{background:#5B2D8E;color:#fff;font-weight:bold}'
+                + '</style></head><body>'
+                + '<div class="mop-header"><div class="mop-header-left"><h1>METHOD OF PROCEDURE</h1>'
+                + '<p>CIRCUIT: <strong>' + esc(model.circuitId) + '</strong>' + (model.soNumber ? ' &nbsp;|&nbsp; ORDER: <strong>' + esc(model.soNumber) + '</strong>' : '') + '</p></div>'
+                + '<img src="' + MOP_LOGO + '" alt="IRIS Networks" /></div>'
+                + '<h2>CIRCUIT PROVISIONING</h2><table>'
+                + kv('CIRCUIT ID', model.circuitId) + kv('CUSTOMER', model.customer) + kv('BANDWIDTH', model.bandwidth)
+                + (model.mgmtIp ? kv('MANAGEMENT IP', model.mgmtIp) : '') + (model.mgmtVlan ? kv('MANAGEMENT VLAN', model.mgmtVlan) : '') + (model.mgmtGateway ? kv('MANAGEMENT GATEWAY', model.mgmtGateway) : '')
+                + kv('ENGINEER', model.engineer) + kv('DATE', model.date) + '</table>'
+                + (topologyHtml ? '<h2>TOPOLOGY</h2>' + topologyHtml : '')
+                + locHtml
+                + '<h2>NOTES</h2><table><tr><td>' + (esc(model.notes) || '&nbsp;') + '</td></tr></table>'
+                + '</body></html>';
+        }
+
+        // ---- interactive builder ----
+        const _MOP_CATS = {
+            equipmentInstall: { label: 'Equipment Install', cols: [['Action', 'action'], ['Qty', 'qty'], ['Description', 'desc']] },
+            cableInstall: { label: 'Cable Install', cols: [['Cable', 'cable'], ['From', 'from'], ['To', 'to'], ['Term', 'term']] },
+            bom: { label: 'BOM', cols: [['Qty', 'qty'], ['Part #', 'part'], ['Description', 'desc'], ['PO/Stk', 'postk'], ['Manuf.', 'manuf']] }
+        };
+
+        async function renderMopBuilderPage() {
+            const content = document.getElementById('content');
+            content.innerHTML = '<p style="color:var(--text-secondary); padding:1rem;">Loading circuits…</p>';
+            let circuits;
+            try { circuits = await store.getCircuits(); }
+            catch (e) { content.innerHTML = '<div style="padding:2rem;color:var(--danger);">Could not load circuits: ' + (typeof friendlyError === 'function' ? friendlyError(e) : (e && e.message || e)) + '</div>'; return; }
+            const opts = '<option value="">Select a circuit…</option>' + [...circuits]
+                .sort((a, b) => String(a.circuitId || a.id).localeCompare(String(b.circuitId || b.id)))
+                .map(c => `<option value="${c.id}">${_dvEsc((c.circuitId || c.id) + (c.customer ? ' — ' + c.customer : ''))}</option>`).join('');
+            content.innerHTML = `
+                <div style="max-width: 1100px; margin: 0 auto;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem; flex-wrap:wrap; gap:1rem;">
+                        <h1 style="font-size:2rem; margin:0;">📋 MoP Builder</h1>
+                        <button class="btn-primary" onclick="mopPreview()" title="Render the MoP">👁 Preview</button>
+                    </div>
+                    <p style="color:var(--text-secondary); margin:0 0 1.25rem;">Build a Method of Procedure from a circuit — toggle <strong>Cable Install / Equipment Install / BOM</strong> per location, edit the lists, then Preview (matches the 3924 format, minus config). <em>Save → Salesforce comes next.</em></p>
+                    <div style="margin-bottom:1.5rem;">
+                        <label style="display:block; font-size:0.85rem; color:var(--text-secondary); margin-bottom:0.35rem;">Circuit</label>
+                        <select id="mopCircuitSelect" onchange="mopLoadCircuit(this.value)" style="width:100%; max-width:540px; padding:0.6rem; border:1px solid var(--border-color); border-radius:0.5rem; background:var(--bg-tertiary); color:var(--text-primary);">${opts}</select>
+                    </div>
+                    <div id="mopBuilderBody"><p style="color:var(--text-secondary);">Select a circuit to begin.</p></div>
+                </div>`;
+        }
+
+        async function mopLoadCircuit(id) {
+            const body = document.getElementById('mopBuilderBody');
+            if (!id) { window._mopDraft = null; window._mopCtx = null; if (body) body.innerHTML = '<p style="color:var(--text-secondary);">Select a circuit to begin.</p>'; return; }
+            if (body) body.innerHTML = '<p style="color:var(--text-secondary);">Loading circuit…</p>';
+            let data;
+            try { data = await Promise.all([store.getCircuits(), store.getSites(), store.getEquipment(), store.getFdps(), store.getNnis(), store.getRacks()]); }
+            catch (e) { if (body) body.innerHTML = '<div style="color:var(--danger);">Load failed: ' + (typeof friendlyError === 'function' ? friendlyError(e) : (e && e.message || e)) + '</div>'; return; }
+            const [circuits, sites, equipment, fdps, nnis, racks] = data;
+            const circuit = circuits.find(c => c.id === id);
+            if (!circuit) { if (body) body.innerHTML = '<div style="color:var(--warning);">Circuit not found.</div>'; return; }
+            window._mopCtx = { sites, equipment, fdps, nnis, racks, circuit };
+            window._mopDraft = buildMopModel(circuit, window._mopCtx);
+            mopRenderBody();
+        }
+
+        function _mopCatTable(li, cat) {
+            const d = window._mopDraft, def = _MOP_CATS[cat], items = d.locations[li][cat].items;
+            const th = def.cols.map(c => `<th style="text-align:left; font-size:0.72rem; color:var(--text-secondary); padding:0.2rem 0.4rem;">${c[0]}</th>`).join('') + '<th></th>';
+            const rows = items.map((it, i) => '<tr>' + def.cols.map(c =>
+                `<td style="padding:0.15rem 0.3rem;"><input value="${_dvEsc(it[c[1]])}" onchange="mopCellEdit(${li},'${cat}',${i},'${c[1]}',this.value)" style="width:100%; padding:0.35rem; border:1px solid var(--border-color); border-radius:0.3rem; background:var(--bg-tertiary); color:var(--text-primary); font-size:0.82rem;"></td>`
+            ).join('') + `<td style="padding:0.15rem 0.3rem;"><button onclick="mopRemoveRow(${li},'${cat}',${i})" class="btn-secondary" style="padding:0.3rem 0.5rem; font-size:0.75rem;" title="Remove">✕</button></td></tr>`).join('');
+            return `<div style="margin:0.5rem 0 0.75rem;">
+                <div style="font-size:0.8rem; font-weight:600; color:var(--accent-primary); margin-bottom:0.25rem;">${def.label}</div>
+                <table style="width:100%; border-collapse:collapse;"><thead><tr>${th}</tr></thead><tbody>${rows}</tbody></table>
+                <button onclick="mopAddRow(${li},'${cat}')" class="btn-secondary" style="padding:0.3rem 0.7rem; font-size:0.78rem; margin-top:0.35rem;">+ Add row</button>
+            </div>`;
+        }
+
+        function mopRenderBody() {
+            const d = window._mopDraft, body = document.getElementById('mopBuilderBody');
+            if (!d || !body) return;
+            const fld = (label, field, val) => `<div style="flex:1; min-width:180px;"><label style="display:block; font-size:0.78rem; color:var(--text-secondary); margin-bottom:0.25rem;">${label}</label><input value="${_dvEsc(val)}" onchange="mopSetField('${field}', this.value)" style="width:100%; padding:0.5rem; border:1px solid var(--border-color); border-radius:0.4rem; background:var(--bg-tertiary); color:var(--text-primary);"></div>`;
+            let h = `<div style="background:var(--bg-secondary); border:1px solid var(--border-color); border-radius:0.6rem; padding:1rem 1.25rem; margin-bottom:1.25rem; display:flex; gap:1rem; flex-wrap:wrap;">
+                ${fld('Engineer', 'engineer', d.engineer)}${fld('Date', 'date', d.date)}${fld('Notes', 'notes', d.notes)}</div>`;
+            d.locations.forEach((loc, li) => {
+                const allOn = loc.equipmentInstall.enabled && loc.cableInstall.enabled && loc.bom.enabled;
+                const chk = (cat, label) => `<label style="cursor:pointer; margin-right:1.25rem; font-size:0.9rem;"><input type="checkbox" ${loc[cat].enabled ? 'checked' : ''} onchange="mopToggleCat(${li},'${cat}',this.checked)" style="vertical-align:middle;"> ${label}</label>`;
+                h += `<div style="background:var(--bg-secondary); border:1px solid var(--border-color); border-radius:0.6rem; padding:1rem 1.25rem; margin-bottom:1rem;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem; margin-bottom:0.6rem;">
+                        <strong style="font-size:1.05rem;">${_dvEsc(loc.letter)} — ${_dvEsc(loc.siteName)}${loc.clli ? ' <span style="color:var(--text-tertiary); font-weight:400; font-family:monospace; font-size:0.85rem;">' + _dvEsc(loc.clli) + '</span>' : ''}</strong>
+                        <label style="cursor:pointer; font-size:0.82rem; color:var(--text-secondary);"><input type="checkbox" ${allOn ? 'checked' : ''} onchange="mopToggleAll(${li}, this.checked)" style="vertical-align:middle;"> Select all</label>
+                    </div>
+                    <div style="padding-bottom:0.4rem; border-bottom:1px solid var(--border-color); margin-bottom:0.5rem;">${chk('cableInstall', 'Cable Install')}${chk('equipmentInstall', 'Equipment Install')}${chk('bom', 'BOM')}</div>
+                    ${loc.cableInstall.enabled ? _mopCatTable(li, 'cableInstall') : ''}
+                    ${loc.equipmentInstall.enabled ? _mopCatTable(li, 'equipmentInstall') : ''}
+                    ${loc.bom.enabled ? _mopCatTable(li, 'bom') : ''}
+                </div>`;
+            });
+            body.innerHTML = h;
+        }
+
+        function mopSetField(field, val) { if (window._mopDraft) window._mopDraft[field] = val; }
+        function mopCellEdit(li, cat, i, key, val) { try { window._mopDraft.locations[li][cat].items[i][key] = val; } catch (e) {} }
+        function mopToggleCat(li, cat, checked) { window._mopDraft.locations[li][cat].enabled = checked; mopRenderBody(); }
+        function mopToggleAll(li, checked) { ['cableInstall', 'equipmentInstall', 'bom'].forEach(c => window._mopDraft.locations[li][c].enabled = checked); mopRenderBody(); }
+        function mopAddRow(li, cat) {
+            const blank = {}; _MOP_CATS[cat].cols.forEach(c => blank[c[1]] = '');
+            if (cat === 'equipmentInstall') blank.action = 'INSTALL';
+            if (cat === 'bom') { blank.qty = '1'; blank.postk = 'Stock'; }
+            if (cat === 'cableInstall') blank.cable = 'FIBER';
+            window._mopDraft.locations[li][cat].items.push(blank); mopRenderBody();
+        }
+        function mopRemoveRow(li, cat, i) { window._mopDraft.locations[li][cat].items.splice(i, 1); mopRenderBody(); }
+
+        function mopPreview() {
+            const d = window._mopDraft, c = window._mopCtx;
+            if (!d) { alert('Select a circuit first.'); return; }
+            let topo = '';
+            try { topo = renderCircuitDiagramSVG(buildCircuitDiagramModel(c.circuit, c)); } catch (e) { topo = ''; }
+            const html = renderMopHtml(d, topo);
+            window._mopLastHtml = html;
+            const existing = document.getElementById('mopPreviewOverlay'); if (existing) existing.remove();
+            const overlay = document.createElement('div');
+            overlay.id = 'mopPreviewOverlay';
+            overlay.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.65); z-index:10000; display:flex; flex-direction:column; padding:2rem 1rem;';
+            overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
+            overlay.innerHTML = `
+                <div style="background:#fff; border-radius:8px; flex:1; display:flex; flex-direction:column; overflow:hidden; max-width:1000px; width:100%; margin:0 auto;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; padding:0.65rem 1rem; border-bottom:1px solid #ddd; background:#f7f7f8;">
+                        <strong style="color:#333;">MoP Preview — ${_dvEsc(d.circuitId)}</strong>
+                        <div style="display:flex; gap:0.5rem;">
+                            <button class="btn-secondary" onclick="(document.getElementById('mopPreviewFrame').contentWindow||{}).print&&document.getElementById('mopPreviewFrame').contentWindow.print()" style="padding:0.4rem 0.9rem;">🖨 Print</button>
+                            <button class="btn-secondary" onclick="document.getElementById('mopPreviewOverlay').remove()" style="padding:0.4rem 0.9rem;">✕ Close</button>
+                        </div>
+                    </div>
+                    <iframe id="mopPreviewFrame" style="flex:1; border:0; width:100%; background:#fff;"></iframe>
+                </div>`;
+            document.body.appendChild(overlay);
+            const fr = document.getElementById('mopPreviewFrame');
+            if (fr) fr.srcdoc = html;
+        }
+
         async function renderGlobalSearchPage() {
             const content = document.getElementById('content');
             content.innerHTML = `
@@ -17250,7 +17469,7 @@ ${entityActionButtons('nni', `${n.id}`, true)}
         //   .../#/circuit/{id}          -> circuit details   .../#/circuit/{id}/dlr -> DLR viewer
         //   .../#/equipment/{id}  .../#/fdp/{id}  .../#/nni/{id}  .../#/rack/{id}  .../#/darkfiber/{id}
         // Hashes NOT starting with '#/' (e.g. MSAL auth #code=...) are ignored.
-        const VALID_ROUTE_PAGES = ['dashboard','health','activity','duplicates','sites','siteMap','racks','equipment','templates','darkfiber','fdps','availablePorts','circuits','nnis','search'];
+        const VALID_ROUTE_PAGES = ['dashboard','health','activity','duplicates','sites','siteMap','racks','equipment','templates','darkfiber','fdps','availablePorts','circuits','nnis','mopBuilder','search'];
         const ENTITY_ROUTES = { site: 'sites', circuit: 'circuits', equipment: 'equipment', fdp: 'fdps', nni: 'nnis', rack: 'racks', darkfiber: 'darkfiber' };
         let _routingSuppress = false;
         let _routeApplying = false;
@@ -17474,6 +17693,8 @@ ${entityActionButtons('nni', `${n.id}`, true)}
                 await renderCircuitsPage();
             } else if (page === 'nnis') {
                 await renderNnisPage();
+            } else if (page === 'mopBuilder') {
+                await renderMopBuilderPage();
             } else if (page === 'search') {
                 await renderGlobalSearchPage();
             } else if (page === 'availablePorts') {
