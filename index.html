@@ -13657,6 +13657,7 @@
                     siteName: (s && s.name) || siteId || '?',
                     clli: (s && s.irisClli) || '',
                     address: (s && [s.address, s.city, s.state].filter(Boolean).join(', ')) || '',
+                    siteContact: '',
                     equipmentInstall: { enabled: equip.length > 0, items: equip },
                     cableInstall: { enabled: cable.length > 0, items: cable },
                     bom: { enabled: bom.length > 0, items: bom }
@@ -13665,8 +13666,11 @@
             return {
                 circuitId: circuit.circuitId || circuit.id, customer: circuit.customer || '', bandwidth: circuit.bandwidth || '',
                 soNumber: circuit.soNumber || '', salesforceId: circuit.salesforceId || '',
-                mgmtIp: circuit.cpeMgmtIp || '', mgmtVlan: circuit.cpeMgmtVlan || '', mgmtGateway: circuit.cpeMgmtGateway || '',
-                engineer: '', date: '', notes: '', locations
+                dates: { engRelease: '', equipDue: '', opsDue: '', custDue: '' },
+                // NOC + director lines are constants (editable); everything else is custom per MoP.
+                contacts: { overseeingEng: '', reviewer1: '', reviewer2: '', noc: '888-618-4638', engDirector: 'Eli Champion 931-273-1917', opsDirector: 'Drew Cannon 731-414-1621', pm: '' },
+                provisioning: { trafficVlan: '', mgmtVlan: circuit.cpeMgmtVlan || '', mgmtIp: circuit.cpeMgmtIp || '', custIpRange: '', subnet: circuit.cpeMgmtSubnet || '', gateway: circuit.cpeMgmtGateway || '' },
+                notes: '', locations
             };
         }
 
@@ -13675,22 +13679,19 @@
             const row = cells => '<tr>' + cells.map(c => '<td>' + esc(c) + '</td>').join('') + '</tr>';
             const hdrRow = cells => '<tr>' + cells.map(c => '<td class="hdr">' + esc(c) + '</td>').join('') + '</tr>';
             const kv = (k, v) => '<tr><td class="lbl">' + esc(k) + '</td><td>' + esc(v) + '</td></tr>';
-            const CATS = [
-                ['bom', 'BILL OF MATERIALS', ['Qty', 'Part #', 'Description', 'PO/Stk', 'Manuf.', 'Location'], (it, loc) => [it.qty, it.part, it.desc, it.postk, it.manuf, loc]],
-                ['equipmentInstall', 'EQUIPMENT INSTALL', ['Item', 'Action', 'Qty', 'Description', 'Location'], (it, loc, i) => [String(i + 1), it.action, it.qty, it.desc, loc]],
-                ['cableInstall', 'CABLE RUNNING LIST', ['Run', 'Cable', 'From', 'To', 'Location', 'Term'], (it, loc, i) => [String(i + 1), it.cable, it.from, it.to, loc, it.term]]
-            ];
-            const locHtml = model.locations.map(loc => {
-                const locName = loc.letter + ' Location';
-                const header = '<h2>' + esc(loc.letter) + ' LOCATION &mdash; ' + esc(loc.siteName) + (loc.clli ? ' (' + esc(loc.clli) + ')' : '') + '</h2>'
-                    + (loc.address ? '<p style="color:#666;margin:0 0 8px 0;font-size:10pt;">' + esc(loc.address) + '</p>' : '');
-                const tables = CATS.filter(([key]) => loc[key].enabled).map(([key, title, headers, cells]) => {
-                    const items = loc[key].items;
-                    return '<h2>' + esc(title) + ' &mdash; ' + esc(locName) + '</h2><table>' + hdrRow(headers)
-                        + (items.length ? items.map((it, i) => row(cells(it, locName, i))).join('') : row(headers.map(() => ''))) + '</table>';
-                }).join('');
-                return header + (tables || '<p style="color:#666;">No tasks selected for this location.</p>');
-            }).join('');
+            const d = model.dates || {}, co = model.contacts || {}, pr = model.provisioning || {};
+            const locLabel = loc => loc.clli || (loc.letter + ' Location');
+            // Combined category table across all locations, keyed by CLLI in the Location column.
+            const combined = (key, title, headers, cellFn) => {
+                const rows = [];
+                model.locations.forEach(loc => { if (!loc[key].enabled) return; const ll = locLabel(loc); loc[key].items.forEach(it => rows.push(cellFn(it, ll, rows.length))); });
+                if (!rows.length) return '';
+                return '<h2>' + esc(title) + '</h2><table>' + hdrRow(headers) + rows.map(r => row(r)).join('') + '</table>';
+            };
+            // CONTACTS: IRIS roles + per-location address/site-contact
+            const contactRows = kv('OVERSEEING ENGINEER', co.overseeingEng) + kv('REVIEWING ENGINEER #1', co.reviewer1) + kv('REVIEWING ENGINEER #2', co.reviewer2)
+                + kv('NOC', co.noc) + kv('ENGINEERING DIRECTOR', co.engDirector) + kv('OPERATIONS DIRECTOR', co.opsDirector) + kv('PROJECT MANAGER', co.pm)
+                + model.locations.map(loc => kv(loc.letter + ' LOCATION INFORMATION', loc.address) + kv('SITE CONTACT', loc.siteContact)).join('');
             return '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>'
                 + 'body{font-family:Arial;font-size:11pt;margin:40px}'
                 + '.mop-header{display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #5B2D8E;padding-bottom:12px;margin-bottom:16px}'
@@ -13702,13 +13703,17 @@
                 + '<div class="mop-header"><div class="mop-header-left"><h1>METHOD OF PROCEDURE</h1>'
                 + '<p>CIRCUIT: <strong>' + esc(model.circuitId) + '</strong>' + (model.soNumber ? ' &nbsp;|&nbsp; ORDER: <strong>' + esc(model.soNumber) + '</strong>' : '') + '</p></div>'
                 + '<img src="' + MOP_LOGO + '" alt="IRIS Networks" /></div>'
+                + '<h2>DATES</h2><table>' + kv('ENGINEERING RELEASE', d.engRelease) + kv('EQUIPMENT DUE DATE', d.equipDue) + kv('OPERATIONS DUE DATE', d.opsDue) + kv('CUSTOMER DUE DATE', d.custDue) + '</table>'
+                + '<h2>CONTACTS</h2><table>' + contactRows + '</table>'
                 + '<h2>CIRCUIT PROVISIONING</h2><table>'
                 + kv('CIRCUIT ID', model.circuitId) + kv('CUSTOMER', model.customer) + kv('BANDWIDTH', model.bandwidth)
-                + (model.mgmtIp ? kv('MANAGEMENT IP', model.mgmtIp) : '') + (model.mgmtVlan ? kv('MANAGEMENT VLAN', model.mgmtVlan) : '') + (model.mgmtGateway ? kv('MANAGEMENT GATEWAY', model.mgmtGateway) : '')
-                + kv('ENGINEER', model.engineer) + kv('DATE', model.date) + '</table>'
+                + kv('TRAFFIC VLAN', pr.trafficVlan) + kv('MANAGEMENT VLAN', pr.mgmtVlan) + kv('MANAGEMENT IP', pr.mgmtIp)
+                + kv('CUSTOMER IP RANGE', pr.custIpRange) + kv('SUBNET', pr.subnet) + kv('GATEWAY', pr.gateway) + '</table>'
+                + '<h2>NOTES</h2><table><tr><td>' + (model.notes ? esc(model.notes).replace(/\n/g, '<br>') : '&nbsp;') + '</td></tr></table>'
+                + combined('bom', 'BILL OF MATERIALS', ['Qty', 'Part #', 'Description', 'PO/Stk', 'Manuf.', 'Location'], (it, ll) => [it.qty, it.part, it.desc, it.postk, it.manuf, ll])
+                + combined('equipmentInstall', 'EQUIPMENT INSTALL', ['Item', 'Action', 'Qty', 'Description', 'Location'], (it, ll, n) => [String(n + 1), it.action, it.qty, it.desc, ll])
+                + combined('cableInstall', 'CABLE RUNNING LIST', ['Run', 'Cable', 'From', 'To', 'Location', 'Term'], (it, ll, n) => [String(n + 1), it.cable, it.from, it.to, ll, it.term])
                 + (topologyHtml ? '<h2>TOPOLOGY</h2>' + topologyHtml : '')
-                + locHtml
-                + '<h2>NOTES</h2><table><tr><td>' + (esc(model.notes) || '&nbsp;') + '</td></tr></table>'
                 + '</body></html>';
         }
 
@@ -13725,9 +13730,11 @@
             let circuits;
             try { circuits = await store.getCircuits(); }
             catch (e) { content.innerHTML = '<div style="padding:2rem;color:var(--danger);">Could not load circuits: ' + (typeof friendlyError === 'function' ? friendlyError(e) : (e && e.message || e)) + '</div>'; return; }
-            const opts = '<option value="">Select a circuit…</option>' + [...circuits]
-                .sort((a, b) => String(a.circuitId || a.id).localeCompare(String(b.circuitId || b.id)))
-                .map(c => `<option value="${c.id}">${_dvEsc((c.circuitId || c.id) + (c.customer ? ' — ' + c.customer : ''))}</option>`).join('');
+            window._mopCircuits = [...circuits].sort((a, b) => String(a.circuitId || a.id).localeCompare(String(b.circuitId || b.id)));
+            const _mopInitCap = 300;
+            const opts = '<option value="">Select a circuit… (' + window._mopCircuits.length + ' total)</option>'
+                + window._mopCircuits.slice(0, _mopInitCap).map(_mopOption).join('')
+                + (window._mopCircuits.length > _mopInitCap ? '<option disabled>…' + (window._mopCircuits.length - _mopInitCap) + ' more — use search above</option>' : '');
             content.innerHTML = `
                 <div style="max-width: 1100px; margin: 0 auto;">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem; flex-wrap:wrap; gap:1rem;">
@@ -13737,10 +13744,28 @@
                     <p style="color:var(--text-secondary); margin:0 0 1.25rem;">Build a Method of Procedure from a circuit — toggle <strong>Cable Install / Equipment Install / BOM</strong> per location, edit the lists, then Preview (matches the 3924 format, minus config). <em>Save → Salesforce comes next.</em></p>
                     <div style="margin-bottom:1.5rem;">
                         <label style="display:block; font-size:0.85rem; color:var(--text-secondary); margin-bottom:0.35rem;">Circuit</label>
-                        <select id="mopCircuitSelect" onchange="mopLoadCircuit(this.value)" style="width:100%; max-width:540px; padding:0.6rem; border:1px solid var(--border-color); border-radius:0.5rem; background:var(--bg-tertiary); color:var(--text-primary);">${opts}</select>
+                        <div style="display:flex; gap:0.6rem; flex-wrap:wrap; align-items:center;">
+                            <input type="text" id="mopCircuitSearch" placeholder="🔍 Search by Circuit ID or customer…" oninput="mopFilterCircuits()" style="flex:1; min-width:260px; max-width:360px; padding:0.6rem; border:1px solid var(--border-color); border-radius:0.5rem; background:var(--bg-tertiary); color:var(--text-primary);">
+                            <select id="mopCircuitSelect" onchange="mopLoadCircuit(this.value)" style="flex:1; min-width:300px; max-width:540px; padding:0.6rem; border:1px solid var(--border-color); border-radius:0.5rem; background:var(--bg-tertiary); color:var(--text-primary);">${opts}</select>
+                        </div>
                     </div>
                     <div id="mopBuilderBody"><p style="color:var(--text-secondary);">Select a circuit to begin.</p></div>
                 </div>`;
+        }
+
+        function _mopOption(c) { return `<option value="${c.id}">${_dvEsc((c.circuitId || c.id) + (c.customer ? ' — ' + c.customer : ''))}</option>`; }
+
+        // Filter the circuit dropdown from the search box (over Circuit ID + customer).
+        function mopFilterCircuits() {
+            const sel = document.getElementById('mopCircuitSelect'), se = document.getElementById('mopCircuitSearch');
+            if (!sel || !se) return;
+            const term = se.value.trim().toLowerCase(), list = window._mopCircuits || [], cur = sel.value, CAP = 300;
+            const matches = term ? list.filter(c => ((c.circuitId || c.id) + ' ' + (c.customer || '')).toLowerCase().includes(term)) : list;
+            sel.innerHTML = '<option value="">' + (term ? matches.length + ' match' + (matches.length === 1 ? '' : 'es') : 'Select a circuit… (' + list.length + ' total)') + '</option>'
+                + matches.slice(0, CAP).map(_mopOption).join('')
+                + (matches.length > CAP ? '<option disabled>…' + (matches.length - CAP) + ' more — refine search</option>' : '');
+            if (term && matches.length === 1) { sel.value = matches[0].id; mopLoadCircuit(matches[0].id); }
+            else if (cur && matches.some(c => c.id === cur)) sel.value = cur;
         }
 
         async function mopLoadCircuit(id) {
@@ -13774,9 +13799,14 @@
         function mopRenderBody() {
             const d = window._mopDraft, body = document.getElementById('mopBuilderBody');
             if (!d || !body) return;
-            const fld = (label, field, val) => `<div style="flex:1; min-width:180px;"><label style="display:block; font-size:0.78rem; color:var(--text-secondary); margin-bottom:0.25rem;">${label}</label><input value="${_dvEsc(val)}" onchange="mopSetField('${field}', this.value)" style="width:100%; padding:0.5rem; border:1px solid var(--border-color); border-radius:0.4rem; background:var(--bg-tertiary); color:var(--text-primary);"></div>`;
-            let h = `<div style="background:var(--bg-secondary); border:1px solid var(--border-color); border-radius:0.6rem; padding:1rem 1.25rem; margin-bottom:1.25rem; display:flex; gap:1rem; flex-wrap:wrap;">
-                ${fld('Engineer', 'engineer', d.engineer)}${fld('Date', 'date', d.date)}${fld('Notes', 'notes', d.notes)}</div>`;
+            const inp = (label, path, val, wide) => `<div style="flex:${wide ? '2' : '1'}; min-width:${wide ? '240' : '140'}px;"><label style="display:block; font-size:0.72rem; color:var(--text-secondary); margin-bottom:0.2rem;">${label}</label><input value="${_dvEsc(val)}" onchange="mopSetField('${path}', this.value)" style="width:100%; padding:0.45rem; border:1px solid var(--border-color); border-radius:0.4rem; background:var(--bg-tertiary); color:var(--text-primary); font-size:0.85rem;"></div>`;
+            const group = (title, fields) => `<div style="margin-bottom:0.9rem;"><div style="font-size:0.82rem; font-weight:700; color:var(--accent-primary); margin-bottom:0.35rem;">${title}</div><div style="display:flex; gap:0.7rem; flex-wrap:wrap;">${fields}</div></div>`;
+            let h = `<div style="background:var(--bg-secondary); border:1px solid var(--border-color); border-radius:0.6rem; padding:1rem 1.25rem; margin-bottom:1.25rem;">`
+                + group('Dates', inp('Engineering Release', 'dates.engRelease', d.dates.engRelease) + inp('Equipment Due', 'dates.equipDue', d.dates.equipDue) + inp('Operations Due', 'dates.opsDue', d.dates.opsDue) + inp('Customer Due', 'dates.custDue', d.dates.custDue))
+                + group('Contacts', inp('Overseeing Engineer', 'contacts.overseeingEng', d.contacts.overseeingEng) + inp('Reviewing Engineer #1', 'contacts.reviewer1', d.contacts.reviewer1) + inp('Reviewing Engineer #2', 'contacts.reviewer2', d.contacts.reviewer2) + inp('NOC', 'contacts.noc', d.contacts.noc) + inp('Engineering Director', 'contacts.engDirector', d.contacts.engDirector) + inp('Operations Director', 'contacts.opsDirector', d.contacts.opsDirector) + inp('Project Manager', 'contacts.pm', d.contacts.pm))
+                + group('Circuit Provisioning', inp('Bandwidth', 'bandwidth', d.bandwidth) + inp('Traffic VLAN', 'provisioning.trafficVlan', d.provisioning.trafficVlan) + inp('Mgmt VLAN', 'provisioning.mgmtVlan', d.provisioning.mgmtVlan) + inp('Mgmt IP', 'provisioning.mgmtIp', d.provisioning.mgmtIp) + inp('Customer IP Range', 'provisioning.custIpRange', d.provisioning.custIpRange) + inp('Subnet', 'provisioning.subnet', d.provisioning.subnet) + inp('Gateway', 'provisioning.gateway', d.provisioning.gateway))
+                + `<div><label style="display:block; font-size:0.72rem; color:var(--text-secondary); margin-bottom:0.2rem;">Notes</label><textarea onchange="mopSetField('notes', this.value)" rows="2" style="width:100%; padding:0.5rem; border:1px solid var(--border-color); border-radius:0.4rem; background:var(--bg-tertiary); color:var(--text-primary); font-size:0.85rem;">${_dvEsc(d.notes)}</textarea></div>`
+                + `</div>`;
             d.locations.forEach((loc, li) => {
                 const allOn = loc.equipmentInstall.enabled && loc.cableInstall.enabled && loc.bom.enabled;
                 const chk = (cat, label) => `<label style="cursor:pointer; margin-right:1.25rem; font-size:0.9rem;"><input type="checkbox" ${loc[cat].enabled ? 'checked' : ''} onchange="mopToggleCat(${li},'${cat}',this.checked)" style="vertical-align:middle;"> ${label}</label>`;
@@ -13794,7 +13824,7 @@
             body.innerHTML = h;
         }
 
-        function mopSetField(field, val) { if (window._mopDraft) window._mopDraft[field] = val; }
+        function mopSetField(path, val) { const d = window._mopDraft; if (!d) return; const p = path.split('.'); let o = d; for (let i = 0; i < p.length - 1; i++) o = o && o[p[i]]; if (o) o[p[p.length - 1]] = val; }
         function mopCellEdit(li, cat, i, key, val) { try { window._mopDraft.locations[li][cat].items[i][key] = val; } catch (e) {} }
         function mopToggleCat(li, cat, checked) { window._mopDraft.locations[li][cat].enabled = checked; mopRenderBody(); }
         function mopToggleAll(li, checked) { ['cableInstall', 'equipmentInstall', 'bom'].forEach(c => window._mopDraft.locations[li][c].enabled = checked); mopRenderBody(); }
