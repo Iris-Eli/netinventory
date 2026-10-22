@@ -13666,10 +13666,13 @@
             return {
                 circuitId: circuit.circuitId || circuit.id, customer: circuit.customer || '', bandwidth: circuit.bandwidth || '',
                 soNumber: circuit.soNumber || '', salesforceId: circuit.salesforceId || '',
-                dates: { engRelease: '', equipDue: '', opsDue: '', custDue: '' },
+                dates: { engRelease: '' },
                 // NOC + director lines are constants (editable); everything else is custom per MoP.
-                contacts: { overseeingEng: '', reviewer1: '', reviewer2: '', noc: '888-618-4638', engDirector: 'Eli Champion 931-273-1917', opsDirector: 'Drew Cannon 731-414-1621', pm: '' },
-                provisioning: { trafficVlan: '', mgmtVlan: circuit.cpeMgmtVlan || '', mgmtIp: circuit.cpeMgmtIp || '', custIpRange: '', subnet: circuit.cpeMgmtSubnet || '', gateway: circuit.cpeMgmtGateway || '' },
+                contacts: { overseeingEng: '', reviewer1: '', noc: '888-618-4638', engDirector: 'Eli Champion 931-273-1917', opsDirector: 'Drew Cannon 731-414-1621', pm: '' },
+                provisioning: { trafficVlan: '', mgmtVlan: circuit.cpeMgmtVlan || '', mgmtIp: circuit.cpeMgmtIp || '', subnet: circuit.cpeMgmtSubnet || '', gateway: circuit.cpeMgmtGateway || '' },
+                // Not on the standard 3924 and/or not naturally gathered by NetInventory — grouped as
+                // optional; each renders in the output only when the engineer fills it in.
+                optional: { equipDue: '', opsDue: '', custDue: '', reviewer2: '', custIpRange: '', other: '' },
                 notes: '', locations
             };
         }
@@ -13679,7 +13682,9 @@
             const row = cells => '<tr>' + cells.map(c => '<td>' + esc(c) + '</td>').join('') + '</tr>';
             const hdrRow = cells => '<tr>' + cells.map(c => '<td class="hdr">' + esc(c) + '</td>').join('') + '</tr>';
             const kv = (k, v) => '<tr><td class="lbl">' + esc(k) + '</td><td>' + esc(v) + '</td></tr>';
-            const d = model.dates || {}, co = model.contacts || {}, pr = model.provisioning || {};
+            const d = model.dates || {}, co = model.contacts || {}, pr = model.provisioning || {}, op = model.optional || {};
+            const kvIf = (k, v) => v ? kv(k, v) : '';
+            const fmt = v => { const mt = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(v || '')); return mt ? (parseInt(mt[2], 10) + '/' + parseInt(mt[3], 10) + '/' + mt[1]) : (v || ''); };
             const locLabel = loc => loc.clli || (loc.letter + ' Location');
             // Combined category table across all locations, keyed by CLLI in the Location column.
             const combined = (key, title, headers, cellFn) => {
@@ -13689,7 +13694,7 @@
                 return '<h2>' + esc(title) + '</h2><table>' + hdrRow(headers) + rows.map(r => row(r)).join('') + '</table>';
             };
             // CONTACTS: IRIS roles + per-location address/site-contact
-            const contactRows = kv('OVERSEEING ENGINEER', co.overseeingEng) + kv('REVIEWING ENGINEER #1', co.reviewer1) + kv('REVIEWING ENGINEER #2', co.reviewer2)
+            const contactRows = kv('OVERSEEING ENGINEER', co.overseeingEng) + kv('REVIEWING ENGINEER', co.reviewer1) + kvIf('REVIEWING ENGINEER #2', op.reviewer2)
                 + kv('NOC', co.noc) + kv('ENGINEERING DIRECTOR', co.engDirector) + kv('OPERATIONS DIRECTOR', co.opsDirector) + kv('PROJECT MANAGER', co.pm)
                 + model.locations.map(loc => kv(loc.letter + ' LOCATION INFORMATION', loc.address) + kv('SITE CONTACT', loc.siteContact)).join('');
             return '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>'
@@ -13703,13 +13708,14 @@
                 + '<div class="mop-header"><div class="mop-header-left"><h1>METHOD OF PROCEDURE</h1>'
                 + '<p>CIRCUIT: <strong>' + esc(model.circuitId) + '</strong>' + (model.soNumber ? ' &nbsp;|&nbsp; ORDER: <strong>' + esc(model.soNumber) + '</strong>' : '') + '</p></div>'
                 + '<img src="' + MOP_LOGO + '" alt="IRIS Networks" /></div>'
-                + '<h2>DATES</h2><table>' + kv('ENGINEERING RELEASE', d.engRelease) + kv('EQUIPMENT DUE DATE', d.equipDue) + kv('OPERATIONS DUE DATE', d.opsDue) + kv('CUSTOMER DUE DATE', d.custDue) + '</table>'
+                + '<h2>DATES</h2><table>' + kv('ENGINEERING RELEASE', fmt(d.engRelease)) + kvIf('EQUIPMENT DUE DATE', op.equipDue) + kvIf('OPERATIONS DUE DATE', op.opsDue) + kvIf('CUSTOMER DUE DATE', fmt(op.custDue)) + '</table>'
                 + '<h2>CONTACTS</h2><table>' + contactRows + '</table>'
                 + '<h2>CIRCUIT PROVISIONING</h2><table>'
                 + kv('CIRCUIT ID', model.circuitId) + kv('CUSTOMER', model.customer) + kv('BANDWIDTH', model.bandwidth)
                 + kv('TRAFFIC VLAN', pr.trafficVlan) + kv('MANAGEMENT VLAN', pr.mgmtVlan) + kv('MANAGEMENT IP', pr.mgmtIp)
-                + kv('CUSTOMER IP RANGE', pr.custIpRange) + kv('SUBNET', pr.subnet) + kv('GATEWAY', pr.gateway) + '</table>'
+                + kvIf('CUSTOMER IP RANGE', op.custIpRange) + kv('SUBNET', pr.subnet) + kv('GATEWAY', pr.gateway) + '</table>'
                 + '<h2>NOTES</h2><table><tr><td>' + (model.notes ? esc(model.notes).replace(/\n/g, '<br>') : '&nbsp;') + '</td></tr></table>'
+                + (op.other ? '<h2>ADDITIONAL INFORMATION</h2><table><tr><td>' + esc(op.other).replace(/\n/g, '<br>') + '</td></tr></table>' : '')
                 + combined('bom', 'BILL OF MATERIALS', ['Qty', 'Part #', 'Description', 'PO/Stk', 'Manuf.', 'Location'], (it, ll) => [it.qty, it.part, it.desc, it.postk, it.manuf, ll])
                 + combined('equipmentInstall', 'EQUIPMENT INSTALL', ['Item', 'Action', 'Qty', 'Description', 'Location'], (it, ll, n) => [String(n + 1), it.action, it.qty, it.desc, ll])
                 + combined('cableInstall', 'CABLE RUNNING LIST', ['Run', 'Cable', 'From', 'To', 'Location', 'Term'], (it, ll, n) => [String(n + 1), it.cable, it.from, it.to, ll, it.term])
@@ -13799,13 +13805,18 @@
         function mopRenderBody() {
             const d = window._mopDraft, body = document.getElementById('mopBuilderBody');
             if (!d || !body) return;
-            const inp = (label, path, val, wide) => `<div style="flex:${wide ? '2' : '1'}; min-width:${wide ? '240' : '140'}px;"><label style="display:block; font-size:0.72rem; color:var(--text-secondary); margin-bottom:0.2rem;">${label}</label><input value="${_dvEsc(val)}" onchange="mopSetField('${path}', this.value)" style="width:100%; padding:0.45rem; border:1px solid var(--border-color); border-radius:0.4rem; background:var(--bg-tertiary); color:var(--text-primary); font-size:0.85rem;"></div>`;
+            const inp = (label, path, val, wide, type) => `<div style="flex:${wide ? '2' : '1'}; min-width:${wide ? '240' : '140'}px;"><label style="display:block; font-size:0.72rem; color:var(--text-secondary); margin-bottom:0.2rem;">${label}</label><input type="${type || 'text'}" value="${_dvEsc(val)}" onchange="mopSetField('${path}', this.value)" style="width:100%; padding:0.45rem; border:1px solid var(--border-color); border-radius:0.4rem; background:var(--bg-tertiary); color:var(--text-primary); font-size:0.85rem;"></div>`;
+            const ta = (label, path, val) => `<div style="margin-top:0.5rem;"><label style="display:block; font-size:0.72rem; color:var(--text-secondary); margin-bottom:0.2rem;">${label}</label><textarea onchange="mopSetField('${path}', this.value)" rows="2" style="width:100%; padding:0.5rem; border:1px solid var(--border-color); border-radius:0.4rem; background:var(--bg-tertiary); color:var(--text-primary); font-size:0.85rem;">${_dvEsc(val)}</textarea></div>`;
             const group = (title, fields) => `<div style="margin-bottom:0.9rem;"><div style="font-size:0.82rem; font-weight:700; color:var(--accent-primary); margin-bottom:0.35rem;">${title}</div><div style="display:flex; gap:0.7rem; flex-wrap:wrap;">${fields}</div></div>`;
             let h = `<div style="background:var(--bg-secondary); border:1px solid var(--border-color); border-radius:0.6rem; padding:1rem 1.25rem; margin-bottom:1.25rem;">`
-                + group('Dates', inp('Engineering Release', 'dates.engRelease', d.dates.engRelease) + inp('Equipment Due', 'dates.equipDue', d.dates.equipDue) + inp('Operations Due', 'dates.opsDue', d.dates.opsDue) + inp('Customer Due', 'dates.custDue', d.dates.custDue))
-                + group('Contacts', inp('Overseeing Engineer', 'contacts.overseeingEng', d.contacts.overseeingEng) + inp('Reviewing Engineer #1', 'contacts.reviewer1', d.contacts.reviewer1) + inp('Reviewing Engineer #2', 'contacts.reviewer2', d.contacts.reviewer2) + inp('NOC', 'contacts.noc', d.contacts.noc) + inp('Engineering Director', 'contacts.engDirector', d.contacts.engDirector) + inp('Operations Director', 'contacts.opsDirector', d.contacts.opsDirector) + inp('Project Manager', 'contacts.pm', d.contacts.pm))
-                + group('Circuit Provisioning', inp('Bandwidth', 'bandwidth', d.bandwidth) + inp('Traffic VLAN', 'provisioning.trafficVlan', d.provisioning.trafficVlan) + inp('Mgmt VLAN', 'provisioning.mgmtVlan', d.provisioning.mgmtVlan) + inp('Mgmt IP', 'provisioning.mgmtIp', d.provisioning.mgmtIp) + inp('Customer IP Range', 'provisioning.custIpRange', d.provisioning.custIpRange) + inp('Subnet', 'provisioning.subnet', d.provisioning.subnet) + inp('Gateway', 'provisioning.gateway', d.provisioning.gateway))
-                + `<div><label style="display:block; font-size:0.72rem; color:var(--text-secondary); margin-bottom:0.2rem;">Notes</label><textarea onchange="mopSetField('notes', this.value)" rows="2" style="width:100%; padding:0.5rem; border:1px solid var(--border-color); border-radius:0.4rem; background:var(--bg-tertiary); color:var(--text-primary); font-size:0.85rem;">${_dvEsc(d.notes)}</textarea></div>`
+                + group('Dates', inp('Engineering Release', 'dates.engRelease', d.dates.engRelease, false, 'date'))
+                + group('Contacts', inp('Overseeing Engineer', 'contacts.overseeingEng', d.contacts.overseeingEng) + inp('Reviewing Engineer', 'contacts.reviewer1', d.contacts.reviewer1) + inp('NOC', 'contacts.noc', d.contacts.noc) + inp('Engineering Director', 'contacts.engDirector', d.contacts.engDirector) + inp('Operations Director', 'contacts.opsDirector', d.contacts.opsDirector) + inp('Project Manager', 'contacts.pm', d.contacts.pm))
+                + group('Circuit Provisioning', inp('Bandwidth', 'bandwidth', d.bandwidth) + inp('Traffic VLAN', 'provisioning.trafficVlan', d.provisioning.trafficVlan) + inp('Mgmt VLAN', 'provisioning.mgmtVlan', d.provisioning.mgmtVlan) + inp('Mgmt IP', 'provisioning.mgmtIp', d.provisioning.mgmtIp) + inp('Subnet', 'provisioning.subnet', d.provisioning.subnet) + inp('Gateway', 'provisioning.gateway', d.provisioning.gateway))
+                + ta('Notes', 'notes', d.notes)
+                + `<details style="margin-top:0.9rem;"><summary style="cursor:pointer; font-size:0.82rem; font-weight:700; color:var(--text-secondary);">➕ Additional (optional) — anything not on the standard template; shows in the MoP only when filled</summary><div style="margin-top:0.6rem;">`
+                + `<div style="display:flex; gap:0.7rem; flex-wrap:wrap;">${inp('Equipment Due', 'optional.equipDue', d.optional.equipDue)}${inp('Operations Due', 'optional.opsDue', d.optional.opsDue)}${inp('Customer Due', 'optional.custDue', d.optional.custDue, false, 'date')}${inp('Reviewing Engineer #2', 'optional.reviewer2', d.optional.reviewer2)}${inp('Customer IP Range', 'optional.custIpRange', d.optional.custIpRange)}</div>`
+                + ta('Other', 'optional.other', d.optional.other)
+                + `</div></details>`
                 + `</div>`;
             d.locations.forEach((loc, li) => {
                 const allOn = loc.equipmentInstall.enabled && loc.cableInstall.enabled && loc.bom.enabled;
