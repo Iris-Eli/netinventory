@@ -17665,16 +17665,45 @@ ${entityActionButtons('nni', `${n.id}`, true)}
         }
         // 🧭 Auto-link equipment → PoP/site by CLLI (device-name CLLI ↔ site CLLI). Preview-first, non-destructive.
         let _popLinkPlan = [];
+        let _popAliasMovePlan = [];
+        // Owner-confirmed naming rules (2026-10-26): device-name codes that don't follow the 8-char CLLI
+        // pattern, mapped to the site code they live at. "A" between L and G is optional (ATLGA55 = ATLAGA55).
+        // Matched anywhere in the equipment name / hostname / Iris CLLI. Checked BEFORE the CLLI match.
+        const EQUIPMENT_SITE_ALIASES = [
+            { re: /ATLA?GA55/i, site: 'ATLGAMA', label: 'ATL(A)GA55' },
+            { re: /ATLA?GA56|ATLA?GADR/i, site: 'ATLNGAMQ', label: 'ATL(A)GA56 / ATL(A)GADR' }
+        ];
+        function equipmentSiteAlias(e) {
+            const hay = [e.name, e.hostname, e.irisClli].filter(Boolean).join(' ');
+            return EQUIPMENT_SITE_ALIASES.find(a => a.re.test(hay)) || null;
+        }
+        // Site record for a code: its id (SharePoint Title), name, or Iris CLLI, case-insensitive.
+        function findSiteByCode(sites, code) {
+            const c = String(code || '').toUpperCase().trim();
+            return sites.find(s => String(s.id || '').toUpperCase().trim() === c)
+                || sites.find(s => String(s.irisClli || '').toUpperCase().trim() === c)
+                || sites.find(s => String(s.name || '').toUpperCase().trim() === c) || null;
+        }
+
         async function autoLinkEquipmentToPops() {
             const [equipment, sites] = await Promise.all([store.getEquipment(), store.getSites()]);
             const siteByClli = {};
             sites.forEach(s => { const c = String(s.irisClli || '').toUpperCase().trim(); if (c && !siteByClli[c]) siteByClli[c] = s; });
-            if (!Object.keys(siteByClli).length) {
+            const missingAliasSites = EQUIPMENT_SITE_ALIASES.filter(a => !findSiteByCode(sites, a.site)).map(a => a.site);
+            if (!Object.keys(siteByClli).length && missingAliasSites.length === EQUIPMENT_SITE_ALIASES.length) {
                 alert('No site CLLIs yet — run 🏷️ Backfill CLLIs on the Sites page first (or add site CLLIs), then this tool can match equipment to sites.');
                 return;
             }
-            const link = [], conflict = [];
+            const link = [], conflict = [], aliasMove = [];
             equipment.forEach(e => {
+                const alias = equipmentSiteAlias(e);
+                if (alias) {
+                    const site = findSiteByCode(sites, alias.site);
+                    if (!site || e.siteId === site.id) return;
+                    if (!e.siteId) link.push({ e, site, clli: alias.site + ' (rule)' });
+                    else aliasMove.push({ e, site, clli: alias.site + ' (rule)', from: (sites.find(s => s.id === e.siteId) || {}).name || e.siteId });
+                    return;
+                }
                 const clli = String(e.irisClli || '').toUpperCase().trim() || deriveIrisClli(e.name);
                 if (!clli) return;
                 const site = siteByClli[clli];
@@ -17682,8 +17711,9 @@ ${entityActionButtons('nni', `${n.id}`, true)}
                 if (!e.siteId) link.push({ e, site, clli });    // only fill empty
                 else if (e.siteId !== site.id) conflict.push({ e, site, clli }); // sited elsewhere → flag, never reassign
             });
-            if (!link.length && !conflict.length) { alert('Nothing to link — every equipment with a matchable CLLI is already assigned to a site.'); return; }
+            if (!link.length && !conflict.length && !aliasMove.length) { alert('Nothing to link — every equipment with a matchable CLLI is already assigned to a site.' + (missingAliasSites.length ? `\n\nNote: no site found for ${missingAliasSites.join(', ')} (naming rule targets).` : '')); return; }
             _popLinkPlan = link;
+            _popAliasMovePlan = aliasMove;
             const modal = document.createElement('div');
             modal.className = 'modal active'; modal.id = 'popLinkModal'; modal.style.zIndex = '1200';
             modal.innerHTML = `<div class="modal-content" style="max-width: 760px; max-height: 85vh; overflow-y: auto;">
@@ -17693,17 +17723,26 @@ ${entityActionButtons('nni', `${n.id}`, true)}
                     ${link.length ? `<h3 style="margin-top: 1rem;">Will link (${link.length})</h3>
                         <table style="width: 100%; border-collapse: collapse;"><thead><tr style="text-align: left; border-bottom: 1px solid var(--border-color);"><th style="padding: 0.4rem;">Equipment</th><th style="padding: 0.4rem;">CLLI</th><th style="padding: 0.4rem;">→ Site</th></tr></thead>
                         <tbody>${link.map(x => `<tr style="border-bottom: 1px solid var(--border-color);"><td style="padding: 0.4rem;">${x.e.name}</td><td style="padding: 0.4rem;"><strong>${x.clli}</strong></td><td style="padding: 0.4rem;">${x.site.name || x.site.id}</td></tr>`).join('')}</tbody></table>` : '<p style="color: var(--text-tertiary);">No unassigned equipment to link.</p>'}
+                    ${missingAliasSites.length ? `<p style="margin-top: 1rem; color: var(--warning);">⚠️ No site record found for <strong>${missingAliasSites.join(', ')}</strong> — devices for that naming rule are skipped until the site exists (matched by Site ID, Iris CLLI or name).</p>` : ''}
+                    ${aliasMove.length ? `<h3 style="margin-top: 1.5rem;">Naming rule says these belong elsewhere (${aliasMove.length})</h3>
+                        <label style="display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.5rem; cursor: pointer;"><input type="checkbox" id="popAliasMoveToggle" onchange="_updatePopLinkButton()"> <span>Also move these to the rule's site</span></label>
+                        <ul style="padding-left: 1.25rem; color: var(--text-secondary);">${aliasMove.map(x => `<li>${x.e.name} — now at ${x.from} → <strong>${x.site.name || x.site.id}</strong></li>`).join('')}</ul>` : ''}
                     ${conflict.length ? `<h3 style="margin-top: 1.5rem; color: var(--warning);">Already sited elsewhere — review (${conflict.length}, not changed)</h3>
                         <ul style="padding-left: 1.25rem; color: var(--text-secondary);">${conflict.map(x => `<li>${x.e.name} — CLLI ${x.clli} points to ${x.site.name || x.site.id}, but it's currently on a different site</li>`).join('')}</ul>` : ''}
                     <div style="display: flex; gap: 0.75rem; margin-top: 1.5rem;">
-                        ${link.length ? `<button class="btn-primary" onclick="applyPopLinks(this)">✅ Link ${link.length} device${link.length === 1 ? '' : 's'}</button>` : ''}
+                        ${(link.length || aliasMove.length) ? `<button class="btn-primary" id="popLinkApplyBtn" onclick="applyPopLinks(this)" ${link.length ? '' : 'disabled'}>✅ Link ${link.length} device${link.length === 1 ? '' : 's'}</button>` : ''}
                         <button class="btn-secondary" onclick="document.getElementById('popLinkModal').remove()">Cancel</button>
                     </div>
                 </div></div>`;
             document.body.appendChild(modal);
         }
+        function _updatePopLinkButton() {
+            const btn = document.getElementById('popLinkApplyBtn'); if (!btn) return;
+            const n = (_popLinkPlan || []).length + (document.getElementById('popAliasMoveToggle')?.checked ? (_popAliasMovePlan || []).length : 0);
+            btn.disabled = !n; btn.textContent = `✅ Link ${n} device${n === 1 ? '' : 's'}`;
+        }
         async function applyPopLinks(btn) {
-            const plan = _popLinkPlan || [];
+            const plan = (_popLinkPlan || []).concat(document.getElementById('popAliasMoveToggle')?.checked ? (_popAliasMovePlan || []) : []);
             if (!plan.length) return;
             if (btn) { btn.disabled = true; btn.textContent = 'Linking…'; }
             let done = 0, failed = 0;
