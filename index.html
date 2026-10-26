@@ -8921,6 +8921,18 @@
             return ' @ ' + ((s && (s.irisClli || s.name)) || item.siteId);
         }
 
+        // Keep a saved value selectable even when it isn't in the site-filtered list (device filed on
+        // another site / unsited), so opening + re-saving a circuit never silently drops it.
+        function ensureSelectOption(sel, value, label) {
+            if (!sel || !value || Array.from(sel.options).some(o => o.value === value)) return;
+            const o = document.createElement('option'); o.value = value; o.textContent = label || value; sel.appendChild(o);
+        }
+        async function equipmentOptionLabel(id) {
+            if (!id) return '';
+            const e = (await store.getEquipment()).find(x => x.id === id);
+            return e ? `${e.name} (not at this site)` : `${id} (missing record)`;
+        }
+
         async function updateCircuitEquipmentDropdown(end) {
             const siteSelectId = end === 'a' ? 'circuitASiteSelect' : 'circuitZSiteSelect';
             const equipmentSelectId = end === 'a' ? 'aEquipmentSelect' : 'zEquipmentSelect';
@@ -9200,9 +9212,13 @@
             if (circuit.aLocationSiteId) {
                 await updateCircuitNniDropdowns('a');
                 await updateCircuitFdpDropdowns('a');
+                // Equipment list was never filled on edit (only on a site change) — so it showed empty and a
+                // re-save wiped a saved aEquipment. Fill it for the saved site like NNI/FDP above.
+                await updateCircuitEquipmentDropdown('a');
             }
             
             form.elements.aFdp.value = circuit.aFdp || '';
+            ensureSelectOption(form.elements.aEquipment, circuit.aEquipment, await equipmentOptionLabel(circuit.aEquipment));
             form.elements.aEquipment.value = circuit.aEquipment || '';
             form.elements.aEquipmentFdp.value = circuit.aEquipmentFdp || '';
             await updateEquipmentFdpPorts('a');
@@ -9225,9 +9241,13 @@
             if (circuit.zLocationSiteId) {
                 await updateCircuitNniDropdowns('z');
                 await updateCircuitFdpDropdowns('z');
+                // Equipment list was never filled on edit (only on a site change) — so it showed empty and a
+                // re-save wiped a saved zEquipment. Fill it for the saved site like NNI/FDP above.
+                await updateCircuitEquipmentDropdown('z');
             }
             
             form.elements.zFdp.value = circuit.zFdp || '';
+            ensureSelectOption(form.elements.zEquipment, circuit.zEquipment, await equipmentOptionLabel(circuit.zEquipment));
             form.elements.zEquipment.value = circuit.zEquipment || '';
             form.elements.zEquipmentFdp.value = circuit.zEquipmentFdp || '';
             await updateEquipmentFdpPorts('z');
@@ -9332,6 +9352,7 @@
                 if (checkbox) { checkbox.checked = true; toggleEquipmentCrossFields('a'); }
                 const sel = document.getElementById('aEquipment2Select');
                 if (sel) {
+                    ensureSelectOption(sel, circuit.aEquipment2, await equipmentOptionLabel(circuit.aEquipment2));
                     sel.value = circuit.aEquipment2;
                     await updateEquipment2Ports('a');
                     if (circuit.aEquipment2Port) {
@@ -9348,6 +9369,7 @@
                 if (checkbox) { checkbox.checked = true; toggleEquipmentCrossFields('z'); }
                 const sel = document.getElementById('zEquipment2Select');
                 if (sel) {
+                    ensureSelectOption(sel, circuit.zEquipment2, await equipmentOptionLabel(circuit.zEquipment2));
                     sel.value = circuit.zEquipment2;
                     await updateEquipment2Ports('z');
                     if (circuit.zEquipment2Port) {
@@ -17698,7 +17720,7 @@ ${entityActionButtons('nni', `${n.id}`, true)}
         // pattern, mapped to the site code they live at. "A" between L and G is optional (ATLGA55 = ATLAGA55).
         // Matched anywhere in the equipment name / hostname / Iris CLLI. Checked BEFORE the CLLI match.
         const EQUIPMENT_SITE_ALIASES = [
-            { re: /ATLA?GA55/i, site: 'ATLGAMA', label: 'ATL(A)GA55' },
+            { re: /ATLA?GA55/i, site: 'ATLNGAMA', label: 'ATL(A)GA55' },   // site record ATLNGAMA = CLLI ATLAGA55, 55 Marietta St
             { re: /ATLA?GA56|ATLA?GADR/i, site: 'ATLNGAMQ', label: 'ATL(A)GA56 / ATL(A)GADR' }
         ];
         function equipmentSiteAlias(e) {
