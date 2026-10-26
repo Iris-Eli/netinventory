@@ -7132,40 +7132,41 @@
             const siteId = siteSel ? siteSel.value : '';
             if (!siteId) return;
             
-            const [fdps, equipment, nnis, _intCircuits] = await Promise.all([store.getFdps(), store.getEquipment(), store.getNnis(), store.getCircuits()]);
+            const [fdps, equipment, nnis, _intCircuits, _intSites] = await Promise.all([store.getFdps(), store.getEquipment(), store.getNnis(), store.getCircuits(), store.getSites()]);
+            const _sfx = x => siblingSiteSuffix(x, _intSites, siteId);
             
             const fdpSel = document.getElementById(`vlan${vlanNum}_int${idx}_fdpSelect`);
             if (fdpSel) {
-                const matches = fdps.filter(f => f.siteId === siteId);
+                const matches = itemsAtLocation(fdps, _intSites, siteId);
                 const prev = fdpSel.value;
-                fdpSel.innerHTML = '<option value="">Select FDP...</option>' + matches.map(f => `<option value="${f.id}">${f.name || f.id}${fdpAvailabilityLabel(f, _intCircuits, nnis)}</option>`).join('');
+                fdpSel.innerHTML = '<option value="">Select FDP...</option>' + matches.map(f => `<option value="${f.id}">${f.name || f.id}${_sfx(f)}${fdpAvailabilityLabel(f, _intCircuits, nnis)}</option>`).join('');
                 if (prev && matches.find(f => f.id === prev)) fdpSel.value = prev;
                 updateIntermediateFdpPorts(vlanNum, idx);
             }
             
             const eqSel = document.getElementById(`vlan${vlanNum}_int${idx}_equipmentSelect`);
             if (eqSel) {
-                const matches = equipment.filter(e => e.siteId === siteId);
+                const matches = itemsAtLocation(equipment, _intSites, siteId);
                 const prev = eqSel.value;
-                eqSel.innerHTML = '<option value="">Select Equipment...</option>' + matches.map(e => `<option value="${e.id}">${e.name || e.id}</option>`).join('');
+                eqSel.innerHTML = '<option value="">Select Equipment...</option>' + matches.map(e => `<option value="${e.id}">${e.name || e.id}${_sfx(e)}</option>`).join('');
                 if (prev && matches.find(e => e.id === prev)) eqSel.value = prev;
                 updateIntermediateEquipmentPorts(vlanNum, idx);
             }
 
             const eq2Sel = document.getElementById(`vlan${vlanNum}_int${idx}_equipment2Select`);
             if (eq2Sel) {
-                const matches = equipment.filter(e => e.siteId === siteId);
+                const matches = itemsAtLocation(equipment, _intSites, siteId);
                 const prev = eq2Sel.value;
-                eq2Sel.innerHTML = '<option value="">Select Equipment...</option>' + matches.map(e => `<option value="${e.id}">${e.name || e.id}</option>`).join('');
+                eq2Sel.innerHTML = '<option value="">Select Equipment...</option>' + matches.map(e => `<option value="${e.id}">${e.name || e.id}${_sfx(e)}</option>`).join('');
                 if (prev && matches.find(e => e.id === prev)) eq2Sel.value = prev;
                 updateIntermediateEquipment2Ports(vlanNum, idx);
             }
 
             const eqFdpSel = document.getElementById(`vlan${vlanNum}_int${idx}_equipmentFdpSelect`);
             if (eqFdpSel) {
-                const matches = fdps.filter(f => f.siteId === siteId);
+                const matches = itemsAtLocation(fdps, _intSites, siteId);
                 const prev = eqFdpSel.value;
-                eqFdpSel.innerHTML = '<option value="">Select FDP...</option>' + matches.map(f => `<option value="${f.id}">${f.name || f.id}${fdpAvailabilityLabel(f, _intCircuits, nnis)}</option>`).join('');
+                eqFdpSel.innerHTML = '<option value="">Select FDP...</option>' + matches.map(f => `<option value="${f.id}">${f.name || f.id}${_sfx(f)}${fdpAvailabilityLabel(f, _intCircuits, nnis)}</option>`).join('');
                 if (prev && matches.find(f => f.id === prev)) eqFdpSel.value = prev;
                 updateIntermediateEquipmentFdpPorts(vlanNum, idx);
             }
@@ -8214,14 +8215,14 @@
             // Update FDP dropdown
             const fdpSelect = document.getElementById(fdpSelectId);
             if (fdpSelect && selectedSiteId) {
-                const [allFdps, _vfCircuits, _vfNnis] = await Promise.all([store.getFdps(), store.getCircuits(), store.getNnis()]);
-                const siteFdps = allFdps.filter(fdp => fdp.siteId === selectedSiteId);
+                const [allFdps, _vfCircuits, _vfNnis, _vfSites] = await Promise.all([store.getFdps(), store.getCircuits(), store.getNnis(), store.getSites()]);
+                const siteFdps = itemsAtLocation(allFdps, _vfSites, selectedSiteId);
                 
                 fdpSelect.innerHTML = '<option value="">Select FDP...</option>';
                 siteFdps.forEach(fdp => {
                     const option = document.createElement('option');
                     option.value = fdp.id;
-                    option.textContent = `${fdp.name}${fdpAvailabilityLabel(fdp, _vfCircuits, _vfNnis)}`;
+                    option.textContent = `${fdp.name}${siblingSiteSuffix(fdp, _vfSites, selectedSiteId)}${fdpAvailabilityLabel(fdp, _vfCircuits, _vfNnis)}`;
                     fdpSelect.appendChild(option);
                 });
             }
@@ -8229,16 +8230,14 @@
             // Update Equipment dropdown
             const equipmentSelect = document.getElementById(equipmentSelectId);
             if (equipmentSelect && selectedSiteId) {
-                const allEquipment = await store.getEquipment();
-                const siteEquipment = allEquipment.filter(eq => 
-                    eq.siteId === selectedSiteId || eq.SiteID === selectedSiteId || eq.site === selectedSiteId
-                );
+                const [allEquipment, _veSites] = await Promise.all([store.getEquipment(), store.getSites()]);
+                const siteEquipment = itemsAtLocation(allEquipment, _veSites, selectedSiteId);
                 
                 equipmentSelect.innerHTML = '<option value="">Select Equipment...</option>';
                 siteEquipment.forEach(eq => {
                     const option = document.createElement('option');
                     option.value = eq.id;
-                    option.textContent = `${eq.name}${eq.type ? ` (${eq.type})` : ''}`;
+                    option.textContent = `${eq.name}${eq.type ? ` (${eq.type})` : ''}${siblingSiteSuffix(eq, _veSites, selectedSiteId)}`;
                     equipmentSelect.appendChild(option);
                 });
             }
@@ -8845,8 +8844,8 @@
             const selectedSiteId = siteSelect.value;
             
             // Get all FDPs for the selected site
-            const allFdps = await store.getFdps();
-            const siteFdps = allFdps.filter(fdp => fdp.siteId === selectedSiteId);
+            const [allFdps, _fdpSites] = await Promise.all([store.getFdps(), store.getSites()]);
+            const siteFdps = itemsAtLocation(allFdps, _fdpSites, selectedSiteId);
             const [_fdpCircuits, _fdpNnis] = await Promise.all([store.getCircuits(), store.getNnis()]);
             
             // Update main FDP dropdown
@@ -8862,7 +8861,7 @@
                         const option = document.createElement('option');
                         option.value = fdp.id;
                         const portInfo = fdpAvailabilityLabel(fdp, _fdpCircuits, _fdpNnis);
-                        option.textContent = `${fdp.name}${portInfo}`;
+                        option.textContent = `${fdp.name}${siblingSiteSuffix(fdp, _fdpSites, selectedSiteId)}${portInfo}`;
                         fdpSelect.appendChild(option);
                     });
                 }
@@ -8881,7 +8880,7 @@
                         const option = document.createElement('option');
                         option.value = fdp.id;
                         const portInfo = fdpAvailabilityLabel(fdp, _fdpCircuits, _fdpNnis);
-                        option.textContent = `${fdp.name}${portInfo}`;
+                        option.textContent = `${fdp.name}${siblingSiteSuffix(fdp, _fdpSites, selectedSiteId)}${portInfo}`;
                         equipmentFdpSelect.appendChild(option);
                     });
                 }
@@ -8889,6 +8888,39 @@
         }
         
         // Filter equipment dropdowns by selected site
+        // Site records that are the SAME physical location as siteId: itself, records sharing its Site ID /
+        // Iris CLLI code, or its normalized street address + city. Salesforce-synced circuits point at the
+        // Salesforce site record, while equipment/FDPs are often on the CLLI-named record for the same
+        // building (e.g. after 🧭 Link to PoPs) — so circuit-form pickers list both.
+        function sameLocationSiteIds(sites, siteId) {
+            const ids = new Set(siteId ? [siteId] : []);
+            const me = (sites || []).find(s => s.id === siteId);
+            if (!me) return ids;
+            const up = v => String(v || '').toUpperCase().trim();
+            const addrKey = s => {
+                const a = String(s.address || '').toLowerCase().split(',')[0].replace(/\bstreet\b/g, 'st').replace(/\bavenue\b/g, 'ave').replace(/\bboulevard\b/g, 'blvd').replace(/\broad\b/g, 'rd').replace(/\bdrive\b/g, 'dr').replace(/\bparkway\b/g, 'pkwy').replace(/\bnorth\b/g, 'n').replace(/\bsouth\b/g, 's').replace(/\beast\b/g, 'e').replace(/\bwest\b/g, 'w').replace(/[,.#]/g, '').replace(/\s+/g, ' ').trim();
+                return /\d/.test(a) ? a + '|' + String(s.city || '').toLowerCase().trim() : '';   // street number required
+            };
+            const codes = new Set([up(me.id), up(me.irisClli)].filter(Boolean));
+            const myAddr = addrKey(me);
+            sites.forEach(s => {
+                if (s.id === siteId) return;
+                if (codes.has(up(s.id)) || (s.irisClli && codes.has(up(s.irisClli))) || (myAddr && addrKey(s) === myAddr)) ids.add(s.id);
+            });
+            return ids;
+        }
+        // Items (equipment/FDPs) at the selected site's location, the selected record's own items first.
+        function itemsAtLocation(items, sites, siteId) {
+            const ids = sameLocationSiteIds(sites, siteId);
+            return (items || []).filter(x => ids.has(x.siteId)).sort((a, b) => (a.siteId === siteId ? 0 : 1) - (b.siteId === siteId ? 0 : 1));
+        }
+        // " @ CODE" when an item comes from a sibling site record, so it is clear where it is filed.
+        function siblingSiteSuffix(item, sites, siteId) {
+            if (!item || item.siteId === siteId) return '';
+            const s = (sites || []).find(x => x.id === item.siteId);
+            return ' @ ' + ((s && (s.irisClli || s.name)) || item.siteId);
+        }
+
         async function updateCircuitEquipmentDropdown(end) {
             const siteSelectId = end === 'a' ? 'circuitASiteSelect' : 'circuitZSiteSelect';
             const equipmentSelectId = end === 'a' ? 'aEquipmentSelect' : 'zEquipmentSelect';
@@ -8917,13 +8949,9 @@
             console.log(`${end}-end: Total equipment count:`, allEquipment.length);
             console.log(`${end}-end: Sample equipment:`, allEquipment[0]);
             
-            // Filter by site - check multiple possible field names
-            const siteEquipment = allEquipment.filter(eq => {
-                // Try different field name possibilities
-                return eq.siteId === selectedSiteId || 
-                       eq.SiteID === selectedSiteId ||
-                       eq.site === selectedSiteId;
-            });
+            // Filter by location: the selected site record + sibling records for the same place
+            const _allSites = await store.getSites();
+            const siteEquipment = itemsAtLocation(allEquipment, _allSites, selectedSiteId);
             
             console.log(`${end}-end: Filtered equipment count:`, siteEquipment.length);
             
@@ -8938,7 +8966,7 @@
                 const option = document.createElement('option');
                 option.value = eq.id;
                 const typeLabel = eq.type ? ` (${eq.type})` : '';
-                option.textContent = `${eq.name}${typeLabel}`;
+                option.textContent = `${eq.name}${typeLabel}${siblingSiteSuffix(eq, _allSites, selectedSiteId)}`;
                 equipmentSelect.appendChild(option);
             });
             
