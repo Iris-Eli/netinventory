@@ -7742,6 +7742,150 @@
         }
         
         // Generate HTML for a complete VLAN section (A-end + Z-end)
+        // VLAN 2+ A/Z: the same two add-ons VLAN 1 has under "Equipment" — the equipment also patches to
+        // an FDP, and/or cross-connects to a second device at the same site. Stored on the VLAN's
+        // circuitVlans entry as {a,z}EquipmentFdp/EquipmentFdpPorts + {a,z}Equipment2/Equipment2Port
+        // (no letter columns for VLAN 2+). Counted by circuitConnections → canonical collectors.
+        function vlanEquipmentAddonsHTML(vlanNum, end) {
+            const P = `vlan${vlanNum}_${end.toUpperCase()}`, N = `vlan${vlanNum}_${end}`;
+            const box = 'display: none; margin-left: 1.5rem; border-left: 3px solid var(--accent-primary); padding-left: 1rem;';
+            return `
+                    <div class="form-group">
+                        <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                            <input type="checkbox" id="${P}EquipmentConnectsFdp" onchange="toggleVlanEquipmentAddon(${vlanNum}, '${end}', 'fdp')">
+                            <span>Equipment connects to FDP</span>
+                        </label>
+                    </div>
+                    <div id="${P}EquipmentFdpFields" style="${box}">
+                        <div class="form-group">
+                            <label>FDP</label>
+                            <select name="${N}EquipmentFdp" id="${P}EquipmentFdpSelect" onchange="updateVlanAddonPorts(${vlanNum}, '${end}', 'fdp')"><option value="">Select FDP...</option></select>
+                        </div>
+                        <div class="form-group">
+                            <label>FDP Ports</label>
+                            <select name="${N}EquipmentFdpPorts" id="${P}EquipmentFdpPortsSelect" multiple size="3"><option value="">Select FDP first...</option></select>
+                            <small style="color: var(--text-tertiary); font-size: 0.8rem;">Ctrl/Cmd-click to select multiple ports</small>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                            <input type="checkbox" id="${P}EquipmentConnectsEquip" onchange="toggleVlanEquipmentAddon(${vlanNum}, '${end}', 'cross')">
+                            <span>Equipment connects to equipment (cross-connect)</span>
+                        </label>
+                    </div>
+                    <div id="${P}EquipmentCrossFields" style="${box}">
+                        <div class="form-group">
+                            <label>Second Equipment</label>
+                            <select name="${N}Equipment2" id="${P}Equipment2Select" onchange="updateVlanAddonPorts(${vlanNum}, '${end}', 'cross')"><option value="">Select Equipment...</option></select>
+                        </div>
+                        <div class="form-group">
+                            <label>Second Equipment Ports</label>
+                            <select name="${N}Equipment2Port" id="${P}Equipment2PortSelect" multiple size="3"><option value="">Select equipment first...</option></select>
+                            <small style="color: var(--text-tertiary); font-size: 0.8rem;">Ctrl/Cmd-click to select multiple ports</small>
+                        </div>
+                    </div>`;
+        }
+
+        // Copy the site-filtered option list from the VLAN end's primary FDP / equipment select into
+        // the add-on select (same site), keeping the current choice when it is still offered.
+        function mirrorVlanAddonDropdowns(vlanNum, end) {
+            const P = `vlan${vlanNum}_${end.toUpperCase()}`;
+            [[`${P}FdpSelect`, `${P}EquipmentFdpSelect`], [`${P}EquipmentSelect`, `${P}Equipment2Select`]].forEach(([srcId, dstId]) => {
+                const src = document.getElementById(srcId), dst = document.getElementById(dstId);
+                if (!src || !dst) return;
+                const keep = dst.value;
+                dst.innerHTML = src.innerHTML;
+                dst.value = (keep && Array.from(dst.options).some(o => o.value === keep)) ? keep : '';
+            });
+        }
+
+        function toggleVlanEquipmentAddon(vlanNum, end, kind) {
+            const P = `vlan${vlanNum}_${end.toUpperCase()}`;
+            const cb = document.getElementById(kind === 'fdp' ? `${P}EquipmentConnectsFdp` : `${P}EquipmentConnectsEquip`);
+            const box = document.getElementById(kind === 'fdp' ? `${P}EquipmentFdpFields` : `${P}EquipmentCrossFields`);
+            if (!cb || !box) return;
+            box.style.display = cb.checked ? 'block' : 'none';
+            if (cb.checked) mirrorVlanAddonDropdowns(vlanNum, end);
+        }
+
+        // Fill an add-on port multiselect from the canonical collectors (circuit being edited excluded).
+        async function updateVlanAddonPorts(vlanNum, end, kind) {
+            const P = `vlan${vlanNum}_${end.toUpperCase()}`;
+            const sel = document.getElementById(kind === 'fdp' ? `${P}EquipmentFdpSelect` : `${P}Equipment2Select`);
+            const portSelect = document.getElementById(kind === 'fdp' ? `${P}EquipmentFdpPortsSelect` : `${P}Equipment2PortSelect`);
+            if (!sel || !portSelect) return;
+            const id = sel.value;
+            portSelect.innerHTML = '';
+            if (!id) { portSelect.innerHTML = `<option value="">Select ${kind === 'fdp' ? 'FDP' : 'equipment'} first...</option>`; return; }
+            const [circuits, nnis] = await Promise.all([store.getCircuits(), store.getNnis()]);
+            const selfId = (typeof editingCircuitId !== 'undefined' && editingCircuitId) || null;
+            const addOpt = (value, label, isUsed) => {
+                const o = document.createElement('option');
+                o.value = value; o.textContent = label + (isUsed ? ' - IN USE' : ' - Available');
+                o.disabled = isUsed; o.style.color = isUsed ? 'var(--text-tertiary)' : 'var(--text-primary)';
+                portSelect.appendChild(o);
+            };
+            if (kind === 'fdp') {
+                const fdp = (await store.getFdps()).find(f => f.id === id);
+                if (!fdp) { portSelect.innerHTML = '<option value="">FDP not found</option>'; return; }
+                const used = collectFdpUsedPorts(id, circuits, nnis);
+                const count = parseInt(fdp.portCount || fdp.numPorts, 10) || 24;
+                for (let i = 1; i <= count; i++) addOpt(String(i), 'Port ' + i, used.has(String(i)));
+                return;
+            }
+            const eq = (await store.getEquipment()).find(e => e.id === id);
+            if (!eq || !eq.portConfig) { portSelect.innerHTML = '<option value="">No port configuration for this equipment</option>'; return; }
+            const used = collectEquipmentUsedPorts(id, circuits, nnis, selfId);
+            let cur = 1;
+            eq.portConfig.split(',').forEach(seg => {
+                const m = seg.trim().match(/(\d+)x?\s*(.+)/i);
+                if (!m) return;
+                const count = parseInt(m[1], 10), speed = m[2].trim();
+                for (let i = 0; i < count; i++) { const n = cur + i; addOpt(String(n), `Port ${n} — ${interfaceNameForPort(n, speed)} (${speed})`, used.has(String(n))); }
+                cur += count;
+            });
+        }
+
+        // Prefill one VLAN 2+ end's add-ons from its saved circuitVlans entry (editCircuit).
+        async function loadVlanEquipmentAddons(vlanNum, end, vlan) {
+            const P = `vlan${vlanNum}_${end.toUpperCase()}`;
+            const pick = (selId, csv) => { const s = document.getElementById(selId); if (!s || !csv) return; const want = String(csv).split(',').map(x => x.trim()); Array.from(s.options).forEach(o => { if (want.includes(o.value)) o.selected = true; }); };
+            for (const [kind, idKey, portKey, cbId, selId, portSelId] of [
+                ['fdp', end + 'EquipmentFdp', end + 'EquipmentFdpPorts', `${P}EquipmentConnectsFdp`, `${P}EquipmentFdpSelect`, `${P}EquipmentFdpPortsSelect`],
+                ['cross', end + 'Equipment2', end + 'Equipment2Port', `${P}EquipmentConnectsEquip`, `${P}Equipment2Select`, `${P}Equipment2PortSelect`]
+            ]) {
+                if (!vlan || !vlan[idKey]) continue;
+                const cb = document.getElementById(cbId);
+                if (!cb) continue;
+                cb.checked = true;
+                toggleVlanEquipmentAddon(vlanNum, end, kind);
+                const sel = document.getElementById(selId);
+                if (!sel) continue;
+                if (!Array.from(sel.options).some(o => o.value === vlan[idKey])) {
+                    // saved device not in the site-filtered list (moved/unsited) — keep it selectable rather than drop it
+                    const o = document.createElement('option'); o.value = vlan[idKey]; o.textContent = vlan[idKey] + ' (not at this site)'; sel.appendChild(o);
+                }
+                sel.value = vlan[idKey];
+                await updateVlanAddonPorts(vlanNum, end, kind);
+                pick(portSelId, vlan[portKey]);
+            }
+        }
+
+        // Read one VLAN 2+ end's add-ons for saveCircuit — only when the checkbox is ticked (unticking clears).
+        function readVlanEquipmentAddons(vlanNum, end) {
+            const P = `vlan${vlanNum}_${end.toUpperCase()}`;
+            const on = id => !!document.getElementById(id)?.checked;
+            const val = id => document.getElementById(id)?.value || '';
+            const multi = id => { const s = document.getElementById(id); return s ? Array.from(s.selectedOptions).map(o => o.value).filter(Boolean).join(',') : ''; };
+            const fdpOn = on(`${P}EquipmentConnectsFdp`), xOn = on(`${P}EquipmentConnectsEquip`);
+            return {
+                [end + 'EquipmentFdp']: fdpOn ? val(`${P}EquipmentFdpSelect`) : '',
+                [end + 'EquipmentFdpPorts']: fdpOn ? multi(`${P}EquipmentFdpPortsSelect`) : '',
+                [end + 'Equipment2']: xOn ? val(`${P}Equipment2Select`) : '',
+                [end + 'Equipment2Port']: xOn ? multi(`${P}Equipment2PortSelect`) : ''
+            };
+        }
+
         async function generateVlanSectionHTML(vlanNum) {
             // Get sites for dropdowns
             const sites = await store.getSites();
@@ -7825,6 +7969,7 @@
                         </select>
                         <small style="color: var(--text-tertiary); font-size: 0.85rem;">Hold Ctrl/Cmd to select multiple</small>
                     </div>
+                    ${vlanEquipmentAddonsHTML(vlanNum, 'a')}
                 </div>
                 
                 <div id="vlan${vlanNum}_ANniFields" style="display: none;">
@@ -7930,6 +8075,7 @@
                         </select>
                         <small style="color: var(--text-tertiary); font-size: 0.85rem;">Hold Ctrl/Cmd to select multiple</small>
                     </div>
+                    ${vlanEquipmentAddonsHTML(vlanNum, 'z')}
                 </div>
                 
                 <div id="vlan${vlanNum}_ZNniFields" style="display: none;">
@@ -8113,6 +8259,7 @@
                     nniSelect.appendChild(option);
                 });
             }
+            mirrorVlanAddonDropdowns(vlanNum, end);
         }
         
         // Update FDP ports for VLAN section
@@ -8184,28 +8331,8 @@
             }
             
             const [circuits, nnis] = await Promise.all([store.getCircuits(), store.getNnis()]);
-            const usedPorts = new Set();
-            
-            // Check circuits
-            circuits.forEach(circuit => {
-                if (circuit.aEquipment === selectedEquipmentId && circuit.aEquipmentPort) {
-                    circuit.aEquipmentPort.split(',').forEach(p => usedPorts.add(p.trim()));
-                }
-                if (circuit.zEquipment === selectedEquipmentId && circuit.zEquipmentPort) {
-                    circuit.zEquipmentPort.split(',').forEach(p => usedPorts.add(p.trim()));
-                }
-            });
-            
-            // Check NNIs
-            nnis.forEach(nni => {
-                if (nni.equipmentID === selectedEquipmentId && nni.equipmentPorts) {
-                    nni.equipmentPorts.split(',').forEach(p => {
-                        const match = p.trim().match(/Port\s+(\d+)/i);
-                        if (match) usedPorts.add(match[1]);
-                    });
-                }
-            });
-            
+            const usedPorts = collectEquipmentUsedPorts(selectedEquipmentId, circuits, nnis, (typeof editingCircuitId !== 'undefined' && editingCircuitId) || null);
+
             const portSegments = selectedEquipment.portConfig.split(',');
             let currentPort = 1;
             
@@ -8398,31 +8525,8 @@
             const [circuits, nnis] = await Promise.all([store.getCircuits(), store.getNnis()]);
             
             // Track used ports
-            const usedPorts = new Set();
-            
-            // Check circuits
-            circuits.forEach(circuit => {
-                if (circuit.aEquipment === selectedEquipmentId && circuit.aEquipmentPort) {
-                    circuit.aEquipmentPort.split(',').forEach(p => usedPorts.add(p.trim()));
-                }
-                if (circuit.zEquipment === selectedEquipmentId && circuit.zEquipmentPort) {
-                    circuit.zEquipmentPort.split(',').forEach(p => usedPorts.add(p.trim()));
-                }
-            });
-            
-            // Check NNIs
-            nnis.forEach(nni => {
-                if (nni.equipmentID === selectedEquipmentId && nni.equipmentPorts) {
-                    // Parse "Port 46 (100G)" format
-                    nni.equipmentPorts.split(',').forEach(p => {
-                        const trimmed = p.trim();
-                        const match = trimmed.match(/Port\s+(\d+)/i);
-                        if (match) usedPorts.add(match[1]);
-                        else usedPorts.add(trimmed);
-                    });
-                }
-            });
-            
+            const usedPorts = collectEquipmentUsedPorts(selectedEquipmentId, circuits, nnis, (typeof editingCircuitId !== 'undefined' && editingCircuitId) || null);
+
             // Parse port configuration - handle formats like "48x 1G/10G, 4x 100G"
             const portSegments = selectedEquipment.portConfig.split(',');
             let currentPort = 1;
@@ -8536,53 +8640,86 @@
             }
         }
         
-        // Canonical FDP port consumption: every letter column A-N and Z, both direct-FDP and
-        // equipment-FDP families, plus NNIs. Excludes the circuit currently being edited.
+        // CANONICAL per-location connection reader — every FDP / equipment slot a circuit occupies:
+        //  - VLAN 1 A/Z + intermediate B-N letter columns. B-N values may be per-VLAN encoded
+        //    ("v1=x|v2=y"), so they are decoded here (a raw === compare missed them).
+        //  - VLAN 2+ A/Z ends, which live ONLY in the circuitVlans JSON (no letter columns).
+        // Each slot: {kind:'fdp'|'equipment', role:'fdp'|'equipmentFdp'|'equipment'|'equipment2', id, ports, letter, vlan}.
+        // Memoized per circuit object (store objects are replaced, not mutated, on reload/save).
+        const CONN_LETTERS = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'z'];
+        const CONN_FAMILIES = [
+            ['fdp', 'fdp', 'Fdp', 'Port'], ['fdp', 'equipmentFdp', 'EquipmentFdp', 'EquipmentFdpPorts'],
+            ['equipment', 'equipment', 'Equipment', 'EquipmentPort'], ['equipment', 'equipment2', 'Equipment2', 'Equipment2Port']
+        ];
+        const _circuitConnCache = new WeakMap();
+        function circuitConnections(c) {
+            if (!c || typeof c !== 'object') return [];
+            const hit = _circuitConnCache.get(c);
+            if (hit) return hit;
+            const out = [];
+            const vlans = (typeof c.circuitVlans === 'string' || Array.isArray(c.circuitVlans)) ? (Array.isArray(c.circuitVlans) ? c.circuitVlans : (safeParseJson(c.circuitVlans, []) || [])) : [];
+            const vc = parseInt(c.vlanCount, 10) || vlans.length || 1;
+            CONN_LETTERS.forEach(l => {
+                CONN_FAMILIES.forEach(([kind, role, idCol, portCol]) => {
+                    const rawId = c[l + idCol];
+                    if (!rawId) return;
+                    if (l === 'a' || l === 'z') { out.push({ kind, role, id: String(rawId), ports: String(c[l + portCol] || ''), letter: l, vlan: 1 }); return; }
+                    const ids = parseDelimitedPerVlan(rawId, vc), ports = parseDelimitedPerVlan(c[l + portCol], vc);
+                    Object.keys(ids).forEach(v => { if (ids[v]) out.push({ kind, role, id: ids[v], ports: ports[v] || '', letter: l, vlan: parseInt(v, 10) }); });
+                });
+            });
+            vlans.forEach((v, i) => {
+                if (i === 0 || !v || typeof v !== 'object') return;   // VLAN 1 == the A/Z columns above
+                ['a', 'z'].forEach(l => CONN_FAMILIES.forEach(([kind, role, idCol, portCol]) => {
+                    if (v[l + idCol]) out.push({ kind, role, id: String(v[l + idCol]), ports: String(v[l + portCol] || ''), letter: l, vlan: i + 1 });
+                }));
+            });
+            _circuitConnCache.set(c, out);
+            return out;
+        }
+        const _splitPorts = s => String(s || '').split(',').map(x => x.trim()).filter(Boolean);
+        function circuitUsesEquipment(c, equipId) {
+            return !!equipId && (circuitConnections(c).some(s => s.kind === 'equipment' && s.id === equipId) || c.cpeEquipmentId === equipId);
+        }
+
+        // Canonical FDP port consumption: every location slot (circuitConnections — A-N + Z letter
+        // columns, per-VLAN decoded, + VLAN 2+ ends), both direct-FDP and equipment-FDP, plus NNIs.
+        // Excludes the circuit currently being edited unless includeSelf.
         function collectFdpUsedPorts(fdpId, circuits, nnis, includeSelf) {
             const used = new Set();
             const selfId = includeSelf ? null : ((typeof editingCircuitId !== 'undefined' && editingCircuitId) || null);
-            const letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'z'];
-            const usedAdd = x => { const t = String(x).trim(); if (t) used.add(t); };
             circuits.forEach(c => {
                 if (selfId && c.id === selfId) return;
-                letters.forEach(l => {
-                    if (c[l + 'Fdp'] === fdpId && c[l + 'Port']) String(c[l + 'Port']).split(',').forEach(usedAdd);
-                    if (c[l + 'EquipmentFdp'] === fdpId && c[l + 'EquipmentFdpPorts']) String(c[l + 'EquipmentFdpPorts']).split(',').forEach(usedAdd);
-                });
+                circuitConnections(c).forEach(s => { if (s.kind === 'fdp' && s.id === fdpId) _splitPorts(s.ports).forEach(p => used.add(p)); });
             });
-            nnis.forEach(n => { if (n.fdpId === fdpId && n.fdpPorts) String(n.fdpPorts).split(',').forEach(usedAdd); });
+            nnis.forEach(n => { if (n.fdpId === fdpId && n.fdpPorts) _splitPorts(n.fdpPorts).forEach(p => used.add(p)); });
             return used;
         }
         
-        // True if a circuit consumes this FDP anywhere: A/Z terminations, B-N intermediates, or equipment-FDP connections
+        // True if a circuit consumes this FDP anywhere: A/Z terminations, B-N intermediates, equipment-FDP connections, any VLAN
         function circuitUsesFdp(c, fdpId) {
-            const letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'z'];
-            return letters.some(l => c[l + 'Fdp'] === fdpId || c[l + 'EquipmentFdp'] === fdpId);
+            return circuitConnections(c).some(s => s.kind === 'fdp' && s.id === fdpId);
         }
 
-        // Distinct port identifiers a circuit occupies on ONE specific FDP (direct + equipment-FDP, all letters A-N + Z)
+        // Distinct port identifiers a circuit occupies on ONE specific FDP (direct + equipment-FDP, every location + VLAN)
         function circuitPortsOnFdp(c, fdpId) {
-            const letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'z'];
             const ports = [];
-            letters.forEach(l => {
-                if (c[l + 'Fdp'] === fdpId && c[l + 'Port']) String(c[l + 'Port']).split(',').forEach(p => { const t = p.trim(); if (t) ports.push(t); });
-                if (c[l + 'EquipmentFdp'] === fdpId && c[l + 'EquipmentFdpPorts']) String(c[l + 'EquipmentFdpPorts']).split(',').forEach(p => { const t = p.trim(); if (t) ports.push(t); });
-            });
+            circuitConnections(c).forEach(s => { if (s.kind === 'fdp' && s.id === fdpId) ports.push(..._splitPorts(s.ports)); });
             return [...new Set(ports)].join(', ');
         }
 
-        // Canonical distinct equipment-port usage: {l}Equipment ports (A-N + Z) + NNI equipmentPorts.
+        // Canonical distinct equipment-port usage: every equipment slot (primary {l}Equipment AND the
+        // cross-connect {l}Equipment2, every location + VLAN via circuitConnections) + NNI equipmentPorts.
         // Normalizes "Port 46 (100G)" -> "46" so it matches how ports are stored/compared.
-        function collectEquipmentUsedPorts(equipId, circuits, nnis) {
+        // excludeCircuitId (form pickers only): skip the circuit being edited so its own ports stay selectable.
+        function collectEquipmentUsedPorts(equipId, circuits, nnis, excludeCircuitId) {
             const used = new Set();
-            const letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'z'];
             const norm = p => { const t = String(p).trim(); const m = t.match(/Port\s+(\d+)/i); return m ? m[1] : t; };
             const add = s => String(s).split(',').forEach(p => { const t = norm(p); if (t) used.add(t); });
-            circuits.forEach(c => letters.forEach(l => {
-                if (c[l + 'Equipment'] === equipId && c[l + 'EquipmentPort']) add(c[l + 'EquipmentPort']);
-                // second (cross-connect) device at a location — {l}Equipment2 / {l}Equipment2Port
-                if (c[l + 'Equipment2'] === equipId && c[l + 'Equipment2Port']) add(c[l + 'Equipment2Port']);
-            }));
+            circuits.forEach(c => {
+                if (excludeCircuitId && c.id === excludeCircuitId) return;
+                circuitConnections(c).forEach(s => { if (s.kind === 'equipment' && s.id === equipId && s.ports) add(s.ports); });
+            });
             nnis.forEach(n => { if (n.equipmentID === equipId && n.equipmentPorts) add(n.equipmentPorts); });
             return used;
         }
@@ -8592,15 +8729,7 @@
         function fdpAvailabilityLabel(fdp, circuits, nnis) {
             const total = parseInt(fdp.portCount || fdp.numPorts, 10) || 0;
             if (!total) return '';
-            const selfId = (typeof editingCircuitId !== 'undefined' && editingCircuitId) || null;
-            const used = new Set();
-            circuits.forEach(c => {
-                if (selfId && c.id === selfId) return;
-                [].concat.apply([], ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'z'].map(function(l) { return [[l + 'Fdp', l + 'Port'], [l + 'EquipmentFdp', l + 'EquipmentFdpPorts']]; })).forEach(pair => {
-                    if (c[pair[0]] === fdp.id && c[pair[1]]) String(c[pair[1]]).split(',').forEach(x => used.add(x.trim()));
-                });
-            });
-            nnis.forEach(n => { if (n.fdpId === fdp.id && n.fdpPorts) String(n.fdpPorts).split(',').forEach(x => used.add(x.trim())); });
+            const used = collectFdpUsedPorts(fdp.id, circuits, nnis);
             return ' (' + Math.max(0, total - used.size) + ' of ' + total + ' available)';
         }
         
@@ -8616,15 +8745,7 @@
             const selectedFdp = fdps.find(f => f.id === selectedFdpId);
             if (!selectedFdp) { portSelect.innerHTML = '<option value="">FDP not found</option>'; return; }
             const [circuits, nnis] = await Promise.all([store.getCircuits(), store.getNnis()]);
-            const usedPorts = new Set();
-            const _selfId = (typeof editingCircuitId !== 'undefined' && editingCircuitId) || null;
-            circuits.forEach(c => {
-                if (_selfId && c.id === _selfId) return;
-                [].concat.apply([], ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'z'].map(function(l) { return [[l + 'Fdp', l + 'Port'], [l + 'EquipmentFdp', l + 'EquipmentFdpPorts']]; })).forEach(pair => {
-                    if (c[pair[0]] === selectedFdpId && c[pair[1]]) String(c[pair[1]]).split(',').forEach(x => usedPorts.add(x.trim()));
-                });
-            });
-            nnis.forEach(nni => { if (nni.fdpId === selectedFdpId && nni.fdpPorts) nni.fdpPorts.split(',').forEach(p => usedPorts.add(p.trim())); });
+            const usedPorts = collectFdpUsedPorts(selectedFdpId, circuits, nnis);
             const portCount = selectedFdp.portCount || selectedFdp.numPorts || 24;
             for (let i = 1; i <= portCount; i++) {
                 const portNum = i.toString();
@@ -8685,7 +8806,7 @@
             const selectedEquipment = equipment.find(e => e.id === selectedEquipmentId);
             if (!selectedEquipment || !selectedEquipment.portConfig) { portSelect.innerHTML = '<option value="">No port configuration for this equipment</option>'; return; }
             const [circuits, nnis] = await Promise.all([store.getCircuits(), store.getNnis()]);
-            const usedPorts = collectEquipmentUsedPorts(selectedEquipmentId, circuits, nnis);
+            const usedPorts = collectEquipmentUsedPorts(selectedEquipmentId, circuits, nnis, (typeof editingCircuitId !== 'undefined' && editingCircuitId) || null);
             const portSegments = selectedEquipment.portConfig.split(',');
             let currentPort = 1;
             portSegments.forEach(segment => {
@@ -9305,6 +9426,8 @@
                                 }
                             }
                             
+                            await loadVlanEquipmentAddons(i, 'a', vlan);
+
                             const aNniSelect = document.getElementById(`vlan${i}_ANniSelect`);
                             if (aNniSelect && vlan.aNni) aNniSelect.value = vlan.aNni;
                             const aNniSubintInput = document.getElementById(`vlan${i}_ANniSubinterface`);
@@ -9354,6 +9477,8 @@
                                 }
                             }
                             
+                            await loadVlanEquipmentAddons(i, 'z', vlan);
+
                             const zNniSelect = document.getElementById(`vlan${i}_ZNniSelect`);
                             if (zNniSelect && vlan.zNni) zNniSelect.value = vlan.zNni;
                             const zNniSubintInput = document.getElementById(`vlan${i}_ZNniSubinterface`);
@@ -9963,10 +10088,11 @@
                 aPort: aFdpPorts || '',
                 aEquipment: formData.get('aEquipment') || '',
                 aEquipmentPort: aEquipmentPorts || '',
-                aEquipmentFdp: formData.get('aEquipmentFdp') || '',
-                aEquipmentFdpPorts: (function() { const s = document.getElementById('aEquipmentFdpPortsSelect'); return s ? Array.from(s.selectedOptions).map(o => o.value).filter(Boolean).join(',') : (formData.get('aEquipmentFdpPorts') || ''); })(),
-                aEquipment2: formData.get('aEquipment2') || '',
-                aEquipment2Port: (function() { const s = document.getElementById('aEquipment2PortSelect'); return s ? Array.from(s.selectedOptions).map(o => o.value).filter(Boolean).join(',') : (formData.get('aEquipment2Port') || ''); })(),
+                // Add-ons save only while their checkbox is ticked — unticking clears them (was: kept a stale FDP/2nd device)
+                aEquipmentFdp: document.getElementById('aEquipmentConnectsFdp')?.checked === false ? '' : (formData.get('aEquipmentFdp') || ''),
+                aEquipmentFdpPorts: document.getElementById('aEquipmentConnectsFdp')?.checked === false ? '' : (function() { const s = document.getElementById('aEquipmentFdpPortsSelect'); return s ? Array.from(s.selectedOptions).map(o => o.value).filter(Boolean).join(',') : (formData.get('aEquipmentFdpPorts') || ''); })(),
+                aEquipment2: document.getElementById('aEquipmentConnectsEquip')?.checked === false ? '' : (formData.get('aEquipment2') || ''),
+                aEquipment2Port: document.getElementById('aEquipmentConnectsEquip')?.checked === false ? '' : (function() { const s = document.getElementById('aEquipment2PortSelect'); return s ? Array.from(s.selectedOptions).map(o => o.value).filter(Boolean).join(',') : (formData.get('aEquipment2Port') || ''); })(),
                 aNni: formData.get('aNni') || '',
                 aNniSubinterface: formData.get('aNniSubinterface') || '',
                 
@@ -9977,10 +10103,11 @@
                 zPort: zFdpPorts || '',
                 zEquipment: formData.get('zEquipment') || '',
                 zEquipmentPort: zEquipmentPorts || '',
-                zEquipmentFdp: formData.get('zEquipmentFdp') || '',
-                zEquipmentFdpPorts: (function() { const s = document.getElementById('zEquipmentFdpPortsSelect'); return s ? Array.from(s.selectedOptions).map(o => o.value).filter(Boolean).join(',') : (formData.get('zEquipmentFdpPorts') || ''); })(),
-                zEquipment2: formData.get('zEquipment2') || '',
-                zEquipment2Port: (function() { const s = document.getElementById('zEquipment2PortSelect'); return s ? Array.from(s.selectedOptions).map(o => o.value).filter(Boolean).join(',') : (formData.get('zEquipment2Port') || ''); })(),
+                // Add-ons save only while their checkbox is ticked — unticking clears them (was: kept a stale FDP/2nd device)
+                zEquipmentFdp: document.getElementById('zEquipmentConnectsFdp')?.checked === false ? '' : (formData.get('zEquipmentFdp') || ''),
+                zEquipmentFdpPorts: document.getElementById('zEquipmentConnectsFdp')?.checked === false ? '' : (function() { const s = document.getElementById('zEquipmentFdpPortsSelect'); return s ? Array.from(s.selectedOptions).map(o => o.value).filter(Boolean).join(',') : (formData.get('zEquipmentFdpPorts') || ''); })(),
+                zEquipment2: document.getElementById('zEquipmentConnectsEquip')?.checked === false ? '' : (formData.get('zEquipment2') || ''),
+                zEquipment2Port: document.getElementById('zEquipmentConnectsEquip')?.checked === false ? '' : (function() { const s = document.getElementById('zEquipment2PortSelect'); return s ? Array.from(s.selectedOptions).map(o => o.value).filter(Boolean).join(',') : (formData.get('zEquipment2Port') || ''); })(),
                 zNni: formData.get('zNni') || '',
                 zNniSubinterface: formData.get('zNniSubinterface') || '',
                 
@@ -10019,6 +10146,8 @@
                 aPort: circuit.aPort,
                 aEquipment: circuit.aEquipment,
                 aEquipmentPort: circuit.aEquipmentPort,
+                aEquipmentFdp: circuit.aEquipmentFdp, aEquipmentFdpPorts: circuit.aEquipmentFdpPorts,
+                aEquipment2: circuit.aEquipment2, aEquipment2Port: circuit.aEquipment2Port,
                 aNni: circuit.aNni,
                 aNniSubinterface: circuit.aNniSubinterface,
                 zLocationSiteId: circuit.zLocationSiteId,
@@ -10027,6 +10156,8 @@
                 zPort: circuit.zPort,
                 zEquipment: circuit.zEquipment,
                 zEquipmentPort: circuit.zEquipmentPort,
+                zEquipmentFdp: circuit.zEquipmentFdp, zEquipmentFdpPorts: circuit.zEquipmentFdpPorts,
+                zEquipment2: circuit.zEquipment2, zEquipment2Port: circuit.zEquipment2Port,
                 zNni: circuit.zNni,
                 zNniSubinterface: circuit.zNniSubinterface
             };
@@ -10054,6 +10185,7 @@
                     aPort: vlanAFdpPorts || '',
                     aEquipment: formData.get(`vlan${i}_aEquipment`) || '',
                     aEquipmentPort: vlanAEquipPorts || '',
+                    ...readVlanEquipmentAddons(i, 'a'),
                     aNni: formData.get(`vlan${i}_aNni`) || '',
                     aNniSubinterface: formData.get(`vlan${i}_aNniSubinterface`) || '',
                     zLocationSiteId: formData.get(`vlan${i}_zLocationSiteId`) || '',
@@ -10062,6 +10194,7 @@
                     zPort: vlanZFdpPorts || '',
                     zEquipment: formData.get(`vlan${i}_zEquipment`) || '',
                     zEquipmentPort: vlanZEquipPorts || '',
+                    ...readVlanEquipmentAddons(i, 'z'),
                     zNni: formData.get(`vlan${i}_zNni`) || '',
                     zNniSubinterface: formData.get(`vlan${i}_zNniSubinterface`) || ''
                 };
@@ -11734,14 +11867,13 @@
 
             // Roll up everything that lives in or touches this rack (hierarchy bleeds up & down):
             // FDPs by rackId; circuits touching any of the rack's FDPs (a-n+z via circuitUsesFdp) or
-            // equipment (a-n+z {l}Equipment + cpeEquipmentId); NNIs by their equipment/FDP.
+            // equipment (every slot via circuitConnections + cpeEquipmentId); NNIs by their equipment/FDP.
             const rackFdps = allFdps.filter(f => f.rackId === rackId);
             const rackEqIds = new Set(equipment.map(e => e.id));
             const rackFdpIds = new Set(rackFdps.map(f => f.id));
-            const _rackLetters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'z'];
             const rackCircuits = allCircuits.filter(c =>
                 [...rackFdpIds].some(fid => circuitUsesFdp(c, fid)) ||
-                _rackLetters.some(l => rackEqIds.has(c[l + 'Equipment'])) ||
+                circuitConnections(c).some(s => s.kind === 'equipment' && rackEqIds.has(s.id)) ||
                 rackEqIds.has(c.cpeEquipmentId)
             );
             const rackNnis = allNnis.filter(n => rackEqIds.has(n.equipmentID) || rackFdpIds.has(n.fdpId));
@@ -12361,12 +12493,31 @@
                 // ---- native path from inventory (post NNI->equipment linking) ----
                 const nativeLines = [];
                 let hasA = false, hasZ = false, hasMeet = false;   // ends/meetpoint resolved => native path is authoritative
+                // A/Z FDP + equipment (+ the equipment's FDP and cross-connect 2nd device). VLAN 1's older saves
+                // keep the add-ons only in the top-level columns, so fall back to them for i === 0.
+                // Line order follows the path: A side FDP → equipment → 2nd device; Z side mirrors it.
+                const endVal = k => (vlan && vlan[k]) || (i === 0 ? circuit[k] : '') || '';
+                const endLines = end => {
+                    const ct = endVal(end + 'ConnectionType');
+                    const eqLine = (id, ports) => { const e = id && allEquipment?.find(x => x.id === id); return e ? `${e.name} ${ports || ''}`.trim() : ''; };
+                    const fdpLine = (id, ports) => { const f = id && allFdps?.find(x => x.id === id); return f ? `${f.name || id} FDP ${ports || ''}`.trim() : ''; };
+                    let out = [];
+                    if (ct === 'fdp') out = [fdpLine(endVal(end + 'Fdp'), endVal(end + 'Port'))];
+                    else if (ct === 'equipment') out = [fdpLine(endVal(end + 'EquipmentFdp'), endVal(end + 'EquipmentFdpPorts')),
+                                                       eqLine(endVal(end + 'Equipment'), endVal(end + 'EquipmentPort')),
+                                                       eqLine(endVal(end + 'Equipment2'), endVal(end + 'Equipment2Port'))];
+                    out = out.filter(Boolean);
+                    return end === 'z' ? out.reverse() : out;
+                };
                 const aNniRec = findNniRec(vlan.aNni);
                 const aEq = eqOf(aNniRec);
                 if (aEq && aNniRec.equipmentPorts) {
                     const aSub = vlan.aNniSubinterface ? `.${vlan.aNniSubinterface}` : '';
                     nativeLines.push(`${aEq.name} ${dlrPort(aNniRec.equipmentPorts)}${aSub} (Collector NNI: ${aNniRec.name || vlan.aNni})`);
                     hasA = true;
+                } else {
+                    const aLines = endLines('a');
+                    if (aLines.length) { nativeLines.push(...aLines); hasA = true; }
                 }
                 // ---- B-N intermediate hops (incl. Type-II meetpoint) ----
                 // These live in the circuit's per-position columns (bLocationSiteId/bConnectionType/
@@ -12388,7 +12539,11 @@
                         hasMeet = true;
                     } else if (ct === 'equipment') {
                         const eq = allEquipment?.find(e => e.id === _wp(lo + 'Equipment'));
+                        const eqFdp = _wp(lo + 'EquipmentFdp') && allFdps?.find(f => f.id === _wp(lo + 'EquipmentFdp'));
+                        const eq2 = _wp(lo + 'Equipment2') && allEquipment?.find(e => e.id === _wp(lo + 'Equipment2'));
                         if (eq) { nativeLines.push(`${eq.name} ${_wp(lo + 'EquipmentPort')}`.trim()); hasMeet = true; }
+                        if (eqFdp) nativeLines.push(`${eqFdp.name || _wp(lo + 'EquipmentFdp')} FDP ${_wp(lo + 'EquipmentFdpPorts')}`.trim());
+                        if (eq2) nativeLines.push(`${eq2.name} ${_wp(lo + 'Equipment2Port')}`.trim());
                     } else if (ct === 'fdp') {
                         const fdp = allFdps?.find(f => f.id === _wp(lo + 'Fdp'));
                         nativeLines.push(`${(fdp && fdp.name) || _wp(lo + 'Fdp')} FDP ${_wp(lo + 'Port')}`.trim());
@@ -12405,6 +12560,9 @@
                 } else if ((vlan.zConnectionType || circuit.zConnectionType) === 'cpe') {
                     nativeLines.push('CPE');
                     hasZ = true;
+                } else {
+                    const zLines = endLines('z');
+                    if (zLines.length) { nativeLines.push(...zLines); hasZ = true; }
                 }
 
                 // ---- choose the narrative ----
@@ -12488,9 +12646,21 @@
             const aFdpRack = aFdp?.rackId ? allRacks.find(r => r.id === aFdp.rackId) : null;
             const zFdpRack = zFdp?.rackId ? allRacks.find(r => r.id === zFdp.rackId) : null;
             
+            // Extra devices at a location beyond its main NNI/FDP: direct equipment, the FDP that equipment
+            // patches to, and the cross-connect 2nd device. VLAN 1 falls back to the top-level columns.
+            const _eqName = id => { const e = id && allEquipment.find(x => x.id === id); return e ? e.name : (id || ''); };
+            const _fdpName = id => { const f = id && allFdps.find(x => x.id === id); return f ? f.name : (id || ''); };
+            const _extras = (get, ct) => {
+                const x = [];
+                if (ct === 'equipment' && get('Equipment')) x.push({ label: 'EQUIPMENT', text: _eqName(get('Equipment')) + (get('EquipmentPort') ? ' Port ' + get('EquipmentPort') : '') });
+                if (get('EquipmentFdp')) x.push({ label: 'FDP (from equipment)', text: _fdpName(get('EquipmentFdp')) + (get('EquipmentFdpPorts') ? ' Port ' + get('EquipmentFdpPorts') : '') });
+                if (get('Equipment2')) x.push({ label: 'CROSS-CONNECT EQUIPMENT', text: _eqName(get('Equipment2')) + (get('Equipment2Port') ? ' Port ' + get('Equipment2Port') : '') });
+                return x;
+            };
+            const _endGet = end => k => (vlan[end + k]) || (vlanIndex === 1 && circuit ? circuit[end + k] : '') || '';
             // Build path steps: A → (B-N intermediates) → Z
             const pathSteps = [
-                { label: 'A', site: aSite, connectionType: vlan.aConnectionType || (aNni ? 'nni' : 'fdp'), nni: aNni, fdp: aFdp, equipment: aNniEquipment, rack: aFdpRack, port: vlan.aPort, subinterface: vlan.aNniSubinterface }
+                { label: 'A', site: aSite, connectionType: vlan.aConnectionType || (aNni ? 'nni' : 'fdp'), nni: aNni, fdp: aFdp, equipment: aNniEquipment, rack: aFdpRack, port: vlan.aPort, subinterface: vlan.aNniSubinterface, extras: _extras(_endGet('a'), vlan.aConnectionType) }
             ];
             
             // Pull B-N intermediates from delimited columns (this VLAN's data)
@@ -12510,6 +12680,7 @@
                     const fdpMap = parseDelimitedPerVlan(circuit[`${lo}Fdp`], vlanIndex);
                     const portMap = parseDelimitedPerVlan(circuit[`${lo}Port`], vlanIndex);
                     const nniRawMap = parseDelimitedPerVlan(circuit[`${lo}Nni`], vlanIndex);
+                    const _stepGet = k => (parseDelimitedPerVlan(circuit[`${lo}${k}`], vlanIndex)[vlanIndex]) || '';
                     
                     const stepSite = allSites.find(s => s.id === siteId);
                     const nniRaw = nniRawMap[vlanIndex] || '';
@@ -12532,13 +12703,14 @@
                         equipment: stepEquipDirect || stepEquipViaNni,
                         rack: stepFdp?.rackId ? allRacks.find(r => r.id === stepFdp.rackId) : null,
                         port: portMap[vlanIndex] || eqPortMap[vlanIndex] || '',
-                        subinterface: nniSub || ''
+                        subinterface: nniSub || '',
+                        extras: _extras(_stepGet, ctMap[vlanIndex] || (stepEquipDirect ? 'equipment' : ''))
                     });
                 }
             }
             
             pathSteps.push(
-                { label: 'Z', site: zSite, connectionType: vlan.zConnectionType || (zNni ? 'nni' : 'fdp'), nni: zNni, fdp: zFdp, equipment: zNniEquipment, rack: zFdpRack, port: vlan.zPort, subinterface: vlan.zNniSubinterface }
+                { label: 'Z', site: zSite, connectionType: vlan.zConnectionType || (zNni ? 'nni' : 'fdp'), nni: zNni, fdp: zFdp, equipment: zNniEquipment, rack: zFdpRack, port: vlan.zPort, subinterface: vlan.zNniSubinterface, extras: _extras(_endGet('z'), vlan.zConnectionType) }
             );
             
             return `
@@ -12579,7 +12751,12 @@
                                             ${step.fdp.connectorType ? `<div style="font-size: 0.75rem; color: var(--text-secondary);">Connector: <span style="color: var(--text-primary);">${step.fdp.connectorType}</span></div>` : ''}
                                             ${step.rack ? `<div style="font-size: 0.75rem; color: var(--text-secondary);">Rack: <span style="color: var(--text-primary);">${step.rack.name}</span></div>` : ''}
                                         </div>
-                                    ` : `<div style="border-top: 1px solid var(--border-color); padding-top: 0.75rem; margin-top: 0.75rem;"><div style="color: var(--text-tertiary); font-size: 0.85rem;">Connection not specified</div></div>`}
+                                    ` : ((step.extras && step.extras.length) ? '' : `<div style="border-top: 1px solid var(--border-color); padding-top: 0.75rem; margin-top: 0.75rem;"><div style="color: var(--text-tertiary); font-size: 0.85rem;">Connection not specified</div></div>`)}
+                                    ${(step.extras || []).map(x => `
+                                        <div style="border-top: 1px solid var(--border-color); padding-top: 0.75rem; margin-top: 0.75rem;">
+                                            <div style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.25rem;">${x.label}</div>
+                                            <div style="font-family: 'JetBrains Mono', monospace; color: var(--accent-primary); font-weight: 600; font-size: 0.9rem;">${String(x.text).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))}</div>
+                                        </div>`).join('')}
                                 </div>
                             </div>
                         </div>
@@ -12867,21 +13044,14 @@
             
             circuits.forEach(circuit => {
                 const parsePorts = (portString) => portString ? portString.split(',').map(p => p.trim()).filter(p => p) : [];
-                // Every letter column A-N + Z, both direct-FDP terminations and equipment-to-FDP connections
-                ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'z'].forEach(l => {
-                    const L = l.toUpperCase();
-                    if (circuit[l + 'Fdp'] === fdpId) {
-                        parsePorts(circuit[l + 'Port']).forEach(port => {
-                            if (!portCircuits[port]) portCircuits[port] = [];
-                            portCircuits[port].push({ circuitId: circuit.circuitId, id: circuit.id, location: L, type: circuit.type, direction: circuit.direction });
-                        });
-                    }
-                    if (circuit[l + 'EquipmentFdp'] === fdpId) {
-                        parsePorts(circuit[l + 'EquipmentFdpPorts']).forEach(port => {
-                            if (!portCircuits[port]) portCircuits[port] = [];
-                            portCircuits[port].push({ circuitId: circuit.circuitId, id: circuit.id, location: L + ' (via Equipment)', type: circuit.type, direction: circuit.direction });
-                        });
-                    }
+                // Every location slot (circuitConnections: A-N + Z, every VLAN), direct-FDP and equipment-to-FDP
+                circuitConnections(circuit).forEach(s => {
+                    if (s.kind !== 'fdp' || s.id !== fdpId) return;
+                    const location = s.letter.toUpperCase() + (s.role === 'equipmentFdp' ? ' (via Equipment)' : '') + (s.vlan > 1 ? ` · VLAN ${s.vlan}` : '');
+                    parsePorts(s.ports).forEach(port => {
+                        if (!portCircuits[port]) portCircuits[port] = [];
+                        portCircuits[port].push({ circuitId: circuit.circuitId, id: circuit.id, location, type: circuit.type, direction: circuit.direction });
+                    });
                 });
             });
             
@@ -13135,11 +13305,9 @@
         async function showPortCircuits(fdpId, portNum) {
             const [circuits, nnis] = await Promise.all([store.getCircuits(), store.getNnis()]);
             const parsePorts = (s) => s ? String(s).split(',').map(p => p.trim()).filter(Boolean) : [];
-            const letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'z'];
-            // Match every letter end A-N + Z, direct-FDP AND equipment-FDP (same coverage as the port map)
-            const matches = circuits.filter(c => letters.some(l =>
-                (c[l + 'Fdp'] === fdpId && parsePorts(c[l + 'Port']).includes(portNum)) ||
-                (c[l + 'EquipmentFdp'] === fdpId && parsePorts(c[l + 'EquipmentFdpPorts']).includes(portNum))
+            // Every location slot, direct-FDP AND equipment-FDP, every VLAN (same coverage as the port map)
+            const matches = circuits.filter(c => circuitConnections(c).some(s =>
+                s.kind === 'fdp' && s.id === fdpId && parsePorts(s.ports).includes(portNum)
             ));
 
             if (matches.length === 0) {
@@ -13194,14 +13362,14 @@
             const portCircuits = {};
             circuits.forEach(circuit => {
                 const parsePorts = (portString) => portString ? portString.split(',').map(p => p.trim()).filter(p => p) : [];
-                // Every letter column A-N + Z holds an equipment id + its ports
-                ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'z'].forEach(l => {
-                    if (circuit[l + 'Equipment'] === equipmentId) {
-                        parsePorts(circuit[l + 'EquipmentPort']).forEach(port => {
-                            if (!portCircuits[port]) portCircuits[port] = [];
-                            portCircuits[port].push({ circuitId: circuit.circuitId, id: circuit.id, location: l.toUpperCase(), type: circuit.type, direction: circuit.direction });
-                        });
-                    }
+                // Every equipment slot (primary + cross-connect 2nd device, A-N + Z, every VLAN)
+                circuitConnections(circuit).forEach(s => {
+                    if (s.kind !== 'equipment' || s.id !== equipmentId) return;
+                    const location = s.letter.toUpperCase() + (s.role === 'equipment2' ? ' (cross-connect)' : '') + (s.vlan > 1 ? ` · VLAN ${s.vlan}` : '');
+                    parsePorts(s.ports).forEach(port => {
+                        if (!portCircuits[port]) portCircuits[port] = [];
+                        portCircuits[port].push({ circuitId: circuit.circuitId, id: circuit.id, location, type: circuit.type, direction: circuit.direction });
+                    });
                 });
             });
             
@@ -14811,10 +14979,10 @@ ${entityActionButtons('nni', `${n.id}`, true)}
             const sites = new Set(), equipment = new Set(), fdps = new Set(), nnis = new Set(), routes = new Set();
             CIRCUIT_PATH_LETTERS.forEach(l => {
                 if (c[l + 'LocationSiteId']) sites.add(c[l + 'LocationSiteId']);
-                if (c[l + 'Equipment']) equipment.add(c[l + 'Equipment']);
                 if (c[l + 'Nni']) nnis.add(c[l + 'Nni']);
-                [c[l + 'Fdp'], c[l + 'EquipmentFdp']].forEach(f => { if (f) fdps.add(f); });
             });
+            // equipment (primary + cross-connect) and FDPs (direct + equipment-FDP) at every location + VLAN
+            circuitConnections(c).forEach(s => (s.kind === 'equipment' ? equipment : fdps).add(s.id));
             if (c.cpeEquipmentId) equipment.add(c.cpeEquipmentId);
             if (fdpToRoutes) fdps.forEach(f => (fdpToRoutes[f] || []).forEach(r => routes.add(r)));
             return { sites, equipment, fdps, nnis, routes };
@@ -14946,7 +15114,7 @@ ${entityActionButtons('nni', `${n.id}`, true)}
             const L = CIRCUIT_PATH_LETTERS;
             if (type === 'equipment') {
                 return {
-                    circuits: data.circuits.filter(c => L.some(l => c[l + 'Equipment'] === id) || c.cpeEquipmentId === id),
+                    circuits: data.circuits.filter(c => circuitUsesEquipment(c, id)),
                     nnis: data.nnis.filter(n => n.equipmentID === id)
                 };
             }
@@ -15345,15 +15513,21 @@ ${entityActionButtons('nni', `${n.id}`, true)}
                 return { id, name: name || id, port: port || '', rackId: meta.rackId, rackName: meta.rackName, ruCap: meta.ruCap, rackPos: isNaN(p) ? null : p, ru: parseInt(ru, 10) || 1 };
             };
             const hops = [];
+            // B-N columns may be per-VLAN encoded ("v1=x|v2=y"); the diagram draws VLAN 1's path.
+            // A B-N NNI value can carry ":subinterface" — strip it for the record lookup.
+            const col = (l, k) => { const raw = circuit[l + k]; if (!raw || l === 'a' || l === 'z') return raw || ''; return parseDelimitedPerVlan(raw, 1)[1] || ''; };
             CIRCUIT_PATH_LETTERS.forEach(l => {
-                const siteId = circuit[l + 'LocationSiteId'];
-                const nniId = circuit[l + 'Nni'];
+                const siteId = col(l, 'LocationSiteId');
+                const nniId = (l === 'a' || l === 'z') ? circuit[l + 'Nni'] : String(col(l, 'Nni')).split(':')[0];
                 const n = nniId ? byId(nnis, nniId) : null;
-                let equipId = circuit[l + 'Equipment'];
-                let equipPort = circuit[l + 'EquipmentPort'] || '';
-                const directFdp = circuit[l + 'Fdp'], equipFdp = circuit[l + 'EquipmentFdp'];
+                let equipId = col(l, 'Equipment');
+                let equipPort = col(l, 'EquipmentPort') || '';
+                const directFdp = col(l, 'Fdp'), equipFdp = col(l, 'EquipmentFdp');
                 let fdpId = directFdp || equipFdp;
-                let fdpPort = directFdp ? circuit[l + 'Port'] : circuit[l + 'EquipmentFdpPorts'];
+                let fdpPort = directFdp ? col(l, 'Port') : col(l, 'EquipmentFdpPorts');
+                // second FDP only when the location has BOTH a direct FDP and an equipment-FDP
+                const fdp2Id = directFdp && equipFdp && equipFdp !== directFdp ? equipFdp : '';
+                const equip2Id = col(l, 'Equipment2');
                 // NNI handoff: the equipment/FDP are linked on the NNI record, not the circuit
                 // column — resolve them so the hop shows its gear (matches generateVlanPathHTML).
                 if (n) {
@@ -15368,7 +15542,9 @@ ${entityActionButtons('nni', `${n.id}`, true)}
                     siteId, siteName: siteName(siteId),
                     nni: nniId ? { name: (n && n.name) || nniId, port: (n && (n.equipmentPorts || n.fdpPorts)) || '' } : null,
                     fdp: fdpId ? dev(fdpId, f && f.name, fdpPort, f && f.rackId, f && f.rackPosition, f && f.rackUnits) : null,
-                    equipment: equipId ? dev(equipId, e && e.name, equipPort, e && e.rackId, e && e.rackPosition, e && e.rackUnits) : null
+                    equipment: equipId ? dev(equipId, e && e.name, equipPort, e && e.rackId, e && e.rackPosition, e && e.rackUnits) : null,
+                    fdp2: fdp2Id ? (f2 => dev(fdp2Id, f2 && f2.name, col(l, 'EquipmentFdpPorts'), f2 && f2.rackId, f2 && f2.rackPosition, f2 && f2.rackUnits))(byId(fdps, fdp2Id)) : null,
+                    equipment2: equip2Id ? (e2 => dev(equip2Id, e2 && e2.name, col(l, 'Equipment2Port'), e2 && e2.rackId, e2 && e2.rackPosition, e2 && e2.rackUnits))(byId(equipment, equip2Id)) : null
                 });
             });
             return {
@@ -15411,7 +15587,7 @@ ${entityActionButtons('nni', `${n.id}`, true)}
 
                 // Group placed devices (rackId + rackPos) by rack; render a scaled elevation each.
                 const groups = {};
-                [[h.fdp, 'fdp'], [h.equipment, 'equipment']].forEach(([d, type]) => {
+                [[h.fdp, 'fdp'], [h.fdp2, 'fdp'], [h.equipment, 'equipment'], [h.equipment2, 'equipment']].forEach(([d, type]) => {
                     if (!d || !d.rackId || d.rackPos == null) return;
                     (groups[d.rackId] = groups[d.rackId] || { ruCap: d.ruCap, rackName: d.rackName, devs: [] }).devs.push([d, type]);
                 });
@@ -15433,13 +15609,13 @@ ${entityActionButtons('nni', `${n.id}`, true)}
                         s += `<text x="${colX + labelX0}" y="${lcy - 1}" style="font-size:10px; font-weight:700; fill:var(--text-primary);">${icon} ${esc(clip(d.name, 16))}</text>`;
                         s += `<text x="${colX + labelX0}" y="${lcy + 11}" style="font-size:9px; fill:var(--text-secondary);">${d.port ? ('port ' + esc(d.port) + ' · ') : ''}U${d.rackPos}</text>`;
                         const anchor = { leftX: colX + rackX0, rightX: colX + colW - 6, y: lcy };
-                        if (type === 'equipment') equipAnchor = anchor; else fdpAnchor = anchor;
+                        if (type === 'equipment') { if (d === h.equipment || !equipAnchor) equipAnchor = anchor; } else if (d === h.fdp || !fdpAnchor) fdpAnchor = anchor;
                     });
                     y = frameTop + frameH + laneGap;
                 });
 
                 // Unplaced devices → dashed flagged boxes
-                [[h.fdp, 'fdp'], [h.equipment, 'equipment']].forEach(([d, type]) => {
+                [[h.fdp, 'fdp'], [h.fdp2, 'fdp'], [h.equipment, 'equipment'], [h.equipment2, 'equipment']].forEach(([d, type]) => {
                     if (!d || (d.rackId && d.rackPos != null)) return;
                     const color = type === 'equipment' ? 'var(--accent-primary)' : '#06b6d4';
                     const icon = type === 'equipment' ? '🖥️' : '🔆';
@@ -15447,7 +15623,7 @@ ${entityActionButtons('nni', `${n.id}`, true)}
                     s += `<text x="${colX + labelX0 + 4}" y="${y + 15}" style="font-size:11px; font-weight:700; fill:var(--text-primary);">${icon} ${esc(clip(d.name, 16))}</text>`;
                     s += `<text x="${colX + labelX0 + 4}" y="${y + 29}" style="font-size:9px; fill:var(--warning);">${d.port ? ('port ' + esc(d.port) + ' · ') : ''}⚠ rack position not set</text>`;
                     const anchor = { leftX: colX + labelX0 - 6, rightX: colX + colW - 6, y: y + boxH / 2 };
-                    if (type === 'equipment') equipAnchor = anchor; else fdpAnchor = anchor;
+                    if (type === 'equipment') { if (d === h.equipment || !equipAnchor) equipAnchor = anchor; } else if (d === h.fdp || !fdpAnchor) fdpAnchor = anchor;
                     y += boxH + floatGap;
                 });
 
